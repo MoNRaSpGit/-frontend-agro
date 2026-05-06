@@ -59,16 +59,66 @@ button {
 }
 
 .product-shell-bar {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
   align-items: center;
   margin-bottom: 18px;
   border-radius: 22px;
   padding: 12px 14px;
 }
 
+.product-shell-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.product-shell-home {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}
+
+.product-shell-title-group {
+  display: grid;
+  gap: 2px;
+}
+
+.product-shell-title-group strong {
+  font-size: 1rem;
+}
+
+.product-shell-title-group small {
+  color: #374334;
+}
+
+.product-shell-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.shell-nav-pill {
+  border: 1px solid rgba(56, 72, 49, 0.24);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 252, 245, 0.92);
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.shell-nav-pill.active {
+  background: linear-gradient(135deg, rgba(85, 123, 65, 0.16), rgba(186, 134, 57, 0.14));
+  border-color: rgba(85, 123, 65, 0.22);
+}
+
 .product-shell-menu-wrap {
   position: relative;
+  display: none;
 }
 
 .product-shell-menu-button {
@@ -613,6 +663,7 @@ th {
 }
 
 @media (max-width: 960px) {
+  .product-shell-bar,
   .summary-grid,
   .content-grid,
   .report-summary-grid {
@@ -632,15 +683,23 @@ th {
 
   .product-shell-bar {
     padding: 10px;
+    display: flex;
+    justify-content: flex-end;
   }
 
   .product-shell-menu-wrap,
   .product-shell-menu-button {
+    display: block;
     width: 100%;
   }
 
   .product-shell-menu-button {
     min-width: 0;
+  }
+
+  .product-shell-copy,
+  .product-shell-nav {
+    display: none;
   }
 
   .toolbar {
