@@ -42,7 +42,7 @@ const expenseConceptLabels = {
 } as const;
 
 const today = "2026-05-06";
-const answersStorageKey = "saaspro-agro-discovery-answers";
+const answersStorageKey = "saaspro-agro-discovery-answers-v2";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-UY", {
