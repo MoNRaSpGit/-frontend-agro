@@ -308,44 +308,44 @@ export const initialAccountingEntries: AccountingEntry[] = [
 export const discoveryQuestions: MultipleChoiceQuestion[] = [
   {
     id: "stock-granularity",
-    title: "Como quieren controlar el stock animal",
-    helper: "Definimos si el sistema arranca solo con cantidad o si tambien registra kilos.",
+    title: "Como les gustaria controlar el stock animal",
+    helper: "",
     options: ["Solo cantidad", "Cantidad y kilos", "Depende de la especie"]
   },
   {
     id: "sale-link",
-    title: "Las ventas deben descontar stock automaticamente",
-    helper: "Sirve para decidir si al cargar una venta se baja el stock en el mismo momento.",
+    title: "Cuando cargan una compra, venta, nacimiento o muerte, quieren que el stock se actualice solo",
+    helper: "",
     options: ["Si siempre", "A veces", "No por ahora"]
   },
   {
-    id: "expense-split",
-    title: "Quieren cargar los gastos segun el campo",
-    helper: "Por ejemplo, saber si un gasto corresponde a Potrero Norte, Lote 7 u otro campo.",
-    options: ["Si", "No", "Solo algunos gastos"]
+    id: "field-visibility",
+    title: "Quieren ver el stock solo por establecimiento o tambien por cada campo por separado",
+    helper: "",
+    options: ["Solo por establecimiento", "Tambien por cada campo", "Depende del caso"]
   },
   {
-    id: "wool-cycle",
-    title: "La lana se controla por zafra o como ingreso simple",
-    helper: "Esto define si la lana necesita una parte propia del sistema o si alcanza con cargarla como ingreso.",
-    options: ["Por zafra", "Ingreso simple", "Todavia no sabemos"]
+    id: "expense-split",
+    title: "Los gastos prefieren cargarlos generales o segun el campo al que corresponden",
+    helper: "",
+    options: ["Solo generales", "Segun el campo", "Ambas opciones"]
   },
   {
     id: "field-costing",
-    title: "Quieren ver resultado economico por campo",
-    helper: "Por ejemplo, saber si un campo gano o gasto mas que otro.",
-    options: ["Si, por cada campo", "Solo por establecimiento", "No por ahora"]
+    title: "La parte contable la quieren solo como ingresos y gastos o tambien con resultado por campo",
+    helper: "",
+    options: ["Solo ingresos y gastos", "Tambien resultado por campo", "Todavia no estamos seguros"]
   },
   {
-    id: "deaths-register",
-    title: "La muerte animal se quiere registrar con detalle",
-    helper: "Definimos si alcanza con registrar la cantidad o si tambien importa guardar la causa.",
-    options: ["Solo cantidad", "Cantidad y causa", "Cantidad, causa y lote"]
+    id: "wool-cycle",
+    title: "La lana les gustaria manejarla como un ingreso simple o como algo separado por zafra",
+    helper: "",
+    options: ["Como ingreso simple", "Separada por zafra", "Todavia no sabemos"]
   },
   {
     id: "stock-history",
-    title: "Quieren ver el historial de entradas y salidas de animales",
-    helper: "Esto sirve para reflejar la cuenta corriente de animales que menciono el cliente.",
+    title: "Quieren tener un historial claro de entradas y salidas de animales para revisar movimientos anteriores",
+    helper: "",
     options: ["Si", "No", "Solo para algunos casos"]
   }
 ];

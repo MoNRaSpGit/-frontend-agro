@@ -881,7 +881,6 @@ export function AgroHomePage() {
                 <section key={question.id} className="question-card">
                   <div>
                     <h3>{question.title}</h3>
-                    <p>{question.helper}</p>
                   </div>
                   <div className="option-row">
                     {question.options.map((option) => (
