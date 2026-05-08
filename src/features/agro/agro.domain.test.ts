@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { buildDiscoveryDraft } from "./agro.discovery.helpers";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 
 describe("agro functional round", () => {
@@ -24,20 +23,5 @@ describe("agro functional round", () => {
     expect(requiresEarTag("death", "vacunos")).toBe(true);
     expect(requiresEarTag("death", "ovinos")).toBe(false);
     expect(requiresEarTag("sale", "vacunos")).toBe(false);
-  });
-
-  it("builds the official discovery payload without empty answers", () => {
-    const draft = buildDiscoveryDraft({
-      "sale-link": "Si siempre",
-      "field-costing": "Tambien resultado por campo",
-      empty: ""
-    });
-
-    expect(draft.moduleKey).toBe("agro");
-    expect(draft.version).toBe("v1");
-    expect(draft.answers).toEqual([
-      { questionId: "sale-link", selectedOption: "Si siempre" },
-      { questionId: "field-costing", selectedOption: "Tambien resultado por campo" }
-    ]);
   });
 });

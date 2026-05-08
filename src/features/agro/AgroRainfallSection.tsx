@@ -55,12 +55,6 @@ export function AgroRainfallSection({
             <p>Carga manual para llevar el registro de lluvias del campo.</p>
           </div>
         </div>
-        {editingRainfallRecordId ? (
-          <div className="info-inline-card">
-            <strong>Editando lluvia</strong>
-            <span>Podras corregir fecha, campo, milimetros u observaciones antes de guardar.</span>
-          </div>
-        ) : null}
         <form className="form-grid" onSubmit={onSubmit}>
           <label>
             <span>Fecha</span>

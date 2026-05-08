@@ -1,6 +1,6 @@
 # Agro - Feedback cliente 2026-05-07
 
-Fecha de actualizacion: 2026-05-07
+Fecha de actualizacion: 2026-05-08
 
 ## Fuente
 
@@ -57,7 +57,6 @@ El cliente espera una planilla visual de movimientos de animales con:
 - IVA
 - monto total
 - campo
-- potrero
 
 ### Aclaracion por tipo de movimiento
 
@@ -102,7 +101,7 @@ La intencion operativa es que el cliente pueda comparar esos totales contra la r
 
 ## Registro pluviometrico
 
-Se pide agregar en la parte de `Resumen` un registro pluviometrico por campo.
+Se pide agregar un registro pluviometrico por campo.
 
 Lectura inicial sugerida:
 
@@ -111,30 +110,12 @@ Lectura inicial sugerida:
 - milimetros de lluvia
 - observaciones
 
-## Respuestas inferidas sobre las preguntas de discovery actuales
+## Lectura actual de este feedback
 
-Estas no son respuestas extraidas automaticamente del navegador.
+Este feedback ya quedo absorbido en la UI actual de `frontend-agro` como direccion de producto:
 
-Son respuestas inferidas a partir del mensaje del cliente y sirven como contexto de producto:
-
-- `stock-granularity`: `Cantidad y kilos`
-- `sale-link`: `Si siempre`
-- `field-visibility`: `Tambien por cada campo`
-- `expense-split`: `Segun el campo`
-- `field-costing`: `Tambien resultado por campo`
-- `wool-cycle`: no queda cerrada aun; el cliente menciona lana pero no define si va separada por zafra
-- `stock-history`: `Si`
-
-## Limite tecnico actual
-
-En el demo actual, las respuestas reales de `Preguntas` se guardan en `localStorage` con la clave:
-
-- `saaspro-agro-discovery-answers-v2`
-
-Eso significa que desde el repo puedo ver:
-
-- las preguntas
-- la estructura de persistencia
-- el contexto funcional inferido
-
-Pero no puedo recuperar desde codigo las respuestas reales ya marcadas en un navegador especifico si no tenemos acceso a ese almacenamiento local.
+- lectura por campo en vez de potrero como unidad visible principal
+- planilla de animales mas detallada
+- planilla contable por campo y moneda
+- vista propia para lluvia
+- resumen orientado a control operativo

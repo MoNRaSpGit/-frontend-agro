@@ -91,10 +91,3 @@ export interface RainfallRecord {
   millimeters: number;
   notes: string;
 }
-
-export interface MultipleChoiceQuestion {
-  id: string;
-  title: string;
-  helper: string;
-  options: string[];
-}

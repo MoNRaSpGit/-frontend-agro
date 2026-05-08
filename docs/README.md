@@ -1,6 +1,6 @@
 # Agro Docs
 
-Fecha de actualizacion: 2026-05-06
+Fecha de actualizacion: 2026-05-08
 
 Esta carpeta guarda la documentacion funcional y operativa de `frontend-agro`.
 
@@ -11,24 +11,26 @@ Esta carpeta guarda la documentacion funcional y operativa de `frontend-agro`.
 
 ## Estado actual del frontend
 
-`frontend-agro` arranca como boseto demo-first para discovery con cliente.
+`frontend-agro` hoy funciona como piloto activo de producto para validacion con cliente.
 
-Hoy el alcance visible se divide en cuatro vistas:
+Hoy el alcance visible se divide en cinco vistas:
 
 - `Inicio`
-- `Stock`
+- `Animales`
 - `Contabilidad`
-- `Preguntas`
+- `Lluvia`
+- `Resumen`
 
 ## Intencion de este corte
 
-Todavia no se endurece backend ni modelo final.
+Todavia no se endurece backend ni modelo final de negocio.
 
-La meta de este primer corte es:
+La meta de este corte es:
 
 - que el cliente se vea en el sistema
 - validar si una sola app cubre stock y contabilidad
-- capturar respuestas reales de negocio desde la misma demo
+- validar lectura por campo como unidad operativa principal
+- validar tambien registro de lluvia y tablero de resumen
 
 ## Base funcional demo
 
@@ -37,23 +39,25 @@ Hoy la demo ya deja ver:
 - establecimientos y campos
 - stock animal por especie y categoria
 - categorias sembradas desde la declaracion jurada MGAP/SNIG 2024
-- movimientos simples de stock en memoria
-- planilla contable liviana con neto visible
-- preguntas de multiple opcion para discovery
+- planilla de animales con altas, edicion y validaciones
+- planilla contable con lectura cronologica por campo y moneda
+- carga de lluvia por campo con bitacora propia
+- resumen operativo por establecimiento
 
 ## Regla de persistencia en esta etapa
 
-Por ahora la unica pieza con valor real para guardar en base son las respuestas del cliente en `Preguntas`.
+En esta etapa el frontend prioriza validacion de flujo y lenguaje con persistencia local.
 
-En el frontend demo actual esas respuestas sobreviven al refresh usando persistencia local del navegador, para simular el comportamiento que despues ira a backend.
+Los datos principales sobreviven al refresh usando almacenamiento local del navegador:
 
-El resto del demo puede seguir efimero:
+- movimientos de animales
+- movimientos contables
+- registros de lluvia
 
-- movimientos de stock cargados a mano
-- asientos contables demo
-- pruebas manuales durante la reunion
+El backend de `agro` sigue existiendo, pero hoy su alcance real documentado sigue concentrado en discovery tecnico y capabilities base. La UI actual ya no expone esa parte.
 
 ## Siguiente lectura
 
 - [Contexto funcional del producto](./product-context.md)
 - [Feedback cliente 2026-05-07](./client-feedback-2026-05-07.md)
+- [Bitacora del modulo](./bitacora.md)

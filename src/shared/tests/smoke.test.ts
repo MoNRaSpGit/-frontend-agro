@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryCatalog, discoveryQuestions, refinementQuestions } from "../../features/agro/agro.demo.data";
+import { categoryCatalog, establishments, fields } from "../../features/agro/agro.demo.data";
 import { buildMeta } from "../config/build";
 
 describe("frontend agro smoke", () => {
@@ -9,9 +9,9 @@ describe("frontend agro smoke", () => {
     expect(buildMeta.apiBaseUrl.length).toBeGreaterThan(0);
   });
 
-  it("keeps seeded question rounds available", () => {
-    expect(discoveryQuestions.length).toBeGreaterThan(0);
-    expect(refinementQuestions.length).toBeGreaterThan(0);
+  it("keeps seeded establishments and fields available", () => {
+    expect(establishments.length).toBeGreaterThan(0);
+    expect(fields.length).toBeGreaterThan(0);
   });
 
   it("keeps category catalogs for supported species", () => {

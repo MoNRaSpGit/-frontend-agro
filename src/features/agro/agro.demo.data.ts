@@ -4,7 +4,6 @@ import {
   CategoryDefinition,
   Establishment,
   FieldUnit,
-  MultipleChoiceQuestion,
   RainfallRecord,
   StockSnapshot
 } from "./agro.types";
@@ -112,7 +111,7 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     totalAmount: 2814,
     currency: "USD",
     linkedAccountingEntryId: "acc-2",
-    notes: "Venta por lote chico."
+    notes: "Venta por campo chico."
   },
   {
     id: "anm-3",
@@ -157,7 +156,7 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     quantity: 3,
     commissionAmount: 0,
     taxAmount: 0,
-    notes: "Baja puntual del lote."
+    notes: "Baja puntual del campo."
   },
   {
     id: "anm-6",
@@ -226,7 +225,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     taxAmount: 42,
     netAmount: 2814,
     linkedAnimalMovementId: "anm-2",
-    notes: "Venta de ovinos del lote 12."
+    notes: "Venta de ovinos del Campo 2."
   },
   {
     id: "acc-3",
@@ -270,7 +269,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     taxAmount: 74,
     netAmount: 5945,
     linkedAnimalMovementId: "anm-6",
-    notes: "Venta complementaria de lote liviano."
+    notes: "Venta complementaria de campo liviano."
   },
   {
     id: "acc-6",
@@ -336,82 +335,4 @@ export const initialRainfallRecords: RainfallRecord[] = [
   { id: "rain-2", date: "2026-05-03", fieldId: "field-2", millimeters: 12, notes: "Aporte corto." },
   { id: "rain-3", date: "2026-05-04", fieldId: "field-4", millimeters: 25, notes: "Buen evento para verdeos." },
   { id: "rain-4", date: "2026-05-06", fieldId: "field-5", millimeters: 9, notes: "Lluvia liviana." }
-];
-
-export const discoveryQuestions: MultipleChoiceQuestion[] = [
-  {
-    id: "stock-granularity",
-    title: "Como les gustaria controlar el stock animal",
-    helper: "",
-    options: ["Solo cantidad", "Cantidad y kilos", "Depende de la especie"]
-  },
-  {
-    id: "sale-link",
-    title: "Cuando cargan una compra, venta, nacimiento o muerte, quieren que el stock se actualice solo",
-    helper: "",
-    options: ["Si siempre", "A veces", "No por ahora"]
-  },
-  {
-    id: "field-visibility",
-    title: "Quieren ver el stock solo por establecimiento o tambien por cada campo por separado",
-    helper: "",
-    options: ["Solo por establecimiento", "Tambien por cada campo", "Depende del caso"]
-  },
-  {
-    id: "expense-split",
-    title: "Los gastos prefieren cargarlos generales o segun el campo al que corresponden",
-    helper: "",
-    options: ["Solo generales", "Segun el campo", "Ambas opciones"]
-  },
-  {
-    id: "field-costing",
-    title: "La parte contable la quieren solo como ingresos y gastos o tambien con resultado por campo",
-    helper: "",
-    options: ["Solo ingresos y gastos", "Tambien resultado por campo", "Todavia no estamos seguros"]
-  },
-  {
-    id: "wool-cycle",
-    title: "La lana les gustaria manejarla como un ingreso simple o como algo separado por zafra",
-    helper: "",
-    options: ["Como ingreso simple", "Separada por zafra", "Todavia no sabemos"]
-  },
-  {
-    id: "stock-history",
-    title: "Quieren tener un historial claro de entradas y salidas de animales para revisar movimientos anteriores",
-    helper: "",
-    options: ["Si", "No", "Solo para algunos casos"]
-  }
-];
-
-export const refinementQuestions: MultipleChoiceQuestion[] = [
-  {
-    id: "stock-check-frequency",
-    title: "Cada cuanto les sirve controlar existencias contra la realidad del campo",
-    helper: "",
-    options: ["Todos los meses", "Solo en momentos clave", "Todavia no estamos seguros"]
-  },
-  {
-    id: "field-summary-depth",
-    title: "En el resumen por campo que les resulta mas importante ver primero",
-    helper: "",
-    options: ["Totales por categoria", "Compras y ventas", "Caja y lluvias"]
-  },
-  {
-    id: "expense-rubros-detail",
-    title: "Los gastos quieren manejarlos con pocos rubros o con mas detalle",
-    helper: "",
-    options: ["Pocos rubros", "Mas detalle", "Depende del campo"]
-  },
-  {
-    id: "animal-economic-review",
-    title: "Cuando se relaciona una compra o venta con caja prefieren revisarlo en la misma pantalla o en resumen",
-    helper: "",
-    options: ["En la misma pantalla", "En resumen", "En ambas"]
-  },
-  {
-    id: "rainfall-usage",
-    title: "El registro de lluvias lo quieren solo historico o tambien para comparar campos",
-    helper: "",
-    options: ["Solo historico", "Tambien comparar campos", "Todavia no estamos seguros"]
-  }
 ];

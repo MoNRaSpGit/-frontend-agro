@@ -607,20 +607,6 @@ button {
   margin-bottom: 16px;
 }
 
-.info-inline-card {
-  border-radius: 18px;
-  padding: 16px 18px;
-  background: rgba(64, 88, 52, 0.16);
-  display: grid;
-  gap: 6px;
-  margin-bottom: 14px;
-}
-
-.info-inline-card span {
-  color: #3a4738;
-  line-height: 1.45;
-}
-
 table {
   width: 100%;
   border-collapse: collapse;
