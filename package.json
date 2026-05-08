@@ -9,7 +9,10 @@
     "build:gh": "tsc -b && vite build --base=/-frontend-agro/",
     "deploy": "npm run build:gh && npx gh-pages -d dist",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:smoke": "vitest run src/shared/tests/smoke.test.ts",
+    "test:functional": "vitest run src/features/agro/agro.domain.test.ts"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -26,6 +29,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "gh-pages": "^6.3.0",
     "typescript": "^5.9.3",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
   }
 }

@@ -11,31 +11,31 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
   {
     key: "overview",
     label: "Inicio",
-    description: "Lectura ejecutiva del demo",
+    description: "Vista general del establecimiento",
     persistence: "local"
   },
   {
-    key: "stock",
-    label: "Stock",
-    description: "Prueba rapida del flujo animal",
+    key: "animals",
+    label: "Animales",
+    description: "Entradas, salidas y control de existencias",
     persistence: "local"
   },
   {
     key: "accounting",
     label: "Contabilidad",
-    description: "Lenguaje y rubros del cliente",
+    description: "Caja por moneda, rubro y campo",
     persistence: "local"
   },
   {
-    key: "reports",
-    label: "Reportes",
-    description: "Lectura comercial del establecimiento",
-    persistence: "future"
+    key: "rainfall",
+    label: "Lluvia",
+    description: "Carga y bitacora de lluvias por campo",
+    persistence: "local"
   },
   {
-    key: "questions",
-    label: "Preguntas",
-    description: "Discovery que si vale persistir",
-    persistence: "backend_candidate"
+    key: "summary",
+    label: "Resumen",
+    description: "Control por campo, categorias y alertas",
+    persistence: "future"
   }
 ];

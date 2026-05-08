@@ -1,16 +1,17 @@
-export type AgroView = "overview" | "stock" | "accounting" | "reports" | "questions";
+export type AgroView = "overview" | "animals" | "accounting" | "rainfall" | "summary";
 
 export type AgroSpecies = "vacunos" | "ovinos" | "equinos";
 
-export type StockReason = "compra" | "nacimiento" | "venta" | "muerte" | "ajuste";
-
-export type StockDirection = "in" | "out";
+export type AnimalMovementKind = "purchase" | "sale" | "birth" | "death" | "adjustment";
 
 export type AccountingEntryType = "income" | "expense";
+
+export type MoneyCurrency = "USD" | "UYU";
 
 export type IncomeConcept = "venta_vacunos" | "venta_ovinos" | "venta_lana" | "venta_equinos";
 
 export type ExpenseConcept =
+  | "compra_animales"
   | "alimentacion"
   | "sanidad"
   | "combustible"
@@ -46,16 +47,24 @@ export interface StockSnapshot {
   quantity: number;
 }
 
-export interface StockMovement {
+export interface AnimalMovementRecord {
   id: string;
   date: string;
   establishmentId: string;
   fieldId: string;
   species: AgroSpecies;
   categoryCode: string;
-  direction: StockDirection;
-  reason: StockReason;
+  kind: AnimalMovementKind;
   quantity: number;
+  earTag?: string;
+  weightKg?: number;
+  unitPrice?: number;
+  freightAmount?: number;
+  commissionAmount?: number;
+  taxAmount?: number;
+  totalAmount?: number;
+  currency?: MoneyCurrency;
+  linkedAccountingEntryId?: string;
   notes: string;
 }
 
@@ -63,15 +72,23 @@ export interface AccountingEntry {
   id: string;
   date: string;
   establishmentId: string;
+  fieldId: string;
   type: AccountingEntryType;
   concept: IncomeConcept | ExpenseConcept;
-  species?: AgroSpecies;
-  kilos?: number;
-  pricePerKilo?: number;
+  currency: MoneyCurrency;
   grossAmount: number;
   commissionAmount: number;
   taxAmount: number;
   netAmount: number;
+  linkedAnimalMovementId?: string;
+  notes: string;
+}
+
+export interface RainfallRecord {
+  id: string;
+  date: string;
+  fieldId: string;
+  millimeters: number;
   notes: string;
 }
 

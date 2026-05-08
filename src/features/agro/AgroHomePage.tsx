@@ -1,16 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ProductShell } from "../../shared/components/ProductShell";
+import { AgroAccountingSection } from "./AgroAccountingSection";
+import { AgroAnimalsSection } from "./AgroAnimalsSection";
+import { AgroDeleteConfirmModal } from "./AgroDeleteConfirmModal";
+import { AgroMetricsGrid, AgroToolbar } from "./AgroHomeChrome";
+import { AgroOverviewSection } from "./AgroOverviewSection";
+import { AgroRainfallSection } from "./AgroRainfallSection";
 import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
+import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
+import { expenseConceptLabels, formatMoney, formatNumber, formatShortDate, getNetAmount, incomeConceptLabels, today } from "./agro.home.shared";
 import { agroWorkspaceSections } from "./agro.workspace.config";
 import {
   categoryCatalog,
-  discoveryQuestions,
+  currencyLabels,
   establishments,
   fields,
   initialAccountingEntries,
-  initialMovements,
+  initialAnimalMovements,
+  initialRainfallRecords,
   initialStock,
+  movementKindLabels,
   speciesLabels
 } from "./agro.demo.data";
 import {
@@ -18,92 +28,218 @@ import {
   AccountingEntryType,
   AgroSpecies,
   AgroView,
+  AnimalMovementKind,
+  AnimalMovementRecord,
   ExpenseConcept,
   IncomeConcept,
-  StockDirection,
-  StockMovement,
-  StockReason
+  MoneyCurrency,
+  RainfallRecord
 } from "./agro.types";
-const incomeConceptLabels = {
-  venta_vacunos: "Venta de vacunos",
-  venta_ovinos: "Venta de ovinos",
-  venta_lana: "Venta de lana",
-  venta_equinos: "Venta de equinos"
-} as const;
 
-const expenseConceptLabels = {
-  alimentacion: "Alimentacion",
-  sanidad: "Sanidad",
-  combustible: "Combustible",
-  sueldos: "Sueldos",
-  mantenimiento: "Mantenimiento",
-  impuestos: "Impuestos",
-  otros: "Otros"
-} as const;
-
-const today = "2026-05-06";
-const answersStorageKey = "saaspro-agro-discovery-answers-v2";
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-UY", {
-    style: "currency",
-    currency: "UYU",
-    maximumFractionDigits: 0
-  }).format(value);
-}
-
-function getNetAmount(
-  type: AccountingEntryType,
-  grossAmount: number,
-  commissionAmount: number,
-  taxAmount: number
-) {
-  if (type === "income") {
-    return grossAmount - commissionAmount - taxAmount;
-  }
-
-  return grossAmount + commissionAmount + taxAmount;
-}
+const animalMovementsStorageKey = "saaspro-agro-animal-movements-v1";
+const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v1";
+const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v1";
 
 export function AgroHomePage() {
+  const animalFormPanelRef = useRef<HTMLElement | null>(null);
+  const accountingFormPanelRef = useRef<HTMLElement | null>(null);
+  const animalTableWrapRef = useRef<HTMLDivElement | null>(null);
+  const animalTableRef = useRef<HTMLTableElement | null>(null);
+  const animalTableScrollbarRef = useRef<HTMLDivElement | null>(null);
+  const animalTableScrollbarInnerRef = useRef<HTMLDivElement | null>(null);
+  const animalFieldRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({});
+  const syncingAnimalScrollRef = useRef<"table" | "bottom-bar" | null>(null);
   const [activeView, setActiveView] = useState<AgroView | null>(null);
   const [selectedEstablishmentId, setSelectedEstablishmentId] = useState(establishments[0]?.id ?? "");
-  const [movements, setMovements] = useState<StockMovement[]>(initialMovements);
-  const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>(initialAccountingEntries);
-  const [answers, setAnswers] = useState<Record<string, string>>(() => readJsonStorage(answersStorageKey, {}));
+  const [selectedYear, setSelectedYear] = useState("2026");
+  const [selectedMonth, setSelectedMonth] = useState("all");
+  const [animalSearchTerm, setAnimalSearchTerm] = useState("");
+  const [accountingSearchTerm, setAccountingSearchTerm] = useState("");
+  const [rainfallSearchTerm, setRainfallSearchTerm] = useState("");
+  const [editingAnimalMovementId, setEditingAnimalMovementId] = useState<string | null>(null);
+  const [editingAccountingEntryId, setEditingAccountingEntryId] = useState<string | null>(null);
+  const [editingRainfallRecordId, setEditingRainfallRecordId] = useState<string | null>(null);
+  const [animalFormErrors, setAnimalFormErrors] = useState<Record<string, string>>({});
+  const [showAnimalFloatingScrollbar, setShowAnimalFloatingScrollbar] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{
+    kind: "animal" | "accounting" | "rainfall";
+    id: string;
+    title: string;
+    message: string;
+  } | null>(null);
+  const [animalMovements, setAnimalMovements] = useState<AnimalMovementRecord[]>(() =>
+    readJsonStorage(animalMovementsStorageKey, initialAnimalMovements)
+  );
+  const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>(() =>
+    readJsonStorage(accountingEntriesStorageKey, initialAccountingEntries)
+  );
+  const [rainfallRecords, setRainfallRecords] = useState<RainfallRecord[]>(() =>
+    readJsonStorage(rainfallRecordsStorageKey, initialRainfallRecords)
+  );
 
-  const [stockForm, setStockForm] = useState({
+  const [animalForm, setAnimalForm] = useState({
     date: today,
     establishmentId: establishments[0]?.id ?? "",
     fieldId: fields[0]?.id ?? "",
     species: "vacunos" as AgroSpecies,
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
-    direction: "in" as StockDirection,
-    reason: "compra" as StockReason,
+    kind: "purchase" as AnimalMovementKind,
     quantity: "10",
+    earTag: "",
+    weightKg: "",
+    unitPrice: "",
+    freightAmount: "",
+    commissionAmount: "",
+    taxAmount: "",
+    currency: "USD" as MoneyCurrency,
     notes: ""
   });
 
   const [accountingForm, setAccountingForm] = useState({
     date: today,
     establishmentId: establishments[0]?.id ?? "",
+    fieldId: fields[0]?.id ?? "",
     type: "income" as AccountingEntryType,
     concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
-    species: "vacunos" as AgroSpecies,
-    kilos: "1200",
-    pricePerKilo: "4.2",
-    grossAmount: "5040",
-    commissionAmount: "151",
-    taxAmount: "48",
+    currency: "USD" as MoneyCurrency,
+    grossAmount: "",
+    commissionAmount: "",
+    taxAmount: "",
     notes: ""
   });
+
+  const [rainfallForm, setRainfallForm] = useState({
+    date: today,
+    fieldId: fields[0]?.id ?? "",
+    millimeters: "",
+    notes: ""
+  });
+
+  function resetAnimalForm() {
+    setAnimalForm({
+      date: today,
+      establishmentId: establishments[0]?.id ?? "",
+      fieldId: fields[0]?.id ?? "",
+      species: "vacunos" as AgroSpecies,
+      categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
+      kind: "purchase" as AnimalMovementKind,
+      quantity: "10",
+      earTag: "",
+      weightKg: "",
+      unitPrice: "",
+      freightAmount: "",
+      commissionAmount: "",
+      taxAmount: "",
+      currency: "USD" as MoneyCurrency,
+      notes: ""
+    });
+    setAnimalFormErrors({});
+    setEditingAnimalMovementId(null);
+  }
+
+  function registerAnimalFieldRef(fieldName: string) {
+    return (element: HTMLInputElement | HTMLSelectElement | null) => {
+      animalFieldRefs.current[fieldName] = element;
+    };
+  }
+
+  function clearAnimalFieldError(fieldName: string) {
+    setAnimalFormErrors((current) => {
+      if (!current[fieldName]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[fieldName];
+      return next;
+    });
+  }
+
+  function focusAnimalField(fieldName: string) {
+    const element = animalFieldRefs.current[fieldName];
+    if (!element) {
+      return;
+    }
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => element.focus(), 180);
+  }
+
+  function handleAnimalKindChange(kind: AnimalMovementKind) {
+    setAnimalFormErrors({});
+    setAnimalForm((current) => {
+      if (kind === "purchase") {
+        return {
+          ...current,
+          kind,
+          earTag: ""
+        };
+      }
+
+      if (kind === "sale") {
+        return {
+          ...current,
+          kind,
+          earTag: "",
+          freightAmount: ""
+        };
+      }
+
+      return {
+        ...current,
+        kind,
+        earTag: kind === "death" && current.species === "vacunos" ? current.earTag : "",
+        weightKg: "",
+        unitPrice: "",
+        freightAmount: "",
+        commissionAmount: "",
+        taxAmount: "",
+        currency: "USD"
+      };
+    });
+  }
+
+  function resetAccountingForm() {
+    setAccountingForm({
+      date: today,
+      establishmentId: establishments[0]?.id ?? "",
+      fieldId: fields[0]?.id ?? "",
+      type: "income" as AccountingEntryType,
+      concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
+      currency: "USD" as MoneyCurrency,
+      grossAmount: "",
+      commissionAmount: "",
+      taxAmount: "",
+      notes: ""
+    });
+    setEditingAccountingEntryId(null);
+  }
+
+  function resetRainfallForm() {
+    setRainfallForm({
+      date: today,
+      fieldId: fields[0]?.id ?? "",
+      millimeters: "",
+      notes: ""
+    });
+    setEditingRainfallRecordId(null);
+  }
 
   const visibleFields = useMemo(
     () => fields.filter((field) => field.establishmentId === selectedEstablishmentId),
     [selectedEstablishmentId]
   );
 
-  const stockBySpecies = useMemo(() => {
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    animalMovements.forEach((movement) => years.add(movement.date.slice(0, 4)));
+    accountingEntries.forEach((entry) => years.add(entry.date.slice(0, 4)));
+    rainfallRecords.forEach((record) => years.add(record.date.slice(0, 4)));
+    years.add(today.slice(0, 4));
+    return [...years].sort((left, right) => right.localeCompare(left));
+  }, [accountingEntries, animalMovements, rainfallRecords]);
+
+  const stockBalanceMap = useMemo(() => {
     const balanceMap = new Map<string, number>();
 
     for (const item of initialStock) {
@@ -111,73 +247,555 @@ export function AgroHomePage() {
       balanceMap.set(key, (balanceMap.get(key) ?? 0) + item.quantity);
     }
 
-    for (const movement of movements) {
+    for (const movement of animalMovements) {
       const key = `${movement.fieldId}:${movement.species}:${movement.categoryCode}`;
-      const signedQuantity = movement.direction === "in" ? movement.quantity : movement.quantity * -1;
+      const signedQuantity = deriveMovementDirection(movement.kind) === "entry" ? movement.quantity : movement.quantity * -1;
       balanceMap.set(key, (balanceMap.get(key) ?? 0) + signedQuantity);
     }
 
+    return balanceMap;
+  }, [animalMovements]);
+
+  const stockBySpecies = useMemo(() => {
     const speciesTotals: Record<AgroSpecies, number> = {
       vacunos: 0,
       ovinos: 0,
       equinos: 0
     };
 
-    for (const [key, quantity] of balanceMap.entries()) {
+    for (const [key, quantity] of stockBalanceMap.entries()) {
       const [, species] = key.split(":") as [string, AgroSpecies, string];
       speciesTotals[species] += quantity;
     }
 
     return speciesTotals;
-  }, [movements]);
+  }, [stockBalanceMap]);
 
   const accountingTotals = useMemo(() => {
     return accountingEntries.reduce(
       (summary, entry) => {
-        if (entry.type === "income") {
-          summary.income += entry.netAmount;
-        } else {
-          summary.expense += entry.netAmount;
-        }
-
+        const bucket = entry.type === "income" ? "income" : "expense";
+        summary[entry.currency][bucket] += entry.netAmount;
         return summary;
       },
-      { income: 0, expense: 0 }
+      {
+        USD: { income: 0, expense: 0 },
+        UYU: { income: 0, expense: 0 }
+      }
     );
   }, [accountingEntries]);
 
-  const fieldStockRows = useMemo(() => {
-    const rows = initialStock
-      .map((snapshot) => ({
-        ...snapshot,
-        movements: movements.filter(
-          (movement) =>
-            movement.fieldId === snapshot.fieldId &&
-            movement.species === snapshot.species &&
-            movement.categoryCode === snapshot.categoryCode
-        )
-      }))
-      .map((row) => ({
-        ...row,
-        total:
-          row.quantity +
-          row.movements.reduce((sum, movement) => sum + (movement.direction === "in" ? movement.quantity : -movement.quantity), 0)
-      }))
-      .filter((row) => {
-        const field = fields.find((item) => item.id === row.fieldId);
-        return field?.establishmentId === selectedEstablishmentId;
-      });
-
-    return rows;
-  }, [movements, selectedEstablishmentId]);
-
-  const latestMovements = useMemo(() => {
-    return [...movements].sort((left, right) => right.date.localeCompare(left.date)).slice(0, 6);
-  }, [movements]);
+  const latestAnimalMovements = useMemo(() => {
+    return [...animalMovements].sort((left, right) => right.date.localeCompare(left.date)).slice(0, 6);
+  }, [animalMovements]);
 
   const latestAccountingEntries = useMemo(() => {
     return [...accountingEntries].sort((left, right) => right.date.localeCompare(left.date)).slice(0, 6);
   }, [accountingEntries]);
+
+  const animalLedgerRows = useMemo(() => {
+    return [...animalMovements]
+      .filter((movement) => {
+        if (movement.establishmentId !== selectedEstablishmentId) {
+          return false;
+        }
+
+        if (selectedYear !== "all" && !movement.date.startsWith(selectedYear)) {
+          return false;
+        }
+
+        if (selectedMonth !== "all" && movement.date.slice(5, 7) !== selectedMonth) {
+          return false;
+        }
+
+        if (!animalSearchTerm.trim()) {
+          return true;
+        }
+
+        const field = fields.find((item) => item.id === movement.fieldId);
+        const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+        const searchBase = [
+          movement.date,
+          field?.name ?? "",
+          movementKindLabels[movement.kind],
+          speciesLabels[movement.species],
+          category?.label ?? "",
+          movement.earTag ?? "",
+          movement.notes
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        return searchBase.includes(animalSearchTerm.trim().toLowerCase());
+      })
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [animalMovements, animalSearchTerm, selectedEstablishmentId, selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    function syncAnimalScrollbarMetrics() {
+      const tableWrap = animalTableWrapRef.current;
+      const table = animalTableRef.current;
+      const scrollbar = animalTableScrollbarRef.current;
+      const scrollbarInner = animalTableScrollbarInnerRef.current;
+
+      if (!tableWrap || !table || !scrollbar || !scrollbarInner) {
+        return;
+      }
+
+      const hasOverflow = table.scrollWidth > tableWrap.clientWidth + 4;
+      setShowAnimalFloatingScrollbar(hasOverflow);
+      scrollbarInner.style.width = `${table.scrollWidth}px`;
+      scrollbar.scrollLeft = tableWrap.scrollLeft;
+    }
+
+    syncAnimalScrollbarMetrics();
+    window.addEventListener("resize", syncAnimalScrollbarMetrics);
+    return () => window.removeEventListener("resize", syncAnimalScrollbarMetrics);
+  }, [animalLedgerRows, activeView]);
+
+  useEffect(() => {
+    const tableWrap = animalTableWrapRef.current;
+    const scrollbar = animalTableScrollbarRef.current;
+
+    if (!tableWrap || !scrollbar) {
+      return;
+    }
+
+    const nextTableWrap = tableWrap;
+    const nextScrollbar = scrollbar;
+
+    function handleTableScroll() {
+      if (syncingAnimalScrollRef.current === "bottom-bar") {
+        syncingAnimalScrollRef.current = null;
+        return;
+      }
+
+      syncingAnimalScrollRef.current = "table";
+      nextScrollbar.scrollLeft = nextTableWrap.scrollLeft;
+    }
+
+    function handleBottomBarScroll() {
+      if (syncingAnimalScrollRef.current === "table") {
+        syncingAnimalScrollRef.current = null;
+        return;
+      }
+
+      syncingAnimalScrollRef.current = "bottom-bar";
+      nextTableWrap.scrollLeft = nextScrollbar.scrollLeft;
+    }
+
+    nextTableWrap.addEventListener("scroll", handleTableScroll);
+    nextScrollbar.addEventListener("scroll", handleBottomBarScroll);
+
+    return () => {
+      nextTableWrap.removeEventListener("scroll", handleTableScroll);
+      nextScrollbar.removeEventListener("scroll", handleBottomBarScroll);
+    };
+  }, [animalLedgerRows, activeView]);
+
+  const accountingLedgerRows = useMemo(() => {
+    return [...accountingEntries]
+      .filter((entry) => {
+        if (entry.establishmentId !== selectedEstablishmentId) {
+          return false;
+        }
+
+        if (selectedYear !== "all" && !entry.date.startsWith(selectedYear)) {
+          return false;
+        }
+
+        if (selectedMonth !== "all" && entry.date.slice(5, 7) !== selectedMonth) {
+          return false;
+        }
+
+        if (!accountingSearchTerm.trim()) {
+          return true;
+        }
+
+        const field = fields.find((item) => item.id === entry.fieldId);
+        const conceptLabel =
+          entry.type === "income"
+            ? incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels]
+            : expenseConceptLabels[entry.concept as keyof typeof expenseConceptLabels];
+        const searchBase = [entry.date, field?.name ?? "", conceptLabel, entry.currency, entry.notes]
+          .join(" ")
+          .toLowerCase();
+
+        return searchBase.includes(accountingSearchTerm.trim().toLowerCase());
+      })
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [accountingEntries, accountingSearchTerm, selectedEstablishmentId, selectedMonth, selectedYear]);
+
+  const selectedFieldIds = useMemo(
+    () => fields.filter((field) => field.establishmentId === selectedEstablishmentId).map((field) => field.id),
+    [selectedEstablishmentId]
+  );
+
+  const summaryByField = useMemo(() => {
+    return visibleFields.map((field) => {
+      const stockRows = Array.from(stockBalanceMap.entries())
+        .filter(([key]) => key.startsWith(`${field.id}:`))
+        .map(([key, quantity]) => {
+          const [, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
+          const category = categoryCatalog[species].find((item) => item.code === categoryCode);
+          return {
+            species,
+            categoryCode,
+            categoryLabel: category?.label ?? categoryCode,
+            quantity
+          };
+        })
+        .filter((row) => row.quantity !== 0);
+
+      const movementRows = animalMovements.filter((movement) => {
+        if (movement.fieldId !== field.id) {
+          return false;
+        }
+
+        if (selectedYear !== "all" && !movement.date.startsWith(selectedYear)) {
+          return false;
+        }
+
+        if (selectedMonth !== "all" && movement.date.slice(5, 7) !== selectedMonth) {
+          return false;
+        }
+
+        return true;
+      });
+      const accountingRows = accountingEntries.filter((entry) => {
+        if (entry.fieldId !== field.id) {
+          return false;
+        }
+
+        if (selectedYear !== "all" && !entry.date.startsWith(selectedYear)) {
+          return false;
+        }
+
+        if (selectedMonth !== "all" && entry.date.slice(5, 7) !== selectedMonth) {
+          return false;
+        }
+
+        return true;
+      });
+      const rainfallTotal = rainfallRecords
+        .filter((record) => {
+          if (record.fieldId !== field.id) {
+            return false;
+          }
+
+          if (selectedYear !== "all" && !record.date.startsWith(selectedYear)) {
+            return false;
+          }
+
+          if (selectedMonth !== "all" && record.date.slice(5, 7) !== selectedMonth) {
+            return false;
+          }
+
+          return true;
+        })
+        .reduce((sum, record) => sum + record.millimeters, 0);
+
+      const speciesTotals = (Object.keys(speciesLabels) as AgroSpecies[]).reduce(
+        (totals, species) => {
+          totals[species] = stockRows
+            .filter((row) => row.species === species)
+            .reduce((sum, row) => sum + row.quantity, 0);
+          return totals;
+        },
+        { vacunos: 0, ovinos: 0, equinos: 0 } as Record<AgroSpecies, number>
+      );
+
+      return {
+        field,
+        stockRows,
+        speciesTotals,
+        purchases: movementRows
+          .filter((movement) => movement.kind === "purchase")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        sales: movementRows
+          .filter((movement) => movement.kind === "sale")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        incomeUsd: accountingRows
+          .filter((entry) => entry.type === "income" && entry.currency === "USD")
+          .reduce((sum, entry) => sum + entry.netAmount, 0),
+        expenseUsd: accountingRows
+          .filter((entry) => entry.type === "expense" && entry.currency === "USD")
+          .reduce((sum, entry) => sum + entry.netAmount, 0),
+        expenseUyu: accountingRows
+          .filter((entry) => entry.type === "expense" && entry.currency === "UYU")
+          .reduce((sum, entry) => sum + entry.netAmount, 0),
+        rainfallTotal,
+        adjustments: movementRows
+          .filter((movement) => movement.kind === "adjustment")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        deaths: movementRows
+          .filter((movement) => movement.kind === "death")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        lastRainfallDate: rainfallRecords
+          .filter((record) => {
+            if (record.fieldId !== field.id) {
+              return false;
+            }
+
+            if (selectedYear !== "all" && !record.date.startsWith(selectedYear)) {
+              return false;
+            }
+
+            if (selectedMonth !== "all" && record.date.slice(5, 7) !== selectedMonth) {
+              return false;
+            }
+
+            return true;
+          })
+          .sort((left, right) => right.date.localeCompare(left.date))[0]?.date
+      };
+    });
+  }, [accountingEntries, animalMovements, rainfallRecords, selectedEstablishmentId, selectedMonth, selectedYear, stockBalanceMap, visibleFields]);
+
+  const periodSummary = useMemo(() => {
+    return {
+      entries: animalMovements
+        .filter(
+          (movement) =>
+            selectedFieldIds.includes(movement.fieldId) &&
+            (selectedYear === "all" || movement.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || movement.date.slice(5, 7) === selectedMonth) &&
+            deriveMovementDirection(movement.kind) === "entry"
+        )
+        .reduce((sum, movement) => sum + movement.quantity, 0),
+      exits: animalMovements
+        .filter(
+          (movement) =>
+            selectedFieldIds.includes(movement.fieldId) &&
+            (selectedYear === "all" || movement.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || movement.date.slice(5, 7) === selectedMonth) &&
+            deriveMovementDirection(movement.kind) === "exit"
+        )
+        .reduce((sum, movement) => sum + movement.quantity, 0),
+      incomeUsd: accountingEntries
+        .filter(
+          (entry) =>
+            selectedFieldIds.includes(entry.fieldId) &&
+            (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth) &&
+            entry.type === "income" &&
+            entry.currency === "USD"
+        )
+        .reduce((sum, entry) => sum + entry.netAmount, 0),
+      expenseUsd: accountingEntries
+        .filter(
+          (entry) =>
+            selectedFieldIds.includes(entry.fieldId) &&
+            (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth) &&
+            entry.type === "expense" &&
+            entry.currency === "USD"
+        )
+        .reduce((sum, entry) => sum + entry.netAmount, 0),
+      expenseUyu: accountingEntries
+        .filter(
+          (entry) =>
+            selectedFieldIds.includes(entry.fieldId) &&
+            (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth) &&
+            entry.type === "expense" &&
+            entry.currency === "UYU"
+        )
+        .reduce((sum, entry) => sum + entry.netAmount, 0)
+    };
+  }, [accountingEntries, animalMovements, selectedFieldIds, selectedMonth, selectedYear]);
+
+  const annualSummary = useMemo(() => {
+    return {
+      entries: animalMovements
+        .filter(
+          (movement) =>
+            selectedFieldIds.includes(movement.fieldId) &&
+            movement.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
+            deriveMovementDirection(movement.kind) === "entry"
+        )
+        .reduce((sum, movement) => sum + movement.quantity, 0),
+      exits: animalMovements
+        .filter(
+          (movement) =>
+            selectedFieldIds.includes(movement.fieldId) &&
+            movement.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
+            deriveMovementDirection(movement.kind) === "exit"
+        )
+        .reduce((sum, movement) => sum + movement.quantity, 0),
+      incomeUsd: accountingEntries
+        .filter(
+          (entry) =>
+            selectedFieldIds.includes(entry.fieldId) &&
+            entry.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
+            entry.type === "income" &&
+            entry.currency === "USD"
+        )
+        .reduce((sum, entry) => sum + entry.netAmount, 0),
+      expenseUsd: accountingEntries
+        .filter(
+          (entry) =>
+            selectedFieldIds.includes(entry.fieldId) &&
+            entry.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
+            entry.type === "expense" &&
+            entry.currency === "USD"
+        )
+        .reduce((sum, entry) => sum + entry.netAmount, 0),
+      expenseUyu: accountingEntries
+        .filter(
+          (entry) =>
+            selectedFieldIds.includes(entry.fieldId) &&
+            entry.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
+            entry.type === "expense" &&
+            entry.currency === "UYU"
+        )
+        .reduce((sum, entry) => sum + entry.netAmount, 0)
+    };
+  }, [accountingEntries, animalMovements, selectedFieldIds, selectedYear]);
+
+  const animalLedgerSummary = useMemo(() => {
+    return {
+      purchases: animalLedgerRows.filter((movement) => movement.kind === "purchase").length,
+      sales: animalLedgerRows.filter((movement) => movement.kind === "sale").length,
+      birthsAndDeaths: animalLedgerRows.filter(
+        (movement) => movement.kind === "birth" || movement.kind === "death"
+      ).length,
+      linkedCommercialRows: animalLedgerRows.filter((movement) => Boolean(movement.linkedAccountingEntryId)).length
+    };
+  }, [animalLedgerRows]);
+
+  const accountingLedgerSummary = useMemo(() => {
+    return {
+      incomeUsd: accountingLedgerRows
+        .filter((entry) => entry.type === "income" && entry.currency === "USD")
+        .reduce((sum, entry) => sum + entry.netAmount, 0),
+      expenseUsd: accountingLedgerRows
+        .filter((entry) => entry.type === "expense" && entry.currency === "USD")
+        .reduce((sum, entry) => sum + entry.netAmount, 0),
+      expenseUyu: accountingLedgerRows
+        .filter((entry) => entry.type === "expense" && entry.currency === "UYU")
+        .reduce((sum, entry) => sum + entry.netAmount, 0),
+      linkedRows: accountingLedgerRows.filter((entry) => Boolean(entry.linkedAnimalMovementId)).length
+    };
+  }, [accountingLedgerRows]);
+
+  const rainfallRows = useMemo(() => {
+    return [...rainfallRecords]
+      .filter(
+        (record) => {
+          if (!selectedFieldIds.includes(record.fieldId)) {
+            return false;
+          }
+
+          if (selectedYear !== "all" && !record.date.startsWith(selectedYear)) {
+            return false;
+          }
+
+          if (selectedMonth !== "all" && record.date.slice(5, 7) !== selectedMonth) {
+            return false;
+          }
+
+          if (!rainfallSearchTerm.trim()) {
+            return true;
+          }
+
+          const field = fields.find((item) => item.id === record.fieldId);
+          const searchBase = [record.date, field?.name ?? "", record.notes, `${record.millimeters}`]
+            .join(" ")
+            .toLowerCase();
+
+          return searchBase.includes(rainfallSearchTerm.trim().toLowerCase());
+        }
+      )
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [rainfallRecords, rainfallSearchTerm, selectedFieldIds, selectedMonth, selectedYear]);
+
+  const categoryControlRows = useMemo(() => {
+    return summaryByField.flatMap((item) =>
+      item.stockRows.map((row) => ({
+        fieldName: item.field.name,
+        speciesLabel: speciesLabels[row.species],
+        categoryLabel: row.categoryLabel,
+        quantity: row.quantity
+      }))
+    );
+  }, [summaryByField]);
+
+  const summaryAlerts = useMemo(() => {
+    const fieldsWithoutRain = summaryByField.filter((item) => item.rainfallTotal <= 0).length;
+    const fieldsWithAdjustments = summaryByField.filter((item) => item.adjustments > 0).length;
+    const fieldsWithDeaths = summaryByField.filter((item) => item.deaths > 0).length;
+    const fieldsWithoutStock = summaryByField.filter((item) => item.stockRows.length === 0).length;
+
+    return {
+      fieldsWithoutRain,
+      fieldsWithAdjustments,
+      fieldsWithDeaths,
+      fieldsWithoutStock,
+      totalAlerts: fieldsWithoutRain + fieldsWithAdjustments + fieldsWithDeaths + fieldsWithoutStock
+    };
+  }, [summaryByField]);
+
+  const linkedOperationsRows = useMemo(() => {
+    return animalLedgerRows
+      .filter((movement) => movement.kind === "purchase" || movement.kind === "sale")
+      .map((movement) => {
+        const field = fields.find((item) => item.id === movement.fieldId);
+        const linkedEntry = movement.linkedAccountingEntryId
+          ? accountingEntries.find((entry) => entry.id === movement.linkedAccountingEntryId)
+          : undefined;
+
+        return {
+          id: movement.id,
+          date: movement.date,
+          fieldName: field?.name ?? "-",
+          movementLabel: movementKindLabels[movement.kind],
+          quantity: movement.quantity,
+          totalAmount: movement.totalAmount,
+          currency: movement.currency ?? "USD",
+          linked: Boolean(linkedEntry),
+          linkedLabel: linkedEntry
+            ? `${linkedEntry.type === "income" ? "Ingreso" : "Egreso"} | ${
+                linkedEntry.type === "income"
+                  ? incomeConceptLabels[linkedEntry.concept as keyof typeof incomeConceptLabels]
+                  : expenseConceptLabels[linkedEntry.concept as keyof typeof expenseConceptLabels]
+              }`
+            : "Pendiente de relacion"
+        };
+      })
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [accountingEntries, animalLedgerRows]);
+
+  const linkedOperationsSummary = useMemo(() => {
+    return {
+      linked: linkedOperationsRows.filter((row) => row.linked).length,
+      pending: linkedOperationsRows.filter((row) => !row.linked).length
+    };
+  }, [linkedOperationsRows]);
+
+  const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
+  const isBirthOrDeathAnimalMovement = animalForm.kind === "birth" || animalForm.kind === "death";
+  const isAdjustmentAnimalMovement = animalForm.kind === "adjustment";
+  const isCattleDeathWithEarTag = requiresEarTag(animalForm.kind, animalForm.species);
+
+  const establishmentSummary = establishments
+    .filter((item) => item.id === selectedEstablishmentId)
+    .map((item) => ({
+      ...item,
+      fieldCount: fields.filter((field) => field.establishmentId === item.id).length
+    }))[0];
+
+  useEffect(() => {
+    writeJsonStorage(animalMovementsStorageKey, animalMovements);
+  }, [animalMovements]);
+
+  useEffect(() => {
+    writeJsonStorage(accountingEntriesStorageKey, accountingEntries);
+  }, [accountingEntries]);
+
+  useEffect(() => {
+    writeJsonStorage(rainfallRecordsStorageKey, rainfallRecords);
+  }, [rainfallRecords]);
 
   function showSuccess(message: string) {
     toast.success(message, { autoClose: 2400 });
@@ -187,32 +805,135 @@ export function AgroHomePage() {
     toast.error(message, { autoClose: false });
   }
 
-  function handleStockSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleAnimalSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const quantity = Number(stockForm.quantity);
+    const quantity = Number(animalForm.quantity);
+    const weightKg = Number(animalForm.weightKg);
+    const unitPrice = Number(animalForm.unitPrice);
+    const freightAmount = Number(animalForm.freightAmount);
+    const commissionAmount = Number(animalForm.commissionAmount);
+    const taxAmount = Number(animalForm.taxAmount);
+    const commercialMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
+    const nextErrors: Record<string, string> = {};
+
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      showError("La cantidad debe ser mayor a 0.");
+      nextErrors.quantity = "La cantidad debe ser mayor a 0.";
+    }
+
+    if (isCattleDeathWithEarTag && !animalForm.earTag.trim()) {
+      nextErrors.earTag = "Falta agregar el numero de caravana.";
+    }
+
+    if (commercialMovement) {
+      if (!Number.isFinite(weightKg) || weightKg < 0) {
+        nextErrors.weightKg = "Falta agregar peso.";
+      }
+
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        nextErrors.unitPrice = "Falta agregar precio.";
+      }
+
+      if (animalForm.kind === "purchase" && (!Number.isFinite(freightAmount) || freightAmount < 0)) {
+        nextErrors.freightAmount = "Falta agregar flete.";
+      }
+
+      if (!Number.isFinite(commissionAmount) || commissionAmount < 0) {
+        nextErrors.commissionAmount = "Falta agregar comision.";
+      }
+
+      if (!Number.isFinite(taxAmount) || taxAmount < 0) {
+        nextErrors.taxAmount = "Falta agregar IVA.";
+      }
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setAnimalFormErrors(nextErrors);
+      const firstErrorField = Object.keys(nextErrors)[0];
+      showError(nextErrors[firstErrorField] ?? "Faltan datos obligatorios.");
+      focusAnimalField(firstErrorField);
       return;
     }
 
-    const movement: StockMovement = {
-      id: `mov-${Date.now()}`,
-      date: stockForm.date,
-      establishmentId: stockForm.establishmentId,
-      fieldId: stockForm.fieldId,
-      species: stockForm.species,
-      categoryCode: stockForm.categoryCode,
-      direction: stockForm.direction,
-      reason: stockForm.reason,
+    setAnimalFormErrors({});
+
+    const existingMovement = editingAnimalMovementId
+      ? animalMovements.find((movement) => movement.id === editingAnimalMovementId)
+      : undefined;
+    const nextMovementId = editingAnimalMovementId ?? `anm-${Date.now()}`;
+    const normalizedFreight = commercialMovement && Number.isFinite(freightAmount) ? freightAmount : 0;
+    const normalizedCommission = commercialMovement && Number.isFinite(commissionAmount) ? commissionAmount : 0;
+    const normalizedTax = commercialMovement && Number.isFinite(taxAmount) ? taxAmount : 0;
+    const totalAmount = commercialMovement
+      ? calculateAnimalTotal(quantity, unitPrice, normalizedCommission, normalizedTax, normalizedFreight)
+      : undefined;
+
+    const entryType: AccountingEntryType = animalForm.kind === "sale" ? "income" : "expense";
+    const accountingConcept =
+      animalForm.kind === "sale" ? getIncomeConceptForSpecies(animalForm.species) : "compra_animales";
+    const nextAccountingId = commercialMovement
+      ? existingMovement?.linkedAccountingEntryId ?? `acc-${Date.now()}`
+      : undefined;
+
+    const movement: AnimalMovementRecord = {
+      id: nextMovementId,
+      date: animalForm.date,
+      establishmentId: animalForm.establishmentId,
+      fieldId: animalForm.fieldId,
+      species: animalForm.species,
+      categoryCode: animalForm.categoryCode,
+      kind: animalForm.kind,
       quantity,
-      notes: stockForm.notes.trim()
+      earTag: isCattleDeathWithEarTag ? animalForm.earTag.trim() : undefined,
+      weightKg: commercialMovement ? weightKg : undefined,
+      unitPrice: commercialMovement ? unitPrice : undefined,
+      freightAmount: animalForm.kind === "purchase" ? normalizedFreight : undefined,
+      commissionAmount: commercialMovement ? normalizedCommission : undefined,
+      taxAmount: commercialMovement ? normalizedTax : undefined,
+      totalAmount,
+      currency: commercialMovement ? animalForm.currency : undefined,
+      linkedAccountingEntryId: nextAccountingId,
+      notes: animalForm.notes.trim()
     };
 
-    setMovements((current) => [movement, ...current]);
-    setSelectedEstablishmentId(stockForm.establishmentId);
-    setStockForm((current) => ({ ...current, quantity: "", notes: "" }));
-    showSuccess("Movimiento de stock guardado.");
+    setAnimalMovements((current) =>
+      editingAnimalMovementId
+        ? current.map((item) => (item.id === editingAnimalMovementId ? movement : item))
+        : [movement, ...current]
+    );
+
+    if (commercialMovement && nextAccountingId && totalAmount !== undefined) {
+      const accountingEntry: AccountingEntry = {
+        id: nextAccountingId,
+        date: animalForm.date,
+        establishmentId: animalForm.establishmentId,
+        fieldId: animalForm.fieldId,
+        type: entryType,
+        concept: accountingConcept,
+        currency: animalForm.currency,
+        grossAmount: quantity * unitPrice,
+        commissionAmount: normalizedCommission,
+        taxAmount: normalizedTax,
+        netAmount: totalAmount,
+        linkedAnimalMovementId: nextMovementId,
+        notes: animalForm.notes.trim()
+      };
+
+      setAccountingEntries((current) => {
+        const hasExisting = current.some((item) => item.id === nextAccountingId);
+        if (hasExisting) {
+          return current.map((item) => (item.id === nextAccountingId ? accountingEntry : item));
+        }
+
+        return [accountingEntry, ...current];
+      });
+    } else if (!commercialMovement && existingMovement?.linkedAccountingEntryId) {
+      setAccountingEntries((current) => current.filter((item) => item.id !== existingMovement.linkedAccountingEntryId));
+    }
+
+    setSelectedEstablishmentId(animalForm.establishmentId);
+    resetAnimalForm();
+    showSuccess(editingAnimalMovementId ? "Movimiento de animales actualizado." : "Movimiento de animales guardado.");
   }
 
   function handleAccountingSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -221,24 +942,10 @@ export function AgroHomePage() {
     const grossAmount = Number(accountingForm.grossAmount);
     const commissionAmount = Number(accountingForm.commissionAmount);
     const taxAmount = Number(accountingForm.taxAmount);
-    const kilos = Number(accountingForm.kilos);
-    const pricePerKilo = Number(accountingForm.pricePerKilo);
 
     if (!Number.isFinite(grossAmount) || grossAmount <= 0) {
       showError("El importe bruto debe ser mayor a 0.");
       return;
-    }
-
-    if (accountingForm.type === "income") {
-      if (accountingForm.kilos && (!Number.isFinite(kilos) || kilos < 0)) {
-        showError("Los kilos deben ser un numero valido.");
-        return;
-      }
-
-      if (accountingForm.pricePerKilo && (!Number.isFinite(pricePerKilo) || pricePerKilo < 0)) {
-        showError("El precio por kilo debe ser un numero valido.");
-        return;
-      }
     }
 
     if (!Number.isFinite(commissionAmount) || commissionAmount < 0) {
@@ -251,34 +958,213 @@ export function AgroHomePage() {
       return;
     }
 
+    const existingEntry = editingAccountingEntryId
+      ? accountingEntries.find((item) => item.id === editingAccountingEntryId)
+      : undefined;
     const entry: AccountingEntry = {
-      id: `acc-${Date.now()}`,
+      id: editingAccountingEntryId ?? `acc-${Date.now()}`,
       date: accountingForm.date,
       establishmentId: accountingForm.establishmentId,
+      fieldId: accountingForm.fieldId,
       type: accountingForm.type,
-      concept: accountingForm.type === "income" ? accountingForm.concept : accountingForm.concept,
-      species: accountingForm.type === "income" ? accountingForm.species : undefined,
-      kilos: accountingForm.type === "income" && Number.isFinite(kilos) && kilos > 0 ? kilos : undefined,
-      pricePerKilo:
-        accountingForm.type === "income" && Number.isFinite(pricePerKilo) && pricePerKilo > 0
-          ? pricePerKilo
-          : undefined,
+      concept: accountingForm.concept,
+      currency: accountingForm.currency,
       grossAmount,
-      commissionAmount: Number.isFinite(commissionAmount) ? commissionAmount : 0,
-      taxAmount: Number.isFinite(taxAmount) ? taxAmount : 0,
+      commissionAmount,
+      taxAmount,
       netAmount: getNetAmount(accountingForm.type, grossAmount, commissionAmount, taxAmount),
       notes: accountingForm.notes.trim()
     };
 
-    setAccountingEntries((current) => [entry, ...current]);
+    setAccountingEntries((current) =>
+      editingAccountingEntryId
+        ? current.map((item) => (item.id === editingAccountingEntryId ? entry : item))
+        : [entry, ...current]
+    );
+    if (existingEntry?.linkedAnimalMovementId) {
+      setAnimalMovements((current) =>
+        current.map((movement) =>
+          movement.id === existingEntry.linkedAnimalMovementId ? { ...movement, linkedAccountingEntryId: entry.id } : movement
+        )
+      );
+    }
     setSelectedEstablishmentId(accountingForm.establishmentId);
-    setAccountingForm((current) => ({
-      ...current,
-      kilos: current.type === "income" ? "" : "",
-      pricePerKilo: current.type === "income" ? "" : "",
-      notes: ""
-    }));
-    showSuccess("Registro contable guardado.");
+    resetAccountingForm();
+    showSuccess(editingAccountingEntryId ? "Movimiento contable actualizado." : "Movimiento contable guardado.");
+  }
+
+  function handleRainfallSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const millimeters = Number(rainfallForm.millimeters);
+    if (!Number.isFinite(millimeters) || millimeters < 0) {
+      showError("La lluvia debe ser un numero valido.");
+      return;
+    }
+
+    const rainfallEntry: RainfallRecord = {
+      id: editingRainfallRecordId ?? `rain-${Date.now()}`,
+      date: rainfallForm.date,
+      fieldId: rainfallForm.fieldId,
+      millimeters,
+      notes: rainfallForm.notes.trim()
+    };
+
+    setRainfallRecords((current) =>
+      editingRainfallRecordId
+        ? current.map((item) => (item.id === editingRainfallRecordId ? rainfallEntry : item))
+        : [rainfallEntry, ...current]
+    );
+    resetRainfallForm();
+    showSuccess(editingRainfallRecordId ? "Registro de lluvia actualizado." : "Registro de lluvia guardado.");
+  }
+
+  function handleEditAnimalMovement(movementId: string) {
+    const movement = animalMovements.find((item) => item.id === movementId);
+    if (!movement) {
+      return;
+    }
+
+    setEditingAnimalMovementId(movementId);
+    setSelectedEstablishmentId(movement.establishmentId);
+    setAnimalForm({
+      date: movement.date,
+      establishmentId: movement.establishmentId,
+      fieldId: movement.fieldId,
+      species: movement.species,
+      categoryCode: movement.categoryCode,
+      kind: movement.kind,
+      quantity: `${movement.quantity}`,
+      earTag: movement.earTag ?? "",
+      weightKg: movement.weightKg !== undefined ? `${movement.weightKg}` : "",
+      unitPrice: movement.unitPrice !== undefined ? `${movement.unitPrice}` : "",
+      freightAmount: movement.freightAmount !== undefined ? `${movement.freightAmount}` : "",
+      commissionAmount: movement.commissionAmount !== undefined ? `${movement.commissionAmount}` : "",
+      taxAmount: movement.taxAmount !== undefined ? `${movement.taxAmount}` : "",
+      currency: movement.currency ?? "USD",
+      notes: movement.notes
+    });
+    animalFormPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleEditAccountingEntry(entryId: string) {
+    const entry = accountingEntries.find((item) => item.id === entryId);
+    if (!entry) {
+      return;
+    }
+
+    setEditingAccountingEntryId(entryId);
+    setSelectedEstablishmentId(entry.establishmentId);
+    setAccountingForm({
+      date: entry.date,
+      establishmentId: entry.establishmentId,
+      fieldId: entry.fieldId,
+      type: entry.type,
+      concept: entry.concept,
+      currency: entry.currency,
+      grossAmount: `${entry.grossAmount}`,
+      commissionAmount: `${entry.commissionAmount}`,
+      taxAmount: `${entry.taxAmount}`,
+      notes: entry.notes
+    });
+    accountingFormPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleEditRainfallRecord(recordId: string) {
+    const record = rainfallRecords.find((item) => item.id === recordId);
+    if (!record) {
+      return;
+    }
+
+    const field = fields.find((item) => item.id === record.fieldId);
+    if (field) {
+      setSelectedEstablishmentId(field.establishmentId);
+    }
+    setEditingRainfallRecordId(recordId);
+    setRainfallForm({
+      date: record.date,
+      fieldId: record.fieldId,
+      millimeters: `${record.millimeters}`,
+      notes: record.notes
+    });
+  }
+
+  function handleDeleteAnimalMovement(movementId: string) {
+    const movement = animalMovements.find((item) => item.id === movementId);
+    setAnimalMovements((current) => current.filter((item) => item.id !== movementId));
+    if (editingAnimalMovementId === movementId) {
+      resetAnimalForm();
+    }
+
+    if (movement?.linkedAccountingEntryId) {
+      setAccountingEntries((current) => current.filter((item) => item.id !== movement.linkedAccountingEntryId));
+    }
+
+    showSuccess("Movimiento de animales eliminado.");
+  }
+
+  function handleDeleteAccountingEntry(entryId: string) {
+    setAccountingEntries((current) => current.filter((item) => item.id !== entryId));
+    if (editingAccountingEntryId === entryId) {
+      resetAccountingForm();
+    }
+    setAnimalMovements((current) =>
+      current.map((movement) =>
+        movement.linkedAccountingEntryId === entryId ? { ...movement, linkedAccountingEntryId: undefined } : movement
+      )
+    );
+    showSuccess("Movimiento contable eliminado.");
+  }
+
+  function handleDeleteRainfallRecord(recordId: string) {
+    setRainfallRecords((current) => current.filter((item) => item.id !== recordId));
+    if (editingRainfallRecordId === recordId) {
+      resetRainfallForm();
+    }
+    showSuccess("Registro de lluvia eliminado.");
+  }
+
+  function requestDeleteAnimalMovement(movementId: string) {
+    setPendingDelete({
+      kind: "animal",
+      id: movementId,
+      title: "Eliminar movimiento de animales",
+      message: "Este movimiento se va a borrar de la planilla. Si tenia relacion contable, tambien se elimina esa relacion."
+    });
+  }
+
+  function requestDeleteAccountingEntry(entryId: string) {
+    setPendingDelete({
+      kind: "accounting",
+      id: entryId,
+      title: "Eliminar movimiento contable",
+      message: "Este movimiento se va a borrar de la planilla contable y cualquier vinculo con animales quedara desarmado."
+    });
+  }
+
+  function requestDeleteRainfallRecord(recordId: string) {
+    setPendingDelete({
+      kind: "rainfall",
+      id: recordId,
+      title: "Eliminar registro de lluvia",
+      message: "Este registro se va a borrar del historial de lluvias del campo."
+    });
+  }
+
+  function handleConfirmDelete() {
+    if (!pendingDelete) {
+      return;
+    }
+
+    if (pendingDelete.kind === "animal") {
+      handleDeleteAnimalMovement(pendingDelete.id);
+    } else if (pendingDelete.kind === "accounting") {
+      handleDeleteAccountingEntry(pendingDelete.id);
+    } else {
+      handleDeleteRainfallRecord(pendingDelete.id);
+    }
+
+    setPendingDelete(null);
   }
 
   const projectedNet = getNetAmount(
@@ -288,705 +1174,338 @@ export function AgroHomePage() {
     Number(accountingForm.taxAmount) || 0
   );
 
-  const establishmentSummary = establishments
-    .filter((item) => item.id === selectedEstablishmentId)
-    .map((item) => ({
-      ...item,
-      fieldCount: fields.filter((field) => field.establishmentId === item.id).length
-    }))[0];
-  const selectedFieldIds = fields
-    .filter((field) => field.establishmentId === selectedEstablishmentId)
-    .map((field) => field.id);
-  const reportSpeciesRows = (Object.keys(speciesLabels) as AgroSpecies[]).map((species) => {
-    const opening = initialStock
-      .filter((item) => item.species === species && selectedFieldIds.includes(item.fieldId))
-      .reduce((sum, item) => sum + item.quantity, 0);
-    const entries = movements
-      .filter((movement) => movement.species === species && selectedFieldIds.includes(movement.fieldId))
-      .reduce((sum, movement) => sum + (movement.direction === "in" ? movement.quantity : 0), 0);
-    const exits = movements
-      .filter((movement) => movement.species === species && selectedFieldIds.includes(movement.fieldId))
-      .reduce((sum, movement) => sum + (movement.direction === "out" ? movement.quantity : 0), 0);
-
-    return {
-      species,
-      opening,
-      entries,
-      exits,
-      current: opening + entries - exits
-    };
-  });
-  const selectedAccountingEntries = accountingEntries.filter(
-    (entry) => entry.establishmentId === selectedEstablishmentId
+  const projectedAnimalTotal = calculateAnimalTotal(
+    Number(animalForm.quantity) || 0,
+    Number(animalForm.unitPrice) || 0,
+    Number(animalForm.commissionAmount) || 0,
+    Number(animalForm.taxAmount) || 0,
+    animalForm.kind === "purchase" ? Number(animalForm.freightAmount) || 0 : 0
   );
-  const reportAccounting = selectedAccountingEntries.reduce(
-    (summary, entry) => {
-      if (entry.type === "income") {
-        summary.income += entry.netAmount;
-      } else {
-        summary.expense += entry.netAmount;
-      }
-      return summary;
-    },
-    { income: 0, expense: 0 }
-  );
-  const reportIncomeConcepts = Object.entries(incomeConceptLabels).map(([concept, label]) => {
-    const total = selectedAccountingEntries
-      .filter((entry) => entry.type === "income" && entry.concept === concept)
-      .reduce((sum, entry) => sum + entry.netAmount, 0);
-    return { concept, label, total };
-  });
-  const maxIncomeConceptValue = Math.max(...reportIncomeConcepts.map((item) => item.total), 1);
-  useEffect(() => {
-    writeJsonStorage(answersStorageKey, answers);
-  }, [answers]);
-
-  function handleResetAnswers() {
-    writeJsonStorage(answersStorageKey, answers);
-    showSuccess("Respuestas guardadas.");
-  }
 
   return (
     <main className="app-shell">
       <ProductShell
-        title="Agro demo"
-        subtitle="Demo"
+        title="Agro"
+        subtitle="Control del campo"
         badge=""
         navItems={agroWorkspaceSections}
         activeKey={activeView}
         onSelect={(key) => setActiveView(key as AgroView)}
         onTitleClick={() => setActiveView(null)}
       >
-      <section className="toolbar">
-        <label className="establishment-picker">
-          <span>Establecimiento visible</span>
-          <select value={selectedEstablishmentId} onChange={(event) => setSelectedEstablishmentId(event.target.value)}>
-            {establishments.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
+        <AgroToolbar
+          availableYears={availableYears}
+          selectedEstablishmentId={selectedEstablishmentId}
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+          onEstablishmentChange={setSelectedEstablishmentId}
+          onMonthChange={setSelectedMonth}
+          onYearChange={setSelectedYear}
+        />
 
-      <section className="summary-grid">
-        <article className="metric-card">
-          <span>Total vacunos</span>
-          <strong>{stockBySpecies.vacunos}</strong>
-          <small>Con base inicial mas movimientos cargados en demo.</small>
-        </article>
-        <article className="metric-card">
-          <span>Total ovinos</span>
-          <strong>{stockBySpecies.ovinos}</strong>
-          <small>Visibles por categoria y por campo.</small>
-        </article>
-        <article className="metric-card">
-          <span>Total equinos</span>
-          <strong>{stockBySpecies.equinos}</strong>
-          <small>Incluye caballada operativa del establecimiento.</small>
-        </article>
-        <article className="metric-card accent">
-          <span>Resultado neto demo</span>
-          <strong>{formatCurrency(accountingTotals.income - accountingTotals.expense)}</strong>
-          <small>
-            Ingresos {formatCurrency(accountingTotals.income)} | Egresos {formatCurrency(accountingTotals.expense)}
-          </small>
-        </article>
-      </section>
+        <AgroMetricsGrid accountingTotals={accountingTotals} stockBySpecies={stockBySpecies} />
 
-      {activeView === "overview" ? (
-        <section className="content-grid">
-          <article className="panel wide">
-            <div className="panel-header">
-              <div>
-                <h2>Campos del establecimiento</h2>
-                <p>
-                  {establishmentSummary?.location ?? "-"} | {establishmentSummary?.hectares ?? 0} ha |{" "}
-                  {establishmentSummary?.fieldCount ?? 0} campos
-                </p>
+        {activeView === "overview" ? (
+          <AgroOverviewSection
+            establishmentSummary={establishmentSummary}
+            latestAccountingEntries={latestAccountingEntries}
+            latestAnimalMovements={latestAnimalMovements}
+          />
+        ) : null}
+
+                {activeView === "animals" ? (
+          <AgroAnimalsSection
+            animalFieldRefs={animalFieldRefs}
+            animalForm={animalForm}
+            animalFormErrors={animalFormErrors}
+            animalFormPanelRef={animalFormPanelRef}
+            animalLedgerRows={animalLedgerRows}
+            animalLedgerSummary={animalLedgerSummary}
+            animalSearchTerm={animalSearchTerm}
+            animalTableRef={animalTableRef}
+            animalTableScrollbarInnerRef={animalTableScrollbarInnerRef}
+            animalTableScrollbarRef={animalTableScrollbarRef}
+            animalTableWrapRef={animalTableWrapRef}
+            clearAnimalFieldError={clearAnimalFieldError}
+            editingAnimalMovementId={editingAnimalMovementId}
+            handleAnimalKindChange={handleAnimalKindChange}
+            handleAnimalSubmit={handleAnimalSubmit}
+            isBirthOrDeathAnimalMovement={isBirthOrDeathAnimalMovement}
+            isCattleDeathWithEarTag={isCattleDeathWithEarTag}
+            isCommercialAnimalMovement={isCommercialAnimalMovement}
+            isAdjustmentAnimalMovement={isAdjustmentAnimalMovement}
+            projectedAnimalTotal={projectedAnimalTotal}
+            registerAnimalFieldRef={registerAnimalFieldRef}
+            requestDeleteAnimalMovement={requestDeleteAnimalMovement}
+            resetAnimalForm={resetAnimalForm}
+            setAnimalForm={setAnimalForm}
+            setAnimalSearchTerm={setAnimalSearchTerm}
+            showAnimalFloatingScrollbar={showAnimalFloatingScrollbar}
+            onEditMovement={handleEditAnimalMovement}
+          />
+        ) : null}
+
+        {activeView === "accounting" ? (
+          <AgroAccountingSection
+            accountingFormPanelRef={accountingFormPanelRef}
+            accountingForm={accountingForm}
+            accountingLedgerRows={accountingLedgerRows}
+            accountingSearchTerm={accountingSearchTerm}
+            editingAccountingEntryId={editingAccountingEntryId}
+            projectedNet={projectedNet}
+            requestDeleteAccountingEntry={requestDeleteAccountingEntry}
+            resetAccountingForm={resetAccountingForm}
+            setAccountingForm={setAccountingForm}
+            setAccountingSearchTerm={setAccountingSearchTerm}
+            visibleFields={visibleFields}
+            onEditEntry={handleEditAccountingEntry}
+            onSubmit={handleAccountingSubmit}
+            selectedEstablishmentId={selectedEstablishmentId}
+          />
+        ) : null}
+
+        {activeView === "rainfall" ? (
+          <AgroRainfallSection
+            editingRainfallRecordId={editingRainfallRecordId}
+            rainfallForm={rainfallForm}
+            rainfallRows={rainfallRows}
+            rainfallSearchTerm={rainfallSearchTerm}
+            resetRainfallForm={resetRainfallForm}
+            requestDeleteRainfallRecord={requestDeleteRainfallRecord}
+            setRainfallForm={setRainfallForm}
+            setRainfallSearchTerm={setRainfallSearchTerm}
+            visibleFields={visibleFields}
+            onEditRainfallRecord={handleEditRainfallRecord}
+            onSubmit={handleRainfallSubmit}
+          />
+        ) : null}
+
+        {activeView === "summary" ? (
+          <section className="content-grid">
+            <article className="panel wide">
+              <div className="panel-header">
+                <div>
+                  <h2>Alertas y pendientes</h2>
+                  <p>Lectura rapida para ver que campos o registros conviene revisar a mano.</p>
+                </div>
               </div>
-            </div>
-            <div className="chip-grid">
-              {visibleFields.map((field) => (
-                <article key={field.id} className="chip-card">
-                  <strong>{field.name}</strong>
-                  <span>{field.notes}</span>
+              <div className="report-summary-grid">
+                <article className="report-summary-card warning-card">
+                  <span>Total alertas</span>
+                  <strong>{summaryAlerts.totalAlerts}</strong>
                 </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel">
-            <div className="panel-header">
-              <div>
-                <h2>Ultimos movimientos de stock</h2>
+                <article className="report-summary-card warning-card">
+                  <span>Campos sin lluvia</span>
+                  <strong>{summaryAlerts.fieldsWithoutRain}</strong>
+                </article>
+                <article className="report-summary-card warning-card">
+                  <span>Campos con ajustes</span>
+                  <strong>{summaryAlerts.fieldsWithAdjustments}</strong>
+                </article>
+                <article className="report-summary-card warning-card">
+                  <span>Campos con muertes</span>
+                  <strong>{summaryAlerts.fieldsWithDeaths}</strong>
+                </article>
+                <article className="report-summary-card warning-card">
+                  <span>Campos sin existencias</span>
+                  <strong>{summaryAlerts.fieldsWithoutStock}</strong>
+                </article>
               </div>
-            </div>
-            <div className="list-stack">
-              {latestMovements.map((movement) => (
-                <div key={movement.id} className="list-row">
-                  <div>
-                    <strong>{movement.reason}</strong>
-                    <span>
-                      {movement.date} | {speciesLabels[movement.species]}
-                    </span>
-                  </div>
-                  <strong className={movement.direction === "in" ? "tone-positive" : "tone-negative"}>
-                    {movement.direction === "in" ? "+" : "-"}
-                    {movement.quantity}
-                  </strong>
+            </article>
+
+            <article className="panel wide">
+              <div className="panel-header">
+                <div>
+                  <h2>Resumen por campo</h2>
+                  <p>Control de existencias, compras, ventas y caja separado por campo.</p>
                 </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel">
-            <div className="panel-header">
-              <div>
-                <h2>Ultimos asientos contables</h2>
               </div>
-            </div>
-            <div className="list-stack">
-              {latestAccountingEntries.map((entry) => (
-                <div key={entry.id} className="list-row">
-                  <div>
-                    <strong>
-                      {entry.type === "income"
-                        ? incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels]
-                        : expenseConceptLabels[entry.concept as keyof typeof expenseConceptLabels]}
-                    </strong>
-                    <span>{entry.date}</span>
-                  </div>
-                  <strong className={entry.type === "income" ? "tone-positive" : "tone-negative"}>
-                    {entry.type === "income" ? "+" : "-"}
-                    {formatCurrency(entry.netAmount)}
-                  </strong>
+              <div className="report-stack">
+                {summaryByField.map((item) => (
+                  <article key={item.field.id} className="report-row-card">
+                    <div className="report-row-head">
+                      <strong>{item.field.name}</strong>
+                      <span>{item.field.notes}</span>
+                    </div>
+                    <div className="mini-stats">
+                      <span>Vacunos {item.speciesTotals.vacunos}</span>
+                      <span>Ovinos {item.speciesTotals.ovinos}</span>
+                      <span>Equinos {item.speciesTotals.equinos}</span>
+                    </div>
+                    <div className="mini-stats">
+                      <span>Compras {item.purchases}</span>
+                      <span>Ventas {item.sales}</span>
+                      <span>Lluvia {item.rainfallTotal} mm</span>
+                    </div>
+                    <div className="mini-stats">
+                      <span>Ingresos USD {formatMoney(item.incomeUsd, "USD")}</span>
+                      <span>Egresos USD {formatMoney(item.expenseUsd, "USD")}</span>
+                      <span>Egresos UYU {formatMoney(item.expenseUyu, "UYU")}</span>
+                    </div>
+                    <div className="inline-metrics">
+                      {item.adjustments > 0 ? (
+                        <span className="data-badge warning">Ajustes pendientes de revisar: {item.adjustments}</span>
+                      ) : null}
+                      {item.deaths > 0 ? (
+                        <span className="data-badge warning">Muertes registradas: {item.deaths}</span>
+                      ) : null}
+                      {item.lastRainfallDate ? (
+                        <span className="data-badge compact">Ultima lluvia {item.lastRainfallDate}</span>
+                      ) : (
+                        <span className="data-badge warning">Sin lluvia cargada</span>
+                      )}
+                      {item.stockRows.length === 0 ? (
+                        <span className="data-badge warning">Sin existencias visibles</span>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Resumen del periodo</h2>
                 </div>
-              ))}
-            </div>
-          </article>
-        </section>
-      ) : null}
+              </div>
+              <div className="finance-highlight">
+                <div>
+                  <span>Entradas animales</span>
+                  <strong>{periodSummary.entries}</strong>
+                </div>
+                <div>
+                  <span>Salidas animales</span>
+                  <strong>{periodSummary.exits}</strong>
+                </div>
+                <div>
+                  <span>Ingresos USD</span>
+                  <strong>{formatMoney(periodSummary.incomeUsd, "USD")}</strong>
+                </div>
+                <div>
+                  <span>Gastos USD</span>
+                  <strong>{formatMoney(periodSummary.expenseUsd, "USD")}</strong>
+                </div>
+                <div>
+                  <span>Gastos UYU</span>
+                  <strong>{formatMoney(periodSummary.expenseUyu, "UYU")}</strong>
+                </div>
+              </div>
+            </article>
 
-      {activeView === "stock" ? (
-        <section className="content-grid">
-          <article className="panel">
-            <div className="panel-header">
-              <div>
-                <h2>Cargar movimiento de stock</h2>
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Resumen anual</h2>
+                </div>
               </div>
-            </div>
-            <form className="form-grid" onSubmit={handleStockSubmit}>
-              <label>
-                <span>Fecha</span>
-                <input
-                  type="date"
-                  value={stockForm.date}
-                  onChange={(event) => setStockForm((current) => ({ ...current, date: event.target.value }))}
-                />
-              </label>
-              <label>
-                <span>Establecimiento</span>
-                <select
-                  value={stockForm.establishmentId}
-                  onChange={(event) => {
-                    const nextEstablishmentId = event.target.value;
-                    const nextFieldId = fields.find((field) => field.establishmentId === nextEstablishmentId)?.id ?? "";
-                    setStockForm((current) => ({
-                      ...current,
-                      establishmentId: nextEstablishmentId,
-                      fieldId: nextFieldId
-                    }));
-                  }}
-                >
-                  {establishments.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Campo</span>
-                <select
-                  value={stockForm.fieldId}
-                  onChange={(event) => setStockForm((current) => ({ ...current, fieldId: event.target.value }))}
-                >
-                  {fields
-                    .filter((field) => field.establishmentId === stockForm.establishmentId)
-                    .map((field) => (
-                      <option key={field.id} value={field.id}>
-                        {field.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                <span>Especie</span>
-                <select
-                  value={stockForm.species}
-                  onChange={(event) => {
-                    const nextSpecies = event.target.value as AgroSpecies;
-                    setStockForm((current) => ({
-                      ...current,
-                      species: nextSpecies,
-                      categoryCode: categoryCatalog[nextSpecies][0]?.code ?? ""
-                    }));
-                  }}
-                >
-                  {Object.entries(speciesLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Categoria MGAP</span>
-                <select
-                  value={stockForm.categoryCode}
-                  onChange={(event) => setStockForm((current) => ({ ...current, categoryCode: event.target.value }))}
-                >
-                  {categoryCatalog[stockForm.species].map((category) => (
-                    <option key={category.code} value={category.code}>
-                      {category.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Tipo</span>
-                <select
-                  value={stockForm.direction}
-                  onChange={(event) => setStockForm((current) => ({ ...current, direction: event.target.value as StockDirection }))}
-                >
-                  <option value="in">Entrada</option>
-                  <option value="out">Salida</option>
-                </select>
-              </label>
-              <label>
-                <span>Motivo</span>
-                <select
-                  value={stockForm.reason}
-                  onChange={(event) => setStockForm((current) => ({ ...current, reason: event.target.value as StockReason }))}
-                >
-                  <option value="compra">Compra</option>
-                  <option value="nacimiento">Nacimiento</option>
-                  <option value="venta">Venta</option>
-                  <option value="muerte">Muerte</option>
-                  <option value="ajuste">Ajuste</option>
-                </select>
-              </label>
-              <label>
-                <span>Cantidad</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={stockForm.quantity}
-                  onChange={(event) => setStockForm((current) => ({ ...current, quantity: event.target.value }))}
-                />
-              </label>
-              <label className="span-2">
-                <span>Observaciones</span>
-                <textarea
-                  rows={3}
-                  value={stockForm.notes}
-                  onChange={(event) => setStockForm((current) => ({ ...current, notes: event.target.value }))}
-                />
-              </label>
-              <button type="submit" className="primary-button">
-                Guardar movimiento demo
-              </button>
-            </form>
-          </article>
+              <div className="finance-highlight">
+                <div>
+                  <span>Entradas animales</span>
+                  <strong>{annualSummary.entries}</strong>
+                </div>
+                <div>
+                  <span>Salidas animales</span>
+                  <strong>{annualSummary.exits}</strong>
+                </div>
+                <div>
+                  <span>Ingresos USD</span>
+                  <strong>{formatMoney(annualSummary.incomeUsd, "USD")}</strong>
+                </div>
+                <div>
+                  <span>Gastos USD</span>
+                  <strong>{formatMoney(annualSummary.expenseUsd, "USD")}</strong>
+                </div>
+                <div>
+                  <span>Gastos UYU</span>
+                  <strong>{formatMoney(annualSummary.expenseUyu, "UYU")}</strong>
+                </div>
+              </div>
+            </article>
 
-          <article className="panel wide">
-            <div className="panel-header">
-              <div>
-                <h2>Stock actual por campo y categoria</h2>
-                <p>Cantidad de animales por categoria y equivalencia en unidad ganadera.</p>
+            <article className="panel wide">
+              <div className="panel-header">
+                <div>
+                  <h2>Operaciones vinculadas</h2>
+                  <p>Chequeo de compras y ventas con su movimiento economico relacionado.</p>
+                </div>
               </div>
-            </div>
-            <div className="info-inline-card">
-              <strong>UG = Unidad Ganadera</strong>
-              <span>
-                Es una referencia para comparar categorias distintas dentro del stock. No pesa igual un toro que un
-                ternero, por eso cada categoria tiene su equivalencia.
-              </span>
-            </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Campo</th>
-                    <th>Especie</th>
-                    <th>Categoria</th>
-                    <th>Unidad ganadera</th>
-                    <th>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fieldStockRows.map((row) => {
-                    const field = fields.find((item) => item.id === row.fieldId);
-                    const category = categoryCatalog[row.species].find((item) => item.code === row.categoryCode);
-                    return (
-                      <tr key={`${row.fieldId}-${row.species}-${row.categoryCode}`}>
-                        <td>{field?.name}</td>
-                        <td>{speciesLabels[row.species]}</td>
-                        <td>{category?.label ?? row.categoryCode}</td>
-                        <td>{category?.ug ?? "-"}</td>
-                        <td>{row.total}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </article>
-        </section>
-      ) : null}
-
-      {activeView === "accounting" ? (
-        <section className="content-grid">
-          <article className="panel">
-            <div className="panel-header">
-              <div>
-                <h2>Cargar ingreso o gasto</h2>
-                <p>Registro simple para ventas, compras y gastos del establecimiento.</p>
+              <div className="inline-metrics">
+                <span className="data-badge accent">Relacionadas {linkedOperationsSummary.linked}</span>
+                <span className="data-badge warning">Pendientes {linkedOperationsSummary.pending}</span>
               </div>
-            </div>
-            <form className="form-grid" onSubmit={handleAccountingSubmit}>
-              <label>
-                <span>Fecha</span>
-                <input
-                  type="date"
-                  value={accountingForm.date}
-                  onChange={(event) => setAccountingForm((current) => ({ ...current, date: event.target.value }))}
-                />
-              </label>
-              <label>
-                <span>Establecimiento</span>
-                <select
-                  value={accountingForm.establishmentId}
-                  onChange={(event) =>
-                    setAccountingForm((current) => ({ ...current, establishmentId: event.target.value }))
-                  }
-                >
-                  {establishments.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Tipo</span>
-                <select
-                  value={accountingForm.type}
-                  onChange={(event) =>
-                    setAccountingForm((current) => ({
-                      ...current,
-                      type: event.target.value as AccountingEntryType,
-                      concept: (event.target.value === "income" ? "venta_vacunos" : "alimentacion") as
-                        | IncomeConcept
-                        | ExpenseConcept,
-                      kilos: event.target.value === "income" ? current.kilos : "",
-                      pricePerKilo: event.target.value === "income" ? current.pricePerKilo : ""
-                    }))
-                  }
-                >
-                  <option value="income">Ingreso</option>
-                  <option value="expense">Gasto</option>
-                </select>
-              </label>
-              <label>
-                <span>Rubro</span>
-                <select
-                  value={accountingForm.concept}
-                  onChange={(event) =>
-                    setAccountingForm((current) => ({
-                      ...current,
-                      concept: event.target.value as IncomeConcept | ExpenseConcept
-                    }))
-                  }
-                >
-                  {accountingForm.type === "income"
-                    ? Object.entries(incomeConceptLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))
-                    : Object.entries(expenseConceptLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                </select>
-              </label>
-              {accountingForm.type === "income" ? (
-                <>
-                  <label>
-                    <span>Especie</span>
-                    <select
-                      value={accountingForm.species}
-                      onChange={(event) =>
-                        setAccountingForm((current) => ({ ...current, species: event.target.value as AgroSpecies }))
-                      }
-                    >
-                      {Object.entries(speciesLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Kilos</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={accountingForm.kilos}
-                      onChange={(event) => setAccountingForm((current) => ({ ...current, kilos: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Precio por kilo</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={accountingForm.pricePerKilo}
-                      onChange={(event) =>
-                        setAccountingForm((current) => ({ ...current, pricePerKilo: event.target.value }))
-                      }
-                    />
-                  </label>
-                </>
-              ) : null}
-              <label>
-                <span>Importe bruto</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={accountingForm.grossAmount}
-                  onChange={(event) =>
-                    setAccountingForm((current) => ({ ...current, grossAmount: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Comision</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={accountingForm.commissionAmount}
-                  onChange={(event) =>
-                    setAccountingForm((current) => ({ ...current, commissionAmount: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Impuestos</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={accountingForm.taxAmount}
-                  onChange={(event) => setAccountingForm((current) => ({ ...current, taxAmount: event.target.value }))}
-                />
-              </label>
-              <label className="span-2">
-                <span>Observaciones</span>
-                <textarea
-                  rows={3}
-                  value={accountingForm.notes}
-                  onChange={(event) => setAccountingForm((current) => ({ ...current, notes: event.target.value }))}
-                />
-              </label>
-              <div className="projection-card span-2">
-                <span>Neto proyectado</span>
-                <strong>{formatCurrency(projectedNet)}</strong>
-              </div>
-              <button type="submit" className="primary-button">
-                Guardar asiento demo
-              </button>
-            </form>
-          </article>
-
-          <article className="panel wide">
-            <div className="panel-header">
-              <div>
-                <h2>Planilla contable demo</h2>
-                <p>Resumen de ingresos y gastos con bruto, comision, impuestos y neto final.</p>
-              </div>
-            </div>
-            <div className="info-inline-card">
-              <strong>Neto final</strong>
-              <span>
-                Es el resultado que queda despues de descontar comision e impuestos en una venta, o el costo final en
-                un gasto.
-              </span>
-            </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Rubro</th>
-                    <th>Kilos</th>
-                    <th>Bruto</th>
-                    <th>Comision</th>
-                    <th>Impuestos</th>
-                    <th>Neto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accountingEntries.map((entry) => (
-                    <tr key={entry.id}>
-                      <td>{entry.date}</td>
-                      <td>{entry.type === "income" ? "Ingreso" : "Gasto"}</td>
-                      <td>
-                        {entry.type === "income"
-                          ? incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels]
-                          : expenseConceptLabels[entry.concept as keyof typeof expenseConceptLabels]}
-                      </td>
-                      <td>{entry.kilos ?? "-"}</td>
-                      <td>{formatCurrency(entry.grossAmount)}</td>
-                      <td>{formatCurrency(entry.commissionAmount)}</td>
-                      <td>{formatCurrency(entry.taxAmount)}</td>
-                      <td>{formatCurrency(entry.netAmount)}</td>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Campo</th>
+                      <th>Operacion</th>
+                      <th>Cantidad</th>
+                      <th>Monto</th>
+                      <th>Estado</th>
+                      <th>Relacion contable</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </article>
-        </section>
-      ) : null}
-
-      {activeView === "questions" ? (
-        <section className="content-grid">
-          <article className="panel wide">
-            <div className="panel-header">
-              <div>
-                <h2>Preguntas</h2>
-              </div>
-            </div>
-            <div className="question-stack">
-              {discoveryQuestions.map((question) => (
-                <section key={question.id} className="question-card">
-                  <div>
-                    <h3>{question.title}</h3>
-                  </div>
-                  <div className="option-row">
-                    {question.options.map((option) => (
-                      <label
-                        key={option}
-                        className={answers[question.id] === option ? "option-pill active" : "option-pill"}
-                      >
-                        <input
-                          type="radio"
-                          name={question.id}
-                          value={option}
-                          checked={answers[question.id] === option}
-                          onChange={(event) =>
-                            setAnswers((current) => ({ ...current, [question.id]: event.target.value }))
-                          }
-                        />
-                        <span>{option}</span>
-                      </label>
+                  </thead>
+                  <tbody>
+                    {linkedOperationsRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.date}</td>
+                        <td>{row.fieldName}</td>
+                        <td>{row.movementLabel}</td>
+                        <td>{row.quantity}</td>
+                        <td>{row.totalAmount !== undefined ? formatMoney(row.totalAmount, row.currency) : "-"}</td>
+                        <td>
+                          <span className={row.linked ? "data-badge accent compact" : "data-badge warning compact"}>
+                            {row.linked ? "Relacionado" : "Pendiente"}
+                          </span>
+                        </td>
+                        <td>{row.linkedLabel}</td>
+                      </tr>
                     ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-            <div className="answers-summary">
-              <button type="button" className="primary-button" onClick={handleResetAnswers}>
-                Guardar respuestas
-              </button>
-            </div>
-          </article>
-        </section>
-      ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </article>
 
-      {activeView === "reports" ? (
-        <section className="content-grid">
-          <article className="panel">
-            <div className="panel-header">
-              <div>
-                <h2>Stock por especie</h2>
+            <article className="panel wide">
+              <div className="panel-header">
+                <div>
+                  <h2>Control fino por categoria</h2>
+                  <p>Lectura para revisar existencias por campo, especie y categoria dentro del periodo elegido.</p>
+                </div>
               </div>
-            </div>
-            <div className="report-stack">
-              {reportSpeciesRows.map((row) => (
-                <article key={row.species} className="report-row-card">
-                  <div className="report-row-head">
-                    <strong>{speciesLabels[row.species]}</strong>
-                    <span>{row.current} actuales</span>
-                  </div>
-                  <div className="mini-stats">
-                    <span>Apertura {row.opening}</span>
-                    <span>Entradas {row.entries}</span>
-                    <span>Salidas {row.exits}</span>
-                  </div>
-                  <div className="bar-track">
-                    <span style={{ width: `${Math.max((row.current / Math.max(row.opening + row.entries, 1)) * 100, 10)}%` }} />
-                  </div>
-                </article>
-              ))}
-            </div>
-          </article>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Campo</th>
+                      <th>Especie</th>
+                      <th>Categoria</th>
+                      <th>Total actual</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categoryControlRows.map((row) => (
+                      <tr key={`${row.fieldName}-${row.speciesLabel}-${row.categoryLabel}`}>
+                        <td>{row.fieldName}</td>
+                        <td>{row.speciesLabel}</td>
+                        <td>{row.categoryLabel}</td>
+                        <td>{row.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        ) : null}
 
-          <article className="panel">
-            <div className="panel-header">
-              <div>
-                <h2>Resultado economico</h2>
-              </div>
-            </div>
-            <div className="finance-highlight">
-              <div>
-                <span>Ingresos netos</span>
-                <strong>{formatCurrency(reportAccounting.income)}</strong>
-              </div>
-              <div>
-                <span>Gastos netos</span>
-                <strong>{formatCurrency(reportAccounting.expense)}</strong>
-              </div>
-              <div>
-                <span>Resultado</span>
-                <strong>{formatCurrency(reportAccounting.income - reportAccounting.expense)}</strong>
-              </div>
-            </div>
-          </article>
-
-          <article className="panel wide">
-            <div className="panel-header">
-              <div>
-                <h2>Ingresos por rubro</h2>
-                <p>Nos sirve para ver qué actividad pesa más y qué lenguaje entiende mejor el cliente.</p>
-              </div>
-            </div>
-            <div className="report-stack">
-              {reportIncomeConcepts.map((item) => (
-                <article key={item.concept} className="income-bar-card">
-                  <div className="income-bar-head">
-                    <strong>{item.label}</strong>
-                    <span>{formatCurrency(item.total)}</span>
-                  </div>
-                  <div className="bar-track warm">
-                    <span style={{ width: `${Math.max((item.total / maxIncomeConceptValue) * 100, item.total > 0 ? 8 : 0)}%` }} />
-                  </div>
-                </article>
-              ))}
-            </div>
-          </article>
-
-        </section>
-      ) : null}
+        <AgroDeleteConfirmModal
+          pendingDelete={pendingDelete}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={handleConfirmDelete}
+        />
       </ProductShell>
     </main>
   );

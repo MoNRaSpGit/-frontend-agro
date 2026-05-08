@@ -56,3 +56,4 @@ El resto del demo puede seguir efimero:
 ## Siguiente lectura
 
 - [Contexto funcional del producto](./product-context.md)
+- [Feedback cliente 2026-05-07](./client-feedback-2026-05-07.md)

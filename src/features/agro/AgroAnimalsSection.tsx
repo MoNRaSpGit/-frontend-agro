@@ -1,0 +1,478 @@
+import { categoryCatalog, currencyLabels, establishments, fields, movementKindLabels, speciesLabels } from "./agro.demo.data";
+import { formatMoney, formatNumber, formatShortDate } from "./agro.home.shared";
+import { AgroSpecies, AnimalMovementKind, MoneyCurrency } from "./agro.types";
+
+interface AgroAnimalsSectionProps {
+  animalFieldRefs: React.MutableRefObject<Record<string, HTMLInputElement | HTMLSelectElement | null>>;
+  animalForm: {
+    date: string;
+    establishmentId: string;
+    fieldId: string;
+    species: AgroSpecies;
+    categoryCode: string;
+    kind: AnimalMovementKind;
+    quantity: string;
+    earTag: string;
+    weightKg: string;
+    unitPrice: string;
+    freightAmount: string;
+    commissionAmount: string;
+    taxAmount: string;
+    currency: MoneyCurrency;
+    notes: string;
+  };
+  animalFormErrors: Record<string, string>;
+  animalFormPanelRef: React.RefObject<HTMLElement | null>;
+  animalLedgerRows: any[];
+  animalLedgerSummary: {
+    purchases: number;
+    sales: number;
+    birthsAndDeaths: number;
+    linkedCommercialRows: number;
+  };
+  animalSearchTerm: string;
+  animalTableRef: React.RefObject<HTMLTableElement | null>;
+  animalTableScrollbarInnerRef: React.RefObject<HTMLDivElement | null>;
+  animalTableScrollbarRef: React.RefObject<HTMLDivElement | null>;
+  animalTableWrapRef: React.RefObject<HTMLDivElement | null>;
+  clearAnimalFieldError: (fieldName: string) => void;
+  editingAnimalMovementId: string | null;
+  handleAnimalKindChange: (kind: AnimalMovementKind) => void;
+  handleAnimalSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  isBirthOrDeathAnimalMovement: boolean;
+  isCattleDeathWithEarTag: boolean;
+  isCommercialAnimalMovement: boolean;
+  isAdjustmentAnimalMovement: boolean;
+  projectedAnimalTotal: number;
+  registerAnimalFieldRef: (fieldName: string) => (element: HTMLInputElement | HTMLSelectElement | null) => void;
+  requestDeleteAnimalMovement: (movementId: string) => void;
+  resetAnimalForm: () => void;
+  setAnimalForm: React.Dispatch<
+    React.SetStateAction<{
+      date: string;
+      establishmentId: string;
+      fieldId: string;
+      species: AgroSpecies;
+      categoryCode: string;
+      kind: AnimalMovementKind;
+      quantity: string;
+      earTag: string;
+      weightKg: string;
+      unitPrice: string;
+      freightAmount: string;
+      commissionAmount: string;
+      taxAmount: string;
+      currency: MoneyCurrency;
+      notes: string;
+    }>
+  >;
+  setAnimalSearchTerm: (value: string) => void;
+  showAnimalFloatingScrollbar: boolean;
+  onEditMovement: (movementId: string) => void;
+}
+
+export function AgroAnimalsSection({
+  animalForm,
+  animalFormErrors,
+  animalFormPanelRef,
+  animalLedgerRows,
+  animalLedgerSummary,
+  animalSearchTerm,
+  animalTableRef,
+  animalTableScrollbarInnerRef,
+  animalTableScrollbarRef,
+  animalTableWrapRef,
+  clearAnimalFieldError,
+  editingAnimalMovementId,
+  handleAnimalKindChange,
+  handleAnimalSubmit,
+  isBirthOrDeathAnimalMovement,
+  isCattleDeathWithEarTag,
+  isCommercialAnimalMovement,
+  isAdjustmentAnimalMovement,
+  projectedAnimalTotal,
+  registerAnimalFieldRef,
+  requestDeleteAnimalMovement,
+  resetAnimalForm,
+  setAnimalForm,
+  setAnimalSearchTerm,
+  showAnimalFloatingScrollbar,
+  onEditMovement
+}: AgroAnimalsSectionProps) {
+  return (
+    <section className="content-grid">
+      <article ref={animalFormPanelRef} className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Cargar movimiento de animales</h2>
+            <p>Alta de compras, ventas, nacimientos, muertes o ajustes.</p>
+          </div>
+        </div>
+        <form className="form-grid" onSubmit={handleAnimalSubmit}>
+          <label className={animalFormErrors.date ? "field-error" : undefined}>
+            <span>Fecha</span>
+            <input
+              ref={registerAnimalFieldRef("date")}
+              type="date"
+              value={animalForm.date}
+              onChange={(event) => {
+                clearAnimalFieldError("date");
+                setAnimalForm((current) => ({ ...current, date: event.target.value }));
+              }}
+            />
+          </label>
+          <label className={animalFormErrors.establishmentId ? "field-error" : undefined}>
+            <span>Establecimiento</span>
+            <select
+              ref={registerAnimalFieldRef("establishmentId")}
+              value={animalForm.establishmentId}
+              onChange={(event) => {
+                clearAnimalFieldError("establishmentId");
+                const nextEstablishmentId = event.target.value;
+                const nextFieldId = fields.find((field) => field.establishmentId === nextEstablishmentId)?.id ?? "";
+                setAnimalForm((current) => ({
+                  ...current,
+                  establishmentId: nextEstablishmentId,
+                  fieldId: nextFieldId
+                }));
+              }}
+            >
+              {establishments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={animalFormErrors.fieldId ? "field-error" : undefined}>
+            <span>Campo</span>
+            <select
+              ref={registerAnimalFieldRef("fieldId")}
+              value={animalForm.fieldId}
+              onChange={(event) => {
+                clearAnimalFieldError("fieldId");
+                setAnimalForm((current) => ({ ...current, fieldId: event.target.value }));
+              }}
+            >
+              {fields
+                .filter((field) => field.establishmentId === animalForm.establishmentId)
+                .map((field) => (
+                  <option key={field.id} value={field.id}>
+                    {field.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label className={animalFormErrors.kind ? "field-error" : undefined}>
+            <span>Movimiento</span>
+            <select
+              ref={registerAnimalFieldRef("kind")}
+              value={animalForm.kind}
+              onChange={(event) => handleAnimalKindChange(event.target.value as AnimalMovementKind)}
+            >
+              {Object.entries(movementKindLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={animalFormErrors.species ? "field-error" : undefined}>
+            <span>Especie</span>
+            <select
+              ref={registerAnimalFieldRef("species")}
+              value={animalForm.species}
+              onChange={(event) => {
+                clearAnimalFieldError("species");
+                const nextSpecies = event.target.value as AgroSpecies;
+                setAnimalForm((current) => ({
+                  ...current,
+                  species: nextSpecies,
+                  categoryCode: categoryCatalog[nextSpecies][0]?.code ?? ""
+                }));
+              }}
+            >
+              {Object.entries(speciesLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={animalFormErrors.categoryCode ? "field-error" : undefined}>
+            <span>Categoria</span>
+            <select
+              ref={registerAnimalFieldRef("categoryCode")}
+              value={animalForm.categoryCode}
+              onChange={(event) => {
+                clearAnimalFieldError("categoryCode");
+                setAnimalForm((current) => ({ ...current, categoryCode: event.target.value }));
+              }}
+            >
+              {categoryCatalog[animalForm.species].map((category) => (
+                <option key={category.code} value={category.code}>
+                  {category.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={animalFormErrors.quantity ? "field-error" : undefined}>
+            <span>Cantidad</span>
+            <input
+              ref={registerAnimalFieldRef("quantity")}
+              type="number"
+              min="1"
+              value={animalForm.quantity}
+              onChange={(event) => {
+                clearAnimalFieldError("quantity");
+                setAnimalForm((current) => ({ ...current, quantity: event.target.value }));
+              }}
+            />
+          </label>
+          {isCattleDeathWithEarTag ? (
+            <label className={animalFormErrors.earTag ? "field-error" : undefined}>
+              <span>Numero de caravana</span>
+              <input
+                ref={registerAnimalFieldRef("earTag")}
+                type="text"
+                placeholder="Ej. UY-458921"
+                value={animalForm.earTag}
+                onChange={(event) => {
+                  clearAnimalFieldError("earTag");
+                  setAnimalForm((current) => ({ ...current, earTag: event.target.value }));
+                }}
+              />
+            </label>
+          ) : null}
+          {isCommercialAnimalMovement ? (
+            <>
+              <label className={animalFormErrors.weightKg ? "field-error" : undefined}>
+                <span>Peso</span>
+                <input
+                  ref={registerAnimalFieldRef("weightKg")}
+                  type="number"
+                  min="0"
+                  value={animalForm.weightKg}
+                  onChange={(event) => {
+                    clearAnimalFieldError("weightKg");
+                    setAnimalForm((current) => ({ ...current, weightKg: event.target.value }));
+                  }}
+                />
+              </label>
+              <label className={animalFormErrors.unitPrice ? "field-error" : undefined}>
+                <span>Precio</span>
+                <input
+                  ref={registerAnimalFieldRef("unitPrice")}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={animalForm.unitPrice}
+                  onChange={(event) => {
+                    clearAnimalFieldError("unitPrice");
+                    setAnimalForm((current) => ({ ...current, unitPrice: event.target.value }));
+                  }}
+                />
+              </label>
+              {animalForm.kind === "purchase" ? (
+                <label className={animalFormErrors.freightAmount ? "field-error" : undefined}>
+                  <span>Flete</span>
+                  <input
+                    ref={registerAnimalFieldRef("freightAmount")}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={animalForm.freightAmount}
+                    onChange={(event) => {
+                      clearAnimalFieldError("freightAmount");
+                      setAnimalForm((current) => ({ ...current, freightAmount: event.target.value }));
+                    }}
+                  />
+                </label>
+              ) : null}
+              <label className={animalFormErrors.commissionAmount ? "field-error" : undefined}>
+                <span>Comision</span>
+                <input
+                  ref={registerAnimalFieldRef("commissionAmount")}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={animalForm.commissionAmount}
+                  onChange={(event) => {
+                    clearAnimalFieldError("commissionAmount");
+                    setAnimalForm((current) => ({ ...current, commissionAmount: event.target.value }));
+                  }}
+                />
+              </label>
+              <label className={animalFormErrors.taxAmount ? "field-error" : undefined}>
+                <span>IVA</span>
+                <input
+                  ref={registerAnimalFieldRef("taxAmount")}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={animalForm.taxAmount}
+                  onChange={(event) => {
+                    clearAnimalFieldError("taxAmount");
+                    setAnimalForm((current) => ({ ...current, taxAmount: event.target.value }));
+                  }}
+                />
+              </label>
+              <label>
+                <span>Moneda</span>
+                <select
+                  value={animalForm.currency}
+                  onChange={(event) => setAnimalForm((current) => ({ ...current, currency: event.target.value as MoneyCurrency }))}
+                >
+                  {Object.entries(currencyLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
+          {isBirthOrDeathAnimalMovement ? (
+            <div className="projection-card span-2 compact-card">
+              <span>Movimiento sin impacto economico</span>
+              <strong>No lleva precio, flete, comision, IVA ni moneda.</strong>
+            </div>
+          ) : null}
+          {isAdjustmentAnimalMovement ? (
+            <div className="projection-card span-2 compact-card">
+              <span>Ajuste de existencias</span>
+              <strong>Usalo para corregir diferencias entre lo que hay en el campo y lo que figura cargado.</strong>
+            </div>
+          ) : null}
+          <label className="span-2">
+            <span>Observaciones</span>
+            <textarea
+              rows={3}
+              value={animalForm.notes}
+              onChange={(event) => setAnimalForm((current) => ({ ...current, notes: event.target.value }))}
+            />
+          </label>
+          {isCommercialAnimalMovement ? (
+            <div className="projection-card span-2">
+              <span>Monto total proyectado</span>
+              <strong>{formatMoney(projectedAnimalTotal, animalForm.currency)}</strong>
+            </div>
+          ) : null}
+          <div className="action-row span-2">
+            <button type="submit" className="primary-button">
+              {editingAnimalMovementId ? "Guardar cambios" : "Guardar movimiento demo"}
+            </button>
+            {editingAnimalMovementId ? (
+              <button type="button" className="ghost-button" onClick={resetAnimalForm}>
+                Cancelar edicion
+              </button>
+            ) : null}
+          </div>
+        </form>
+      </article>
+
+      <article className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Planilla de animales</h2>
+            <p>Vista de trabajo para revisar compras, ventas y movimientos del rodeo.</p>
+          </div>
+        </div>
+        <div className="inline-metrics">
+          <span className="data-badge">Compras {animalLedgerSummary.purchases}</span>
+          <span className="data-badge">Ventas {animalLedgerSummary.sales}</span>
+          <span className="data-badge">Nacimientos y muertes {animalLedgerSummary.birthsAndDeaths}</span>
+          <span className="data-badge accent">Relacionados a contabilidad {animalLedgerSummary.linkedCommercialRows}</span>
+        </div>
+        <label className="table-search">
+          <span>Buscar en animales</span>
+          <input
+            type="search"
+            placeholder="Campo, categoria, especie, fecha o nota..."
+            value={animalSearchTerm}
+            onChange={(event) => setAnimalSearchTerm(event.target.value)}
+          />
+        </label>
+        <div ref={animalTableWrapRef} className="table-wrap">
+          <table ref={animalTableRef} className="animal-ledger-table">
+            <thead>
+              <tr>
+                <th className="cell-date">Fecha</th>
+                <th className="cell-field">Campo</th>
+                <th className="cell-kind">Movimiento</th>
+                <th className="cell-number">Cantidad</th>
+                <th className="cell-category">Categoria</th>
+                <th className="cell-tag">Caravana</th>
+                <th className="cell-number">Peso</th>
+                <th className="cell-money">Precio</th>
+                <th className="cell-money">Flete</th>
+                <th className="cell-money">Comision</th>
+                <th className="cell-money">IVA</th>
+                <th className="cell-money">Monto total</th>
+                <th className="cell-link">Relacion contable</th>
+                <th className="cell-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {animalLedgerRows.map((movement) => {
+                const field = fields.find((item) => item.id === movement.fieldId);
+                const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+                return (
+                  <tr key={movement.id}>
+                    <td className="cell-date">{formatShortDate(movement.date)}</td>
+                    <td className="cell-field">{field?.name ?? "-"}</td>
+                    <td className="cell-kind">{movementKindLabels[movement.kind as keyof typeof movementKindLabels]}</td>
+                    <td className="cell-number">{movement.quantity}</td>
+                    <td className="cell-category">{category?.label ?? movement.categoryCode}</td>
+                    <td className="cell-tag">{movement.earTag ?? "-"}</td>
+                    <td className="cell-number">{formatNumber(movement.weightKg)}</td>
+                    <td className="cell-money">
+                      {movement.unitPrice !== undefined ? formatMoney(movement.unitPrice, movement.currency ?? "USD") : "-"}
+                    </td>
+                    <td className="cell-money">
+                      {movement.freightAmount !== undefined ? formatMoney(movement.freightAmount, movement.currency ?? "USD") : "-"}
+                    </td>
+                    <td className="cell-money">
+                      {movement.commissionAmount !== undefined ? formatMoney(movement.commissionAmount, movement.currency ?? "USD") : "-"}
+                    </td>
+                    <td className="cell-money">
+                      {movement.taxAmount !== undefined ? formatMoney(movement.taxAmount, movement.currency ?? "USD") : "-"}
+                    </td>
+                    <td className="cell-money">
+                      {movement.totalAmount !== undefined ? formatMoney(movement.totalAmount, movement.currency ?? "USD") : "-"}
+                    </td>
+                    <td className="cell-link">
+                      <span className={movement.linkedAccountingEntryId ? "data-badge accent compact" : "data-badge compact"}>
+                        {movement.linkedAccountingEntryId ? "Si" : "No"}
+                      </span>
+                    </td>
+                    <td className="cell-actions">
+                      <div className="table-actions">
+                        <button type="button" className="ghost-button" onClick={() => onEditMovement(movement.id)}>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button danger"
+                          onClick={() => requestDeleteAnimalMovement(movement.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div
+          ref={animalTableScrollbarRef}
+          className={showAnimalFloatingScrollbar ? "floating-table-scrollbar" : "floating-table-scrollbar hidden"}
+        >
+          <div ref={animalTableScrollbarInnerRef} className="floating-table-scrollbar-inner" />
+        </div>
+      </article>
+    </section>
+  );
+}
