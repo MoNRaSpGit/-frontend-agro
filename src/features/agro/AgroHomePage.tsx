@@ -9,7 +9,7 @@ import { AgroOverviewSection } from "./AgroOverviewSection";
 import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
-import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
+import { fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
   expenseConceptLabels,
@@ -27,11 +27,6 @@ import {
   fields,
   getEstablishmentIdFromFieldId,
   getFieldIdForEstablishment,
-  initialAccountingEntries,
-  initialAnimalMovements,
-  initialMonthlyExchangeRates,
-  initialRainfallRecords,
-  initialSanitaryRecords,
   initialStock,
   movementKindLabels,
   speciesLabels
@@ -50,12 +45,6 @@ import {
   RainfallRecord,
   SanitaryRecord
 } from "./agro.types";
-
-const animalMovementsStorageKey = "saaspro-agro-animal-movements-v4";
-const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v4";
-const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v4";
-const monthlyExchangeRatesStorageKey = "saaspro-agro-monthly-exchange-rates-v4";
-const sanitaryRecordsStorageKey = "saaspro-agro-sanitary-records-v1";
 
 function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMovementRecord {
   const establishmentId = movement.establishmentId || getEstablishmentIdFromFieldId(movement.fieldId);
@@ -199,21 +188,13 @@ export function AgroHomePage() {
     title: string;
     message: string;
   } | null>(null);
-  const [animalMovements, setAnimalMovements] = useState<AnimalMovementRecord[]>(() =>
-    readJsonStorage(animalMovementsStorageKey, initialAnimalMovements).map(normalizeAnimalMovementRecord)
-  );
-  const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>(() =>
-    readJsonStorage(accountingEntriesStorageKey, initialAccountingEntries).map(normalizeAccountingEntry)
-  );
-  const [rainfallRecords, setRainfallRecords] = useState<RainfallRecord[]>(() =>
-    readJsonStorage(rainfallRecordsStorageKey, initialRainfallRecords).map(normalizeRainfallRecord)
-  );
-  const [sanitaryRecords, setSanitaryRecords] = useState<SanitaryRecord[]>(() =>
-    readJsonStorage(sanitaryRecordsStorageKey, initialSanitaryRecords).map(normalizeSanitaryRecord)
-  );
-  const [monthlyExchangeRates, setMonthlyExchangeRates] = useState<MonthlyExchangeRate[]>(() =>
-    readJsonStorage(monthlyExchangeRatesStorageKey, initialMonthlyExchangeRates)
-  );
+  const [animalMovements, setAnimalMovements] = useState<AnimalMovementRecord[]>([]);
+  const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>([]);
+  const [rainfallRecords, setRainfallRecords] = useState<RainfallRecord[]>([]);
+  const [sanitaryRecords, setSanitaryRecords] = useState<SanitaryRecord[]>([]);
+  const [monthlyExchangeRates, setMonthlyExchangeRates] = useState<MonthlyExchangeRate[]>([]);
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
 
   const [animalForm, setAnimalForm] = useState({
     date: today,
@@ -1193,6 +1174,73 @@ export function AgroHomePage() {
     };
   }, [accountingEntries, animalMovements]);
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadWorkspace() {
+      try {
+        const snapshot = await fetchAgroWorkspace();
+        if (isCancelled) {
+          return;
+        }
+
+        setAnimalMovements(snapshot.data.animalMovements.map(normalizeAnimalMovementRecord));
+        setAccountingEntries(snapshot.data.accountingEntries.map(normalizeAccountingEntry));
+        setRainfallRecords(snapshot.data.rainfallRecords.map(normalizeRainfallRecord));
+        setSanitaryRecords(snapshot.data.sanitaryRecords.map(normalizeSanitaryRecord));
+        setMonthlyExchangeRates(snapshot.data.monthlyExchangeRates);
+        setWorkspaceLoadError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "No se pudo cargar el workspace de agro.";
+        setWorkspaceLoadError(message);
+        showError(message);
+      } finally {
+        if (!isCancelled) {
+          setWorkspaceLoaded(true);
+        }
+      }
+    }
+
+    void loadWorkspace();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceLoaded || workspaceLoadError) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void saveAgroWorkspace({
+        animalMovements,
+        accountingEntries,
+        rainfallRecords,
+        sanitaryRecords,
+        monthlyExchangeRates
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : "No se pudo guardar el workspace de agro.";
+        showError(message);
+      });
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    accountingEntries,
+    animalMovements,
+    monthlyExchangeRates,
+    rainfallRecords,
+    sanitaryRecords,
+    workspaceLoaded,
+    workspaceLoadError
+  ]);
+
   const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
   const isBirthOrDeathAnimalMovement = animalForm.kind === "birth" || animalForm.kind === "death";
   const isAdjustmentAnimalMovement = animalForm.kind === "adjustment";
@@ -1204,26 +1252,6 @@ export function AgroHomePage() {
       ...item,
       fieldCount: fields.filter((field) => field.establishmentId === item.id).length
     }))[0];
-
-  useEffect(() => {
-    writeJsonStorage(animalMovementsStorageKey, animalMovements);
-  }, [animalMovements]);
-
-  useEffect(() => {
-    writeJsonStorage(accountingEntriesStorageKey, accountingEntries);
-  }, [accountingEntries]);
-
-  useEffect(() => {
-    writeJsonStorage(rainfallRecordsStorageKey, rainfallRecords);
-  }, [rainfallRecords]);
-
-  useEffect(() => {
-    writeJsonStorage(sanitaryRecordsStorageKey, sanitaryRecords);
-  }, [sanitaryRecords]);
-
-  useEffect(() => {
-    writeJsonStorage(monthlyExchangeRatesStorageKey, monthlyExchangeRates);
-  }, [monthlyExchangeRates]);
 
   useEffect(() => {
     setInitialStockForm((current) => ({

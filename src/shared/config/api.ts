@@ -1,4 +1,6 @@
-const defaultApiBaseUrl = "http://localhost:3000/api/v1";
+const defaultApiBaseUrl = import.meta.env.PROD
+  ? "https://saasproback.onrender.com/api/v1"
+  : "http://localhost:3000/api/v1";
 
 export function getApiBaseUrl() {
   return import.meta.env.VITE_API_BASE_URL?.trim() || defaultApiBaseUrl;
