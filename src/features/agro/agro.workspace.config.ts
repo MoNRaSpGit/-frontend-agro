@@ -39,6 +39,12 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     persistence: "local"
   },
   {
+    key: "sanity",
+    label: "Sanidad",
+    description: "Tratamientos sanitarios por establecimiento",
+    persistence: "local"
+  },
+  {
     key: "summary",
     label: "Resumen",
     description: "Control por establecimiento, categorias y alertas",

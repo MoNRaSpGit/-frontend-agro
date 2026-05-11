@@ -1,4 +1,4 @@
-export type AgroView = "overview" | "setup" | "animals" | "accounting" | "rainfall" | "summary";
+export type AgroView = "overview" | "setup" | "animals" | "accounting" | "sanity" | "rainfall" | "summary";
 
 export type AgroSpecies = "vacunos" | "ovinos" | "equinos";
 
@@ -97,5 +97,15 @@ export interface RainfallRecord {
   date: string;
   fieldId: string;
   millimeters: number;
+  notes: string;
+}
+
+export interface SanitaryRecord {
+  id: string;
+  date: string;
+  establishmentId: string;
+  fieldId: string;
+  quantity: number;
+  treatment: string;
   notes: string;
 }

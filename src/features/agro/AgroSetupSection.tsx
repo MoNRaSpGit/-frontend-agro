@@ -38,8 +38,7 @@ interface AgroSetupSectionProps {
   >;
   resetInitialStockForm: () => void;
   resetInitialReceivableForm: () => void;
-  onSubmitInitialStock: (event: React.FormEvent<HTMLFormElement>) => void;
-  onSubmitInitialReceivable: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSubmitInitialLoad: () => void;
 }
 
 export function AgroSetupSection({
@@ -56,8 +55,7 @@ export function AgroSetupSection({
   setInitialReceivableForm,
   resetInitialStockForm,
   resetInitialReceivableForm,
-  onSubmitInitialStock,
-  onSubmitInitialReceivable
+  onSubmitInitialLoad
 }: AgroSetupSectionProps) {
   const availableCategories = categoryCatalog[setupSpecies];
   const conceptLabelBySpecies: Record<AgroSpecies, string> = {
@@ -112,7 +110,7 @@ export function AgroSetupSection({
                 <p>Base actual del establecimiento para la especie seleccionada.</p>
               </div>
             </div>
-            <form className="form-grid" onSubmit={onSubmitInitialStock}>
+            <div className="form-grid">
               <label>
                 <span>Categoria</span>
                 <select
@@ -144,15 +142,7 @@ export function AgroSetupSection({
                   onChange={(event) => setInitialStockForm((current) => ({ ...current, notes: event.target.value }))}
                 />
               </label>
-              <div className="action-row span-2">
-                <button type="submit" className="primary-button">
-                  Guardar stock inicial
-                </button>
-                <button type="button" className="ghost-button" onClick={resetInitialStockForm}>
-                  Limpiar
-                </button>
-              </div>
-            </form>
+            </div>
           </section>
 
           <section className="subpanel">
@@ -162,7 +152,7 @@ export function AgroSetupSection({
                 <p>Cuenta base a cobrar para el mismo establecimiento y especie.</p>
               </div>
             </div>
-            <form className="form-grid" onSubmit={onSubmitInitialReceivable}>
+            <div className="form-grid">
               <label className="span-2">
                 <span>Concepto</span>
                 <input type="text" value={conceptLabelBySpecies[setupSpecies]} readOnly />
@@ -197,16 +187,23 @@ export function AgroSetupSection({
                   onChange={(event) => setInitialReceivableForm((current) => ({ ...current, notes: event.target.value }))}
                 />
               </label>
-              <div className="action-row span-2">
-                <button type="submit" className="primary-button">
-                  Guardar saldo inicial
-                </button>
-                <button type="button" className="ghost-button" onClick={resetInitialReceivableForm}>
-                  Limpiar
-                </button>
-              </div>
-            </form>
+            </div>
           </section>
+        </div>
+        <div className="action-row top-gap">
+          <button type="button" className="primary-button" onClick={onSubmitInitialLoad}>
+            Guardar carga inicial
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              resetInitialStockForm();
+              resetInitialReceivableForm();
+            }}
+          >
+            Limpiar
+          </button>
         </div>
       </article>
     </section>

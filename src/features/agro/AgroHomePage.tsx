@@ -7,6 +7,7 @@ import { AgroDeleteConfirmModal } from "./AgroDeleteConfirmModal";
 import { AgroMetricsGrid, AgroToolbar } from "./AgroHomeChrome";
 import { AgroOverviewSection } from "./AgroOverviewSection";
 import { AgroRainfallSection } from "./AgroRainfallSection";
+import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
 import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
@@ -30,6 +31,7 @@ import {
   initialAnimalMovements,
   initialMonthlyExchangeRates,
   initialRainfallRecords,
+  initialSanitaryRecords,
   initialStock,
   movementKindLabels,
   speciesLabels
@@ -45,13 +47,15 @@ import {
   IncomeConcept,
   MonthlyExchangeRate,
   MoneyCurrency,
-  RainfallRecord
+  RainfallRecord,
+  SanitaryRecord
 } from "./agro.types";
 
 const animalMovementsStorageKey = "saaspro-agro-animal-movements-v4";
 const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v4";
 const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v4";
 const monthlyExchangeRatesStorageKey = "saaspro-agro-monthly-exchange-rates-v4";
+const sanitaryRecordsStorageKey = "saaspro-agro-sanitary-records-v1";
 
 function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMovementRecord {
   const establishmentId = movement.establishmentId || getEstablishmentIdFromFieldId(movement.fieldId);
@@ -85,6 +89,17 @@ function normalizeRainfallRecord(record: RainfallRecord): RainfallRecord {
 
   return {
     ...record,
+    fieldId
+  };
+}
+
+function normalizeSanitaryRecord(record: SanitaryRecord): SanitaryRecord {
+  const establishmentId = record.establishmentId || getEstablishmentIdFromFieldId(record.fieldId);
+  const fieldId = getFieldIdForEstablishment(establishmentId);
+
+  return {
+    ...record,
+    establishmentId,
     fieldId
   };
 }
@@ -157,13 +172,15 @@ export function AgroHomePage() {
   const [accountingStatusFilter, setAccountingStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
   const [linkedOperationsStatusFilter, setLinkedOperationsStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
   const [rainfallSearchTerm, setRainfallSearchTerm] = useState("");
+  const [sanitarySearchTerm, setSanitarySearchTerm] = useState("");
   const [editingAnimalMovementId, setEditingAnimalMovementId] = useState<string | null>(null);
   const [editingAccountingEntryId, setEditingAccountingEntryId] = useState<string | null>(null);
   const [editingRainfallRecordId, setEditingRainfallRecordId] = useState<string | null>(null);
+  const [editingSanitaryRecordId, setEditingSanitaryRecordId] = useState<string | null>(null);
   const [animalFormErrors, setAnimalFormErrors] = useState<Record<string, string>>({});
   const [showAnimalFloatingScrollbar, setShowAnimalFloatingScrollbar] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{
-    kind: "animal" | "accounting" | "rainfall";
+    kind: "animal" | "accounting" | "rainfall" | "sanitary";
     id: string;
     title: string;
     message: string;
@@ -176,6 +193,9 @@ export function AgroHomePage() {
   );
   const [rainfallRecords, setRainfallRecords] = useState<RainfallRecord[]>(() =>
     readJsonStorage(rainfallRecordsStorageKey, initialRainfallRecords).map(normalizeRainfallRecord)
+  );
+  const [sanitaryRecords, setSanitaryRecords] = useState<SanitaryRecord[]>(() =>
+    readJsonStorage(sanitaryRecordsStorageKey, initialSanitaryRecords).map(normalizeSanitaryRecord)
   );
   const [monthlyExchangeRates, setMonthlyExchangeRates] = useState<MonthlyExchangeRate[]>(() =>
     readJsonStorage(monthlyExchangeRatesStorageKey, initialMonthlyExchangeRates)
@@ -219,6 +239,14 @@ export function AgroHomePage() {
     establishmentId: establishments[0]?.id ?? "",
     fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
     millimeters: "",
+    notes: ""
+  });
+  const [sanitaryForm, setSanitaryForm] = useState({
+    date: today,
+    establishmentId: establishments[0]?.id ?? "",
+    fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+    quantity: "",
+    treatment: "",
     notes: ""
   });
   const [editingExchangeRateId, setEditingExchangeRateId] = useState<string | null>(null);
@@ -354,6 +382,18 @@ export function AgroHomePage() {
       notes: ""
     });
     setEditingRainfallRecordId(null);
+  }
+
+  function resetSanitaryForm() {
+    setSanitaryForm({
+      date: today,
+      establishmentId: establishments[0]?.id ?? "",
+      fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+      quantity: "",
+      treatment: "",
+      notes: ""
+    });
+    setEditingSanitaryRecordId(null);
   }
 
   function resetExchangeRateForm() {
@@ -973,6 +1013,35 @@ export function AgroHomePage() {
       .sort((left, right) => right.date.localeCompare(left.date));
   }, [rainfallRecords, rainfallSearchTerm, selectedFieldIds, selectedMonth, selectedYear]);
 
+  const sanitaryRows = useMemo(() => {
+    return [...sanitaryRecords]
+      .filter((record) => {
+        if (!selectedFieldIds.includes(record.fieldId)) {
+          return false;
+        }
+
+        if (selectedYear !== "all" && !record.date.startsWith(selectedYear)) {
+          return false;
+        }
+
+        if (selectedMonth !== "all" && record.date.slice(5, 7) !== selectedMonth) {
+          return false;
+        }
+
+        if (!sanitarySearchTerm.trim()) {
+          return true;
+        }
+
+        const field = fields.find((item) => item.id === record.fieldId);
+        const searchBase = [record.date, field?.name ?? "", record.treatment, record.notes, `${record.quantity}`]
+          .join(" ")
+          .toLowerCase();
+
+        return searchBase.includes(sanitarySearchTerm.trim().toLowerCase());
+      })
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [sanitaryRecords, sanitarySearchTerm, selectedFieldIds, selectedMonth, selectedYear]);
+
   const visibleExchangeRates = useMemo(() => {
     return [...monthlyExchangeRates].sort((left, right) => right.yearMonth.localeCompare(left.yearMonth));
   }, [monthlyExchangeRates]);
@@ -1127,6 +1196,10 @@ export function AgroHomePage() {
   useEffect(() => {
     writeJsonStorage(rainfallRecordsStorageKey, rainfallRecords);
   }, [rainfallRecords]);
+
+  useEffect(() => {
+    writeJsonStorage(sanitaryRecordsStorageKey, sanitaryRecords);
+  }, [sanitaryRecords]);
 
   useEffect(() => {
     writeJsonStorage(monthlyExchangeRatesStorageKey, monthlyExchangeRates);
@@ -1396,13 +1469,45 @@ export function AgroHomePage() {
     showSuccess(editingRainfallRecordId ? "Registro de lluvia actualizado." : "Registro de lluvia guardado.");
   }
 
-  function handleInitialStockSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSanitarySubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const quantity = Number(sanitaryForm.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      showError("La cantidad de animales debe ser mayor a 0.");
+      return;
+    }
+
+    if (!sanitaryForm.treatment.trim()) {
+      showError("Falta agregar el tratamiento sanitario.");
+      return;
+    }
+
+    const sanitaryEntry: SanitaryRecord = {
+      id: editingSanitaryRecordId ?? `san-${Date.now()}`,
+      date: sanitaryForm.date,
+      establishmentId: sanitaryForm.establishmentId,
+      fieldId: getFieldIdForEstablishment(sanitaryForm.establishmentId),
+      quantity,
+      treatment: sanitaryForm.treatment.trim(),
+      notes: sanitaryForm.notes.trim()
+    };
+
+    setSanitaryRecords((current) =>
+      editingSanitaryRecordId
+        ? current.map((item) => (item.id === editingSanitaryRecordId ? sanitaryEntry : item))
+        : [sanitaryEntry, ...current]
+    );
+    setSelectedEstablishmentId(sanitaryForm.establishmentId);
+    resetSanitaryForm();
+    showSuccess(editingSanitaryRecordId ? "Tratamiento sanitario actualizado." : "Tratamiento sanitario guardado.");
+  }
+
+  function saveInitialStockLoad() {
     const quantity = Number(initialStockForm.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
       showError("La cantidad inicial debe ser mayor a 0.");
-      return;
+      return false;
     }
 
     const entry: AnimalMovementRecord = {
@@ -1422,29 +1527,27 @@ export function AgroHomePage() {
     setAnimalMovements((current) => [entry, ...current]);
     setSelectedEstablishmentId(setupEstablishmentId);
     resetInitialStockForm();
-    showSuccess("Stock inicial cargado.");
+    return true;
   }
 
-  function handleInitialReceivableSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  function saveInitialReceivableLoad() {
     const totalAmount = Number(initialReceivableForm.totalAmount);
     const collectedAmount =
       initialReceivableForm.collectedAmount.trim() === "" ? 0 : Number(initialReceivableForm.collectedAmount);
 
     if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
       showError("El total a cobrar debe ser mayor a 0.");
-      return;
+      return false;
     }
 
     if (!Number.isFinite(collectedAmount) || collectedAmount < 0) {
       showError("El importe ya cobrado debe ser valido.");
-      return;
+      return false;
     }
 
     if (collectedAmount > totalAmount) {
       showError("Lo ya cobrado no puede ser mayor al total.");
-      return;
+      return false;
     }
 
     const entry: AccountingEntry = {
@@ -1467,7 +1570,46 @@ export function AgroHomePage() {
     setAccountingEntries((current) => [entry, ...current]);
     setSelectedEstablishmentId(setupEstablishmentId);
     resetInitialReceivableForm();
-    showSuccess("Saldo inicial a cobrar cargado.");
+    return true;
+  }
+
+  function handleInitialLoadSubmit() {
+    const hasStockData =
+      initialStockForm.quantity.trim() !== "" || initialStockForm.notes.trim() !== "";
+    const hasReceivableData =
+      initialReceivableForm.totalAmount.trim() !== "" ||
+      initialReceivableForm.collectedAmount.trim() !== "" ||
+      initialReceivableForm.notes.trim() !== "";
+
+    if (!hasStockData && !hasReceivableData) {
+      showError("No hay datos cargados para guardar en la carga inicial.");
+      return;
+    }
+
+    let savedStock = false;
+    let savedReceivable = false;
+
+    if (hasStockData) {
+      savedStock = saveInitialStockLoad();
+      if (!savedStock) {
+        return;
+      }
+    }
+
+    if (hasReceivableData) {
+      savedReceivable = saveInitialReceivableLoad();
+      if (!savedReceivable) {
+        return;
+      }
+    }
+
+    if (savedStock && savedReceivable) {
+      showSuccess("Carga inicial guardada.");
+    } else if (savedStock) {
+      showSuccess("Stock inicial cargado.");
+    } else if (savedReceivable) {
+      showSuccess("Saldo inicial a cobrar cargado.");
+    }
   }
 
   function handleExchangeRateSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1576,6 +1718,24 @@ export function AgroHomePage() {
     });
   }
 
+  function handleEditSanitaryRecord(recordId: string) {
+    const record = sanitaryRecords.find((item) => item.id === recordId);
+    if (!record) {
+      return;
+    }
+
+    setSelectedEstablishmentId(record.establishmentId);
+    setEditingSanitaryRecordId(recordId);
+    setSanitaryForm({
+      date: record.date,
+      establishmentId: record.establishmentId,
+      fieldId: record.fieldId,
+      quantity: `${record.quantity}`,
+      treatment: record.treatment,
+      notes: record.notes
+    });
+  }
+
   function handleEditExchangeRate(rateId: string) {
     const rate = monthlyExchangeRates.find((item) => item.id === rateId);
     if (!rate) {
@@ -1624,6 +1784,14 @@ export function AgroHomePage() {
     showSuccess("Registro de lluvia eliminado.");
   }
 
+  function handleDeleteSanitaryRecord(recordId: string) {
+    setSanitaryRecords((current) => current.filter((item) => item.id !== recordId));
+    if (editingSanitaryRecordId === recordId) {
+      resetSanitaryForm();
+    }
+    showSuccess("Tratamiento sanitario eliminado.");
+  }
+
   function handleDeleteExchangeRate(rateId: string) {
     setMonthlyExchangeRates((current) => current.filter((item) => item.id !== rateId));
     if (editingExchangeRateId === rateId) {
@@ -1659,6 +1827,15 @@ export function AgroHomePage() {
     });
   }
 
+  function requestDeleteSanitaryRecord(recordId: string) {
+    setPendingDelete({
+      kind: "sanitary",
+      id: recordId,
+      title: "Eliminar tratamiento sanitario",
+      message: "Este tratamiento se va a borrar de la planilla sanitaria del establecimiento."
+    });
+  }
+
   function handleConfirmDelete() {
     if (!pendingDelete) {
       return;
@@ -1668,6 +1845,8 @@ export function AgroHomePage() {
       handleDeleteAnimalMovement(pendingDelete.id);
     } else if (pendingDelete.kind === "accounting") {
       handleDeleteAccountingEntry(pendingDelete.id);
+    } else if (pendingDelete.kind === "sanitary") {
+      handleDeleteSanitaryRecord(pendingDelete.id);
     } else {
       handleDeleteRainfallRecord(pendingDelete.id);
     }
@@ -1736,8 +1915,7 @@ export function AgroHomePage() {
             setInitialReceivableForm={setInitialReceivableForm}
             resetInitialStockForm={resetInitialStockForm}
             resetInitialReceivableForm={resetInitialReceivableForm}
-            onSubmitInitialStock={handleInitialStockSubmit}
-            onSubmitInitialReceivable={handleInitialReceivableSubmit}
+            onSubmitInitialLoad={handleInitialLoadSubmit}
           />
         ) : null}
 
@@ -1813,6 +1991,21 @@ export function AgroHomePage() {
             setRainfallSearchTerm={setRainfallSearchTerm}
             onEditRainfallRecord={handleEditRainfallRecord}
             onSubmit={handleRainfallSubmit}
+          />
+        ) : null}
+
+        {activeView === "sanity" ? (
+          <AgroSanitySection
+            editingSanitaryRecordId={editingSanitaryRecordId}
+            sanitaryForm={sanitaryForm}
+            sanitaryRows={sanitaryRows}
+            sanitarySearchTerm={sanitarySearchTerm}
+            resetSanitaryForm={resetSanitaryForm}
+            requestDeleteSanitaryRecord={requestDeleteSanitaryRecord}
+            setSanitaryForm={setSanitaryForm}
+            setSanitarySearchTerm={setSanitarySearchTerm}
+            onEditSanitaryRecord={handleEditSanitaryRecord}
+            onSubmit={handleSanitarySubmit}
           />
         ) : null}
 

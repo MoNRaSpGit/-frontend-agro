@@ -6,6 +6,7 @@ import {
   FieldUnit,
   MonthlyExchangeRate,
   RainfallRecord,
+  SanitaryRecord,
   StockSnapshot
 } from "./agro.types";
 
@@ -96,3 +97,5 @@ export const initialAccountingEntries: AccountingEntry[] = [];
 export const initialRainfallRecords: RainfallRecord[] = [];
 
 export const initialMonthlyExchangeRates: MonthlyExchangeRate[] = [];
+
+export const initialSanitaryRecords: SanitaryRecord[] = [];
