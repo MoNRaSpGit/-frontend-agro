@@ -5,6 +5,9 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 
 export default [
+  {
+    ignores: ["dist", "node_modules", "vite.config.js", "vite.config.d.ts"]
+  },
   js.configs.recommended,
   {
     files: ["src/**/*.{ts,tsx}"],
@@ -34,8 +37,5 @@ export default [
     rules: {
       "react-refresh/only-export-components": "off"
     }
-  },
-  {
-    ignores: ["dist", "node_modules"]
   }
 ];

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { App } from "./app/App";
+import { AppUpdateNotice } from "./shared/components/AppUpdateNotice";
 import "./styles/global.css";
 
 if ("serviceWorker" in navigator) {
@@ -17,6 +18,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <>
       <App />
+      <AppUpdateNotice />
       <ToastContainer
         position="bottom-right"
         hideProgressBar
