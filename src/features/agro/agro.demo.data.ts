@@ -127,7 +127,7 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     totalAmount: 2814,
     currency: "USD",
     linkedAccountingEntryId: "acc-2",
-    notes: "Venta registrada en Santa Clara."
+    notes: "Venta registrada en Santa Clara con cobro parcial."
   },
   {
     id: "anm-3",
@@ -190,7 +190,7 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     totalAmount: 5945,
     currency: "USD",
     linkedAccountingEntryId: "acc-5",
-    notes: "Salida de novillos para negocio de mayo."
+    notes: "Salida de novillos para negocio de mayo con cobro pendiente."
   },
   {
     id: "anm-7",
@@ -210,6 +210,24 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     currency: "USD",
     linkedAccountingEntryId: "acc-7",
     notes: "Ingreso para reforzar vientres."
+  },
+  {
+    id: "anm-8",
+    date: "2026-05-07",
+    establishmentId: "est-1",
+    fieldId: "field-est-1",
+    species: "vacunos",
+    categoryCode: "5",
+    kind: "sale",
+    quantity: 11,
+    weightKg: 1710,
+    unitPrice: 4.4,
+    commissionAmount: 154,
+    taxAmount: 46,
+    totalAmount: 4640,
+    currency: "USD",
+    linkedAccountingEntryId: "acc-10",
+    notes: "Venta cobrada al contado para cubrir el caso cobrado."
   }
 ];
 
@@ -226,6 +244,8 @@ export const initialAccountingEntries: AccountingEntry[] = [
     commissionAmount: 470,
     taxAmount: 225,
     netAmount: 14967,
+    expectedAmount: 14967,
+    collectedAmount: 14967,
     notes: "Remate consignataria mayo."
   },
   {
@@ -240,8 +260,10 @@ export const initialAccountingEntries: AccountingEntry[] = [
     commissionAmount: 88,
     taxAmount: 42,
     netAmount: 2814,
+    expectedAmount: 2814,
+    collectedAmount: 1600,
     linkedAnimalMovementId: "anm-2",
-    notes: "Venta de ovinos de Santa Clara."
+    notes: "Venta de ovinos de Santa Clara con cobro parcial."
   },
   {
     id: "acc-3",
@@ -284,8 +306,10 @@ export const initialAccountingEntries: AccountingEntry[] = [
     commissionAmount: 186,
     taxAmount: 74,
     netAmount: 5945,
+    expectedAmount: 5945,
+    collectedAmount: 0,
     linkedAnimalMovementId: "anm-6",
-    notes: "Venta complementaria de El Ombu."
+    notes: "Venta complementaria de El Ombu pendiente de cobro."
   },
   {
     id: "acc-6",
@@ -343,6 +367,23 @@ export const initialAccountingEntries: AccountingEntry[] = [
     taxAmount: 0,
     netAmount: 740,
     notes: "Arreglo menor de alambrado."
+  },
+  {
+    id: "acc-10",
+    date: "2026-05-07",
+    establishmentId: "est-1",
+    fieldId: "field-est-1",
+    type: "income",
+    concept: "venta_vacunos",
+    currency: "USD",
+    grossAmount: 4840,
+    commissionAmount: 154,
+    taxAmount: 46,
+    netAmount: 4640,
+    expectedAmount: 4640,
+    collectedAmount: 4640,
+    linkedAnimalMovementId: "anm-8",
+    notes: "Venta de vacunos de Santa Clara cobrada al contado."
   }
 ];
 

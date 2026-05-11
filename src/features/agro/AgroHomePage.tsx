@@ -39,10 +39,10 @@ import {
   RainfallRecord
 } from "./agro.types";
 
-const animalMovementsStorageKey = "saaspro-agro-animal-movements-v1";
-const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v1";
-const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v1";
-const monthlyExchangeRatesStorageKey = "saaspro-agro-monthly-exchange-rates-v1";
+const animalMovementsStorageKey = "saaspro-agro-animal-movements-v2";
+const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v2";
+const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v2";
+const monthlyExchangeRatesStorageKey = "saaspro-agro-monthly-exchange-rates-v2";
 
 function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMovementRecord {
   const establishmentId = movement.establishmentId || getEstablishmentIdFromFieldId(movement.fieldId);
