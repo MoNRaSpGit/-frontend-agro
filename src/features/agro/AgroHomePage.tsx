@@ -966,21 +966,6 @@ export function AgroHomePage() {
     );
   }, [summaryByField]);
 
-  const summaryAlerts = useMemo(() => {
-    const fieldsWithoutRain = summaryByField.filter((item) => item.rainfallTotal <= 0).length;
-    const fieldsWithAdjustments = summaryByField.filter((item) => item.adjustments > 0).length;
-    const fieldsWithDeaths = summaryByField.filter((item) => item.deaths > 0).length;
-    const fieldsWithoutStock = summaryByField.filter((item) => item.stockRows.length === 0).length;
-
-    return {
-      fieldsWithoutRain,
-      fieldsWithAdjustments,
-      fieldsWithDeaths,
-      fieldsWithoutStock,
-      totalAlerts: fieldsWithoutRain + fieldsWithAdjustments + fieldsWithDeaths + fieldsWithoutStock
-    };
-  }, [summaryByField]);
-
   const linkedOperationsRows = useMemo(() => {
     return animalLedgerRows
       .filter((movement) => movement.kind === "purchase" || movement.kind === "sale")
@@ -1615,7 +1600,6 @@ export function AgroHomePage() {
             accountingLedgerWithConversions={visibleAccountingLedgerWithConversions}
             accountingSearchTerm={accountingSearchTerm}
             editingAccountingEntryId={editingAccountingEntryId}
-            editingExchangeRateId={editingExchangeRateId}
             monthlyExchangeRates={visibleExchangeRates}
             projectedNet={projectedNet}
             accountingCollectionSummary={accountingCollectionSummary}
@@ -1651,37 +1635,6 @@ export function AgroHomePage() {
 
         {activeView === "summary" ? (
           <section className="content-grid">
-            <article className="panel wide">
-              <div className="panel-header">
-                <div>
-                  <h2>Alertas y pendientes</h2>
-                  <p>Lectura rapida para ver que establecimientos o registros conviene revisar a mano.</p>
-                </div>
-              </div>
-              <div className="list-stack">
-                <div className="list-row">
-                  <span>Total alertas</span>
-                  <strong>{summaryAlerts.totalAlerts}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Establecimientos sin lluvia</span>
-                  <strong>{summaryAlerts.fieldsWithoutRain}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Establecimientos con ajustes</span>
-                  <strong>{summaryAlerts.fieldsWithAdjustments}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Establecimientos con muertes</span>
-                  <strong>{summaryAlerts.fieldsWithDeaths}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Establecimientos sin existencias</span>
-                  <strong>{summaryAlerts.fieldsWithoutStock}</strong>
-                </div>
-              </div>
-            </article>
-
             <article className="panel wide">
               <div className="panel-header">
                 <div>

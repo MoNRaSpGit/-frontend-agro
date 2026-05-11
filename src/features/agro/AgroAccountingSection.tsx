@@ -36,7 +36,6 @@ interface AgroAccountingSectionProps {
   >;
   accountingSearchTerm: string;
   editingAccountingEntryId: string | null;
-  editingExchangeRateId: string | null;
   monthlyExchangeRates: MonthlyExchangeRate[];
   projectedNet: number;
   accountingCollectionSummary: {
@@ -89,7 +88,6 @@ export function AgroAccountingSection({
   accountingLedgerWithConversions,
   accountingSearchTerm,
   editingAccountingEntryId,
-  editingExchangeRateId,
   monthlyExchangeRates,
   projectedNet,
   accountingCollectionSummary,
@@ -112,6 +110,8 @@ export function AgroAccountingSection({
   const accountingTableScrollbarInnerRef = useRef<HTMLDivElement | null>(null);
   const syncingAccountingScrollRef = useRef<"table" | "bottom-bar" | null>(null);
   const [showAccountingFloatingScrollbar, setShowAccountingFloatingScrollbar] = useState(false);
+  const [showExchangeRateEditModal, setShowExchangeRateEditModal] = useState(false);
+  const [pendingExchangeRateDelete, setPendingExchangeRateDelete] = useState<MonthlyExchangeRate | null>(null);
 
   useEffect(() => {
     function syncAccountingScrollbarMetrics() {
@@ -175,9 +175,45 @@ export function AgroAccountingSection({
     };
   }, [accountingLedgerRows]);
 
+  function handleOpenExchangeRateEdit(rateId: string) {
+    onEditExchangeRate(rateId);
+    setShowExchangeRateEditModal(true);
+  }
+
+  function handleCloseExchangeRateEdit() {
+    setShowExchangeRateEditModal(false);
+    resetExchangeRateForm();
+  }
+
+  function handleExchangeRateModalSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const averageRate = Number(exchangeRateForm.averageRate);
+    if (!exchangeRateForm.yearMonth) {
+      return;
+    }
+
+    if (!Number.isFinite(averageRate) || averageRate <= 0) {
+      return;
+    }
+
+    onSubmitExchangeRate(event);
+    setShowExchangeRateEditModal(false);
+  }
+
+  function handleConfirmExchangeRateDelete() {
+    if (!pendingExchangeRateDelete) {
+      return;
+    }
+
+    onDeleteExchangeRate(pendingExchangeRateDelete.id);
+    setPendingExchangeRateDelete(null);
+  }
+
   return (
-    <section className="content-grid accounting-top-grid">
-      <article ref={accountingFormPanelRef} className="panel accounting-split-panel accounting-form-panel">
+    <>
+      <section className="content-grid accounting-top-grid">
+        <article ref={accountingFormPanelRef} className="panel accounting-split-panel accounting-form-panel">
         <div className="panel-header">
           <div>
             <h2>Cargar movimiento de caja</h2>
@@ -358,81 +394,80 @@ export function AgroAccountingSection({
             ) : null}
           </div>
         </form>
-      </article>
+        </article>
 
-      <article className="panel accounting-split-panel">
-        <div className="panel-header">
-          <div>
-            <h2>Tipo de cambio promedio mensual</h2>
-            <p>Carga el promedio del mes para dolarizar los egresos en pesos.</p>
+        <article className="panel accounting-split-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Tipo de cambio promedio mensual</h2>
+              <p>Carga el promedio del mes para dolarizar los egresos en pesos.</p>
+            </div>
           </div>
-        </div>
-        <form className="form-grid" onSubmit={onSubmitExchangeRate}>
-          <label>
-            <span>Mes</span>
-            <input
-              type="month"
-              value={exchangeRateForm.yearMonth}
-              onChange={(event) => setExchangeRateForm((current) => ({ ...current, yearMonth: event.target.value }))}
-            />
-          </label>
-          <label>
-            <span>TC promedio</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={exchangeRateForm.averageRate}
-              onChange={(event) => setExchangeRateForm((current) => ({ ...current, averageRate: event.target.value }))}
-            />
-          </label>
-          <div className="projection-card span-2 compact-card">
-            <span>Egresos UYU pasados a USD</span>
-            <strong>{formatMoney(accountingCollectionSummary.expenseUyuDollarized, "USD")}</strong>
-          </div>
-          <div className="action-row span-2">
-            <button type="submit" className="primary-button">
-              {editingExchangeRateId ? "Guardar TC" : "Agregar TC"}
-            </button>
-            {editingExchangeRateId ? (
-              <button type="button" className="ghost-button" onClick={resetExchangeRateForm}>
-                Cancelar edicion
+          <form className="form-grid" onSubmit={onSubmitExchangeRate}>
+            <label>
+              <span>Mes</span>
+              <input
+                type="month"
+                value={exchangeRateForm.yearMonth}
+                onChange={(event) => setExchangeRateForm((current) => ({ ...current, yearMonth: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>TC promedio</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={exchangeRateForm.averageRate}
+                onChange={(event) => setExchangeRateForm((current) => ({ ...current, averageRate: event.target.value }))}
+              />
+            </label>
+            <div className="projection-card span-2 compact-card">
+              <span>Egresos UYU pasados a USD</span>
+              <strong>{formatMoney(accountingCollectionSummary.expenseUyuDollarized, "USD")}</strong>
+            </div>
+            <div className="action-row span-2">
+              <button type="submit" className="primary-button">
+                Agregar TC
               </button>
-            ) : null}
-          </div>
-        </form>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Mes</th>
-                <th>TC promedio</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthlyExchangeRates.map((item) => (
-                <tr key={item.id}>
-                  <td>{formatYearMonth(item.yearMonth)}</td>
-                  <td>{item.averageRate.toFixed(2)}</td>
-                  <td>
-                    <div className="table-actions">
-                      <button type="button" className="ghost-button" onClick={() => onEditExchangeRate(item.id)}>
-                        Editar
-                      </button>
-                      <button type="button" className="ghost-button danger" onClick={() => onDeleteExchangeRate(item.id)}>
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
+            </div>
+          </form>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th>TC promedio</th>
+                  <th>Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </article>
+              </thead>
+              <tbody>
+                {monthlyExchangeRates.map((item) => (
+                  <tr key={item.id}>
+                    <td>{formatYearMonth(item.yearMonth)}</td>
+                    <td>{item.averageRate.toFixed(2)}</td>
+                    <td>
+                      <div className="table-actions">
+                        <button type="button" className="ghost-button" onClick={() => handleOpenExchangeRateEdit(item.id)}>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button danger"
+                          onClick={() => setPendingExchangeRateDelete(item)}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
 
-      <article className="panel wide">
+        <article className="panel wide">
         <div className="panel-header">
           <div>
             <h2>Planilla contable</h2>
@@ -545,7 +580,69 @@ export function AgroAccountingSection({
         >
           <div ref={accountingTableScrollbarInnerRef} className="floating-table-scrollbar-inner" />
         </div>
-      </article>
-    </section>
+        </article>
+      </section>
+
+      {showExchangeRateEditModal ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="edit-exchange-rate-title">
+            <form className="form-grid" onSubmit={handleExchangeRateModalSubmit}>
+              <div className="confirm-modal-copy span-2">
+                <strong id="edit-exchange-rate-title">Editar tipo de cambio</strong>
+                <span>Ajusta el mes y el promedio antes de guardar.</span>
+              </div>
+              <label>
+                <span>Mes</span>
+                <input
+                  type="month"
+                  value={exchangeRateForm.yearMonth}
+                  onChange={(event) => setExchangeRateForm((current) => ({ ...current, yearMonth: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>TC promedio</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={exchangeRateForm.averageRate}
+                  onChange={(event) => setExchangeRateForm((current) => ({ ...current, averageRate: event.target.value }))}
+                />
+              </label>
+              <div className="action-row span-2">
+                <button type="button" className="ghost-button" onClick={handleCloseExchangeRateEdit}>
+                  Cancelar
+                </button>
+                <button type="submit" className="primary-button">
+                  Aceptar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingExchangeRateDelete ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-exchange-rate-title">
+            <div className="confirm-modal-copy">
+              <strong id="delete-exchange-rate-title">Eliminar tipo de cambio</strong>
+              <span>
+                Se va a eliminar el tipo de cambio de {formatYearMonth(pendingExchangeRateDelete.yearMonth)}. Esta accion
+                afecta la lectura de egresos UYU pasados a USD.
+              </span>
+            </div>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={() => setPendingExchangeRateDelete(null)}>
+                Cancelar
+              </button>
+              <button type="button" className="ghost-button danger" onClick={handleConfirmExchangeRateDelete}>
+                Si, eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

@@ -525,6 +525,15 @@ button {
   padding-bottom: 6px;
 }
 
+.floating-scroll-host {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.floating-scroll-host::-webkit-scrollbar {
+  display: none;
+}
+
 .floating-table-scrollbar {
   position: sticky;
   bottom: 14px;

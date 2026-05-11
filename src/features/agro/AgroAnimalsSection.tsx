@@ -393,7 +393,7 @@ export function AgroAnimalsSection({
             onChange={(event) => setAnimalSearchTerm(event.target.value)}
           />
         </label>
-        <div ref={animalTableWrapRef} className="table-wrap">
+        <div ref={animalTableWrapRef} className="table-wrap floating-scroll-host">
           <table ref={animalTableRef} className="animal-ledger-table">
             <thead>
               <tr>
