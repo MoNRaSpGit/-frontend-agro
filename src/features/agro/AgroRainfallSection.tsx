@@ -1,7 +1,10 @@
-import { establishments, fields, getFieldIdForEstablishment } from "./agro.demo.data";
 import { formatShortDate } from "./agro.home.shared";
+import { Establishment, FieldUnit } from "./agro.types";
 
 interface AgroRainfallSectionProps {
+  establishments: Establishment[];
+  fields: FieldUnit[];
+  getFieldIdForEstablishment: (establishmentId: string) => string;
   editingRainfallRecordId: string | null;
   rainfallForm: {
     date: string;
@@ -35,6 +38,9 @@ interface AgroRainfallSectionProps {
 }
 
 export function AgroRainfallSection({
+  establishments,
+  fields,
+  getFieldIdForEstablishment,
   editingRainfallRecordId,
   rainfallForm,
   rainfallRows,

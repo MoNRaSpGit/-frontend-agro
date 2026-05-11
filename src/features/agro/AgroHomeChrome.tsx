@@ -1,8 +1,9 @@
-import { establishments } from "./agro.demo.data";
 import { formatMoney, periodMonthOptions } from "./agro.home.shared";
+import { Establishment } from "./agro.types";
 
 interface AgroToolbarProps {
   availableYears: string[];
+  establishments: Establishment[];
   selectedEstablishmentId: string;
   selectedMonth: string;
   selectedYear: string;
@@ -25,6 +26,7 @@ interface AgroMetricsGridProps {
 
 export function AgroToolbar({
   availableYears,
+  establishments,
   selectedEstablishmentId,
   selectedMonth,
   selectedYear,

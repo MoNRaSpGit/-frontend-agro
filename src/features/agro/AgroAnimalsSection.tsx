@@ -1,8 +1,11 @@
-import { categoryCatalog, currencyLabels, establishments, getFieldIdForEstablishment, fields, movementKindLabels, speciesLabels } from "./agro.demo.data";
+import { categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
 import { formatMoney, formatNumber, formatShortDate } from "./agro.home.shared";
-import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, MoneyCurrency } from "./agro.types";
+import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, FieldUnit, MoneyCurrency } from "./agro.types";
 
 interface AgroAnimalsSectionProps {
+  establishments: Establishment[];
+  fields: FieldUnit[];
+  getFieldIdForEstablishment: (establishmentId: string) => string;
   animalFieldRefs: React.MutableRefObject<Record<string, HTMLInputElement | HTMLSelectElement | null>>;
   animalForm: {
     date: string;
@@ -74,6 +77,9 @@ interface AgroAnimalsSectionProps {
 }
 
 export function AgroAnimalsSection({
+  establishments,
+  fields,
+  getFieldIdForEstablishment,
   animalForm,
   animalFormErrors,
   animalFormPanelRef,

@@ -2,6 +2,8 @@ import { buildApiUrl } from "../../shared/config/api";
 import {
   AccountingEntry,
   AnimalMovementRecord,
+  Establishment,
+  FieldUnit,
   MonthlyExchangeRate,
   RainfallRecord,
   SanitaryRecord
@@ -11,6 +13,8 @@ export type AgroWorkspaceSnapshot = {
   workspaceKey: "public";
   version: "v1";
   data: {
+    establishments: Establishment[];
+    fields: FieldUnit[];
     animalMovements: AnimalMovementRecord[];
     accountingEntries: AccountingEntry[];
     rainfallRecords: RainfallRecord[];

@@ -1,10 +1,14 @@
-import { categoryCatalog, establishments } from "./agro.demo.data";
-import { AgroSpecies } from "./agro.types";
+import { categoryCatalog } from "./agro.demo.data";
+import { AgroSpecies, Establishment } from "./agro.types";
 
 interface AgroSetupSectionProps {
+  establishments: Establishment[];
   setupCutoffDate: string;
   setupEstablishmentId: string;
   setupSpecies: AgroSpecies;
+  newEstablishmentForm: {
+    name: string;
+  };
   initialStockForm: {
     categoryCode: string;
     quantity: string;
@@ -22,6 +26,11 @@ interface AgroSetupSectionProps {
   setSetupCutoffDate: (value: string) => void;
   setSetupEstablishmentId: (value: string) => void;
   setSetupSpecies: (value: AgroSpecies) => void;
+  setNewEstablishmentForm: React.Dispatch<
+    React.SetStateAction<{
+      name: string;
+    }>
+  >;
   setInitialStockForm: React.Dispatch<
     React.SetStateAction<{
       categoryCode: string;
@@ -38,23 +47,28 @@ interface AgroSetupSectionProps {
   >;
   resetInitialStockForm: () => void;
   resetInitialReceivableForm: () => void;
+  onAddEstablishment: () => void;
   onSubmitInitialLoad: () => void;
 }
 
 export function AgroSetupSection({
+  establishments,
   setupCutoffDate,
   setupEstablishmentId,
   setupSpecies,
+  newEstablishmentForm,
   initialStockForm,
   initialReceivableForm,
   setupSummary,
   setSetupCutoffDate,
   setSetupEstablishmentId,
   setSetupSpecies,
+  setNewEstablishmentForm,
   setInitialStockForm,
   setInitialReceivableForm,
   resetInitialStockForm,
   resetInitialReceivableForm,
+  onAddEstablishment,
   onSubmitInitialLoad
 }: AgroSetupSectionProps) {
   const availableCategories = categoryCatalog[setupSpecies];
@@ -103,6 +117,30 @@ export function AgroSetupSection({
         </form>
 
         <div className="content-grid top-gap">
+          <section className="subpanel">
+            <div className="panel-header">
+              <div>
+                <h2>Crear campo</h2>
+                <p>Agrega un establecimiento nuevo para usarlo en todo agro.</p>
+              </div>
+            </div>
+            <div className="form-grid">
+              <label>
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  value={newEstablishmentForm.name}
+                  onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, name: event.target.value }))}
+                />
+              </label>
+              <div className="action-row span-2">
+                <button type="button" className="primary-button" onClick={onAddEstablishment}>
+                  Crear campo
+                </button>
+              </div>
+            </div>
+          </section>
+
           <section className="subpanel">
             <div className="panel-header">
               <div>

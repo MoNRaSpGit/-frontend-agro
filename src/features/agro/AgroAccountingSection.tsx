@@ -1,9 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { expenseConceptLabels, formatMoney, formatShortDate, formatYearMonth, getNetAmount } from "./agro.home.shared";
-import { currencyLabels, establishments, fields, getFieldIdForEstablishment } from "./agro.demo.data";
-import { AccountingEntry, AccountingEntryType, ExpenseConcept, IncomeConcept, MonthlyExchangeRate, MoneyCurrency } from "./agro.types";
+import { currencyLabels } from "./agro.demo.data";
+import {
+  AccountingEntry,
+  AccountingEntryType,
+  Establishment,
+  ExpenseConcept,
+  FieldUnit,
+  IncomeConcept,
+  MonthlyExchangeRate,
+  MoneyCurrency
+} from "./agro.types";
 
 interface AgroAccountingSectionProps {
+  establishments: Establishment[];
+  fields: FieldUnit[];
+  getFieldIdForEstablishment: (establishmentId: string) => string;
   accountingStatusFilter: "all" | "pending" | "partial" | "collected";
   accountingFormPanelRef: React.RefObject<HTMLElement | null>;
   accountingForm: {
@@ -80,6 +92,9 @@ interface AgroAccountingSectionProps {
 }
 
 export function AgroAccountingSection({
+  establishments,
+  fields,
+  getFieldIdForEstablishment,
   accountingStatusFilter,
   accountingFormPanelRef,
   accountingForm,

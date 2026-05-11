@@ -1,7 +1,10 @@
-import { establishments, fields, getFieldIdForEstablishment } from "./agro.demo.data";
 import { formatShortDate } from "./agro.home.shared";
+import { Establishment, FieldUnit } from "./agro.types";
 
 interface AgroSanitySectionProps {
+  establishments: Establishment[];
+  fields: FieldUnit[];
+  getFieldIdForEstablishment: (establishmentId: string) => string;
   editingSanitaryRecordId: string | null;
   sanitaryForm: {
     date: string;
@@ -39,6 +42,9 @@ interface AgroSanitySectionProps {
 }
 
 export function AgroSanitySection({
+  establishments,
+  fields,
+  getFieldIdForEstablishment,
   editingSanitaryRecordId,
   sanitaryForm,
   sanitaryRows,

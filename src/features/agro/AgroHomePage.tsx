@@ -23,10 +23,9 @@ import {
 import { agroWorkspaceSections } from "./agro.workspace.config";
 import {
   categoryCatalog,
-  establishments,
-  fields,
-  getEstablishmentIdFromFieldId,
-  getFieldIdForEstablishment,
+  establishments as initialEstablishments,
+  fields as initialFields,
+  getEstablishmentIdFromFieldId as getLegacyEstablishmentIdFromFieldId,
   initialStock,
   movementKindLabels,
   speciesLabels
@@ -38,7 +37,9 @@ import {
   AgroView,
   AnimalMovementKind,
   AnimalMovementRecord,
+  Establishment,
   ExpenseConcept,
+  FieldUnit,
   IncomeConcept,
   MonthlyExchangeRate,
   MoneyCurrency,
@@ -47,8 +48,8 @@ import {
 } from "./agro.types";
 
 function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMovementRecord {
-  const establishmentId = movement.establishmentId || getEstablishmentIdFromFieldId(movement.fieldId);
-  const fieldId = getFieldIdForEstablishment(establishmentId);
+  const establishmentId = movement.establishmentId || getLegacyEstablishmentIdFromFieldId(movement.fieldId);
+  const fieldId = initialFields.find((field) => field.establishmentId === establishmentId)?.id ?? movement.fieldId;
 
   return {
     ...movement,
@@ -58,8 +59,8 @@ function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMo
 }
 
 function normalizeAccountingEntry(entry: AccountingEntry): AccountingEntry {
-  const establishmentId = entry.establishmentId || getEstablishmentIdFromFieldId(entry.fieldId);
-  const fieldId = getFieldIdForEstablishment(establishmentId);
+  const establishmentId = entry.establishmentId || getLegacyEstablishmentIdFromFieldId(entry.fieldId);
+  const fieldId = initialFields.find((field) => field.establishmentId === establishmentId)?.id ?? entry.fieldId;
   const expectedAmount = entry.type === "income" ? entry.expectedAmount ?? entry.netAmount : undefined;
   const collectedAmount = entry.type === "income" ? entry.collectedAmount ?? expectedAmount : undefined;
 
@@ -73,8 +74,8 @@ function normalizeAccountingEntry(entry: AccountingEntry): AccountingEntry {
 }
 
 function normalizeRainfallRecord(record: RainfallRecord): RainfallRecord {
-  const establishmentId = getEstablishmentIdFromFieldId(record.fieldId);
-  const fieldId = getFieldIdForEstablishment(establishmentId);
+  const establishmentId = getLegacyEstablishmentIdFromFieldId(record.fieldId);
+  const fieldId = initialFields.find((field) => field.establishmentId === establishmentId)?.id ?? record.fieldId;
 
   return {
     ...record,
@@ -83,8 +84,8 @@ function normalizeRainfallRecord(record: RainfallRecord): RainfallRecord {
 }
 
 function normalizeSanitaryRecord(record: SanitaryRecord): SanitaryRecord {
-  const establishmentId = record.establishmentId || getEstablishmentIdFromFieldId(record.fieldId);
-  const fieldId = getFieldIdForEstablishment(establishmentId);
+  const establishmentId = record.establishmentId || getLegacyEstablishmentIdFromFieldId(record.fieldId);
+  const fieldId = initialFields.find((field) => field.establishmentId === establishmentId)?.id ?? record.fieldId;
 
   return {
     ...record,
@@ -156,6 +157,10 @@ function isDateWithinStockCutoff(date: string, selectedYear: string, selectedMon
   return yearMonth <= `${selectedYear}-${selectedMonth}`;
 }
 
+function getFieldIdForEstablishmentFrom(fields: FieldUnit[], establishmentId: string) {
+  return fields.find((field) => field.establishmentId === establishmentId)?.id ?? "";
+}
+
 export function AgroHomePage() {
   const today = getTodayDate();
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
@@ -167,7 +172,9 @@ export function AgroHomePage() {
   const animalFieldRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({});
   const syncingAnimalScrollRef = useRef<"table" | "bottom-bar" | null>(null);
   const [activeView, setActiveView] = useState<AgroView | null>(null);
-  const [selectedEstablishmentId, setSelectedEstablishmentId] = useState(establishments[0]?.id ?? "");
+  const [establishments, setEstablishments] = useState<Establishment[]>(initialEstablishments);
+  const [fields, setFields] = useState<FieldUnit[]>(initialFields);
+  const [selectedEstablishmentId, setSelectedEstablishmentId] = useState(initialEstablishments[0]?.id ?? "");
   const [selectedYear, setSelectedYear] = useState(today.slice(0, 4));
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [animalSearchTerm, setAnimalSearchTerm] = useState("");
@@ -198,8 +205,8 @@ export function AgroHomePage() {
 
   const [animalForm, setAnimalForm] = useState({
     date: today,
-    establishmentId: establishments[0]?.id ?? "",
-    fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+    establishmentId: initialEstablishments[0]?.id ?? "",
+    fieldId: getFieldIdForEstablishmentFrom(initialFields, initialEstablishments[0]?.id ?? ""),
     species: "vacunos" as AgroSpecies,
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     kind: "purchase" as AnimalMovementKind,
@@ -217,8 +224,8 @@ export function AgroHomePage() {
 
   const [accountingForm, setAccountingForm] = useState({
     date: today,
-    establishmentId: establishments[0]?.id ?? "",
-    fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+    establishmentId: initialEstablishments[0]?.id ?? "",
+    fieldId: getFieldIdForEstablishmentFrom(initialFields, initialEstablishments[0]?.id ?? ""),
     type: "income" as AccountingEntryType,
     concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
     currency: "USD" as MoneyCurrency,
@@ -231,15 +238,15 @@ export function AgroHomePage() {
 
   const [rainfallForm, setRainfallForm] = useState({
     date: today,
-    establishmentId: establishments[0]?.id ?? "",
-    fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+    establishmentId: initialEstablishments[0]?.id ?? "",
+    fieldId: getFieldIdForEstablishmentFrom(initialFields, initialEstablishments[0]?.id ?? ""),
     millimeters: "",
     notes: ""
   });
   const [sanitaryForm, setSanitaryForm] = useState({
     date: today,
-    establishmentId: establishments[0]?.id ?? "",
-    fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+    establishmentId: initialEstablishments[0]?.id ?? "",
+    fieldId: getFieldIdForEstablishmentFrom(initialFields, initialEstablishments[0]?.id ?? ""),
     quantity: "",
     treatment: "",
     notes: ""
@@ -250,8 +257,11 @@ export function AgroHomePage() {
     averageRate: ""
   });
   const [setupCutoffDate, setSetupCutoffDate] = useState(today);
-  const [setupEstablishmentId, setSetupEstablishmentId] = useState(establishments[0]?.id ?? "");
+  const [setupEstablishmentId, setSetupEstablishmentId] = useState(initialEstablishments[0]?.id ?? "");
   const [setupSpecies, setSetupSpecies] = useState<AgroSpecies>("vacunos");
+  const [newEstablishmentForm, setNewEstablishmentForm] = useState({
+    name: ""
+  });
   const [initialStockForm, setInitialStockForm] = useState({
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     quantity: "",
@@ -267,7 +277,7 @@ export function AgroHomePage() {
     setAnimalForm({
       date: today,
       establishmentId: establishments[0]?.id ?? "",
-      fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+      fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
       species: "vacunos" as AgroSpecies,
       categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
       kind: "purchase" as AnimalMovementKind,
@@ -355,7 +365,7 @@ export function AgroHomePage() {
     setAccountingForm({
       date: today,
       establishmentId: establishments[0]?.id ?? "",
-      fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+      fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
       type: "income" as AccountingEntryType,
       concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
       currency: "USD" as MoneyCurrency,
@@ -372,7 +382,7 @@ export function AgroHomePage() {
     setRainfallForm({
       date: today,
       establishmentId: establishments[0]?.id ?? "",
-      fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+      fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
       millimeters: "",
       notes: ""
     });
@@ -383,7 +393,7 @@ export function AgroHomePage() {
     setSanitaryForm({
       date: today,
       establishmentId: establishments[0]?.id ?? "",
-      fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
+      fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
       quantity: "",
       treatment: "",
       notes: ""
@@ -415,10 +425,47 @@ export function AgroHomePage() {
     });
   }
 
+  function resetNewEstablishmentForm() {
+    setNewEstablishmentForm({
+      name: ""
+    });
+  }
+
   const visibleFields = useMemo(
     () => fields.filter((field) => field.establishmentId === selectedEstablishmentId),
-    [selectedEstablishmentId]
+    [fields, selectedEstablishmentId]
   );
+
+  useEffect(() => {
+    const fallbackEstablishmentId = establishments[0]?.id ?? "";
+
+    if (selectedEstablishmentId && establishments.some((item) => item.id === selectedEstablishmentId)) {
+      return;
+    }
+
+    setSelectedEstablishmentId(fallbackEstablishmentId);
+    setSetupEstablishmentId(fallbackEstablishmentId);
+    setAnimalForm((current) => ({
+      ...current,
+      establishmentId: fallbackEstablishmentId,
+      fieldId: getFieldIdForEstablishmentFrom(fields, fallbackEstablishmentId)
+    }));
+    setAccountingForm((current) => ({
+      ...current,
+      establishmentId: fallbackEstablishmentId,
+      fieldId: getFieldIdForEstablishmentFrom(fields, fallbackEstablishmentId)
+    }));
+    setRainfallForm((current) => ({
+      ...current,
+      establishmentId: fallbackEstablishmentId,
+      fieldId: getFieldIdForEstablishmentFrom(fields, fallbackEstablishmentId)
+    }));
+    setSanitaryForm((current) => ({
+      ...current,
+      establishmentId: fallbackEstablishmentId,
+      fieldId: getFieldIdForEstablishmentFrom(fields, fallbackEstablishmentId)
+    }));
+  }, [establishments, fields, selectedEstablishmentId]);
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
@@ -539,7 +586,7 @@ export function AgroHomePage() {
         return searchBase.includes(animalSearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [animalMovements, animalSearchTerm, selectedEstablishmentId]);
+  }, [animalMovements, animalSearchTerm, fields, selectedEstablishmentId]);
 
   useEffect(() => {
     function syncAnimalScrollbarMetrics() {
@@ -626,7 +673,7 @@ export function AgroHomePage() {
         return searchBase.includes(accountingSearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, accountingSearchTerm, selectedEstablishmentId]);
+  }, [accountingEntries, accountingSearchTerm, fields, selectedEstablishmentId]);
 
   const accountingLedgerWithConversions = useMemo(() => {
     return accountingLedgerRows.map((entry) => {
@@ -685,7 +732,7 @@ export function AgroHomePage() {
 
   const selectedFieldIds = useMemo(
     () => fields.filter((field) => field.establishmentId === selectedEstablishmentId).map((field) => field.id),
-    [selectedEstablishmentId]
+    [fields, selectedEstablishmentId]
   );
 
   const summaryByField = useMemo(() => {
@@ -1016,7 +1063,7 @@ export function AgroHomePage() {
         }
       )
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [rainfallForm.date, rainfallRecords, rainfallSearchTerm, selectedFieldIds]);
+  }, [fields, rainfallForm.date, rainfallRecords, rainfallSearchTerm, selectedFieldIds]);
 
   const sanitaryRows = useMemo(() => {
     return [...sanitaryRecords]
@@ -1041,7 +1088,7 @@ export function AgroHomePage() {
         return searchBase.includes(sanitarySearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [sanitaryForm.date, sanitaryRecords, sanitarySearchTerm, selectedFieldIds]);
+  }, [fields, sanitaryForm.date, sanitaryRecords, sanitarySearchTerm, selectedFieldIds]);
 
   const visibleExchangeRates = useMemo(() => {
     return [...monthlyExchangeRates].sort((left, right) => right.yearMonth.localeCompare(left.yearMonth));
@@ -1122,7 +1169,7 @@ export function AgroHomePage() {
         };
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, animalMovements, selectedEstablishmentId, selectedMonth, selectedYear]);
+  }, [accountingEntries, animalMovements, fields, selectedEstablishmentId, selectedMonth, selectedYear]);
 
   const accountStatementSummary = useMemo(() => {
     return accountStatementRows.reduce(
@@ -1184,6 +1231,15 @@ export function AgroHomePage() {
           return;
         }
 
+        const nextEstablishments =
+          snapshot.data.establishments && snapshot.data.establishments.length > 0
+            ? snapshot.data.establishments
+            : initialEstablishments;
+        const nextFields =
+          snapshot.data.fields && snapshot.data.fields.length > 0 ? snapshot.data.fields : initialFields;
+
+        setEstablishments(nextEstablishments);
+        setFields(nextFields);
         setAnimalMovements(snapshot.data.animalMovements.map(normalizeAnimalMovementRecord));
         setAccountingEntries(snapshot.data.accountingEntries.map(normalizeAccountingEntry));
         setRainfallRecords(snapshot.data.rainfallRecords.map(normalizeRainfallRecord));
@@ -1219,6 +1275,8 @@ export function AgroHomePage() {
 
     const timeoutId = window.setTimeout(() => {
       void saveAgroWorkspace({
+        establishments,
+        fields,
         animalMovements,
         accountingEntries,
         rainfallRecords,
@@ -1234,6 +1292,8 @@ export function AgroHomePage() {
   }, [
     accountingEntries,
     animalMovements,
+    establishments,
+    fields,
     monthlyExchangeRates,
     rainfallRecords,
     sanitaryRecords,
@@ -1268,6 +1328,53 @@ export function AgroHomePage() {
 
   function showError(message: string) {
     toast.error(message, { autoClose: false });
+  }
+
+  function handleAddEstablishment() {
+    const name = newEstablishmentForm.name.trim();
+    if (!name) {
+      showError("Falta el nombre del establecimiento.");
+      return;
+    }
+
+    if (establishments.some((item) => item.name.trim().toLowerCase() === name.toLowerCase())) {
+      showError("Ese establecimiento ya existe.");
+      return;
+    }
+
+    const slug = name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || `est-${Date.now()}`;
+
+    const establishmentId = `est-${slug}`;
+    const fieldId = `field-${slug}`;
+    const nextEstablishment: Establishment = {
+      id: establishmentId,
+      name,
+      location: "",
+      hectares: 0
+    };
+
+    const nextField: FieldUnit = {
+      id: fieldId,
+      establishmentId,
+      name,
+      notes: "Operacion consolidada del establecimiento."
+    };
+
+    setEstablishments((current) => [...current, nextEstablishment]);
+    setFields((current) => [...current, nextField]);
+    setSelectedEstablishmentId(establishmentId);
+    setSetupEstablishmentId(establishmentId);
+    setAnimalForm((current) => ({ ...current, establishmentId, fieldId }));
+    setAccountingForm((current) => ({ ...current, establishmentId, fieldId }));
+    setRainfallForm((current) => ({ ...current, establishmentId, fieldId }));
+    setSanitaryForm((current) => ({ ...current, establishmentId, fieldId }));
+    resetNewEstablishmentForm();
+    showSuccess("Establecimiento agregado.");
   }
 
   function handleAnimalSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1353,7 +1460,7 @@ export function AgroHomePage() {
       id: nextMovementId,
       date: animalForm.date,
       establishmentId: animalForm.establishmentId,
-      fieldId: getFieldIdForEstablishment(animalForm.establishmentId),
+      fieldId: getFieldIdForEstablishmentFrom(fields, animalForm.establishmentId),
       species: animalForm.species,
       categoryCode: animalForm.categoryCode,
       kind: animalForm.kind,
@@ -1381,7 +1488,7 @@ export function AgroHomePage() {
         id: nextAccountingId,
         date: animalForm.date,
         establishmentId: animalForm.establishmentId,
-        fieldId: getFieldIdForEstablishment(animalForm.establishmentId),
+        fieldId: getFieldIdForEstablishmentFrom(fields, animalForm.establishmentId),
         type: entryType,
         concept: accountingConcept,
         currency: animalForm.currency,
@@ -1460,7 +1567,7 @@ export function AgroHomePage() {
       id: editingAccountingEntryId ?? `acc-${Date.now()}`,
       date: accountingForm.date,
       establishmentId: accountingForm.establishmentId,
-      fieldId: getFieldIdForEstablishment(accountingForm.establishmentId),
+      fieldId: getFieldIdForEstablishmentFrom(fields, accountingForm.establishmentId),
       type: accountingForm.type,
       concept: accountingForm.concept,
       currency: accountingForm.currency,
@@ -1503,7 +1610,7 @@ export function AgroHomePage() {
     const rainfallEntry: RainfallRecord = {
       id: editingRainfallRecordId ?? `rain-${Date.now()}`,
       date: rainfallForm.date,
-      fieldId: getFieldIdForEstablishment(rainfallForm.establishmentId),
+      fieldId: getFieldIdForEstablishmentFrom(fields, rainfallForm.establishmentId),
       millimeters,
       notes: rainfallForm.notes.trim()
     };
@@ -1535,7 +1642,7 @@ export function AgroHomePage() {
       id: editingSanitaryRecordId ?? `san-${Date.now()}`,
       date: sanitaryForm.date,
       establishmentId: sanitaryForm.establishmentId,
-      fieldId: getFieldIdForEstablishment(sanitaryForm.establishmentId),
+      fieldId: getFieldIdForEstablishmentFrom(fields, sanitaryForm.establishmentId),
       quantity,
       treatment: sanitaryForm.treatment.trim(),
       notes: sanitaryForm.notes.trim()
@@ -1562,7 +1669,7 @@ export function AgroHomePage() {
       id: `anm-${Date.now()}`,
       date: setupCutoffDate,
       establishmentId: setupEstablishmentId,
-      fieldId: getFieldIdForEstablishment(setupEstablishmentId),
+      fieldId: getFieldIdForEstablishmentFrom(fields, setupEstablishmentId),
       species: setupSpecies,
       categoryCode: initialStockForm.categoryCode,
       kind: "adjustment",
@@ -1602,7 +1709,7 @@ export function AgroHomePage() {
       id: `acc-${Date.now()}`,
       date: setupCutoffDate,
       establishmentId: setupEstablishmentId,
-      fieldId: getFieldIdForEstablishment(setupEstablishmentId),
+      fieldId: getFieldIdForEstablishmentFrom(fields, setupEstablishmentId),
       type: "income",
       concept: getIncomeConceptForSpecies(setupSpecies),
       currency: "USD",
@@ -1930,6 +2037,7 @@ export function AgroHomePage() {
       >
         <AgroToolbar
           availableYears={availableYears}
+          establishments={establishments}
           selectedEstablishmentId={selectedEstablishmentId}
           selectedMonth={selectedMonth}
           selectedYear={selectedYear}
@@ -1950,25 +2058,32 @@ export function AgroHomePage() {
 
         {activeView === "setup" ? (
           <AgroSetupSection
+            establishments={establishments}
             setupCutoffDate={setupCutoffDate}
             setupEstablishmentId={setupEstablishmentId}
             setupSpecies={setupSpecies}
+            newEstablishmentForm={newEstablishmentForm}
             initialStockForm={initialStockForm}
             initialReceivableForm={initialReceivableForm}
             setupSummary={setupSummary}
             setSetupCutoffDate={setSetupCutoffDate}
             setSetupEstablishmentId={setSetupEstablishmentId}
             setSetupSpecies={setSetupSpecies}
+            setNewEstablishmentForm={setNewEstablishmentForm}
             setInitialStockForm={setInitialStockForm}
             setInitialReceivableForm={setInitialReceivableForm}
             resetInitialStockForm={resetInitialStockForm}
             resetInitialReceivableForm={resetInitialReceivableForm}
+            onAddEstablishment={handleAddEstablishment}
             onSubmitInitialLoad={handleInitialLoadSubmit}
           />
         ) : null}
 
         {activeView === "animals" ? (
           <AgroAnimalsSection
+            establishments={establishments}
+            fields={fields}
+            getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             animalFieldRefs={animalFieldRefs}
             animalForm={animalForm}
             animalFormErrors={animalFormErrors}
@@ -2001,6 +2116,9 @@ export function AgroHomePage() {
 
         {activeView === "accounting" ? (
           <AgroAccountingSection
+            establishments={establishments}
+            fields={fields}
+            getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             accountingStatusFilter={accountingStatusFilter}
             accountingFormPanelRef={accountingFormPanelRef}
             accountingForm={accountingForm}
@@ -2029,6 +2147,9 @@ export function AgroHomePage() {
 
         {activeView === "rainfall" ? (
           <AgroRainfallSection
+            establishments={establishments}
+            fields={fields}
+            getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             editingRainfallRecordId={editingRainfallRecordId}
             rainfallForm={rainfallForm}
             rainfallRows={rainfallRows}
@@ -2044,6 +2165,9 @@ export function AgroHomePage() {
 
         {activeView === "sanity" ? (
           <AgroSanitySection
+            establishments={establishments}
+            fields={fields}
+            getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             editingSanitaryRecordId={editingSanitaryRecordId}
             sanitaryForm={sanitaryForm}
             sanitaryRows={sanitaryRows}
