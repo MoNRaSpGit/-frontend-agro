@@ -18,7 +18,11 @@ export const expenseConceptLabels = {
   otros: "Otros"
 } as const;
 
-export const today = "2026-05-07";
+export function getTodayDate() {
+  const now = new Date();
+  const timezoneOffsetMs = now.getTimezoneOffset() * 60 * 1000;
+  return new Date(now.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
+}
 
 export const periodMonthOptions = [
   { value: "all", label: "Todos los meses" },

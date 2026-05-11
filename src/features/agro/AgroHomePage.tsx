@@ -9,7 +9,15 @@ import { AgroOverviewSection } from "./AgroOverviewSection";
 import { AgroRainfallSection } from "./AgroRainfallSection";
 import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
-import { expenseConceptLabels, formatMoney, getNetAmount, getYearMonth, incomeConceptLabels, today } from "./agro.home.shared";
+import {
+  expenseConceptLabels,
+  formatMoney,
+  formatShortDate,
+  getNetAmount,
+  getTodayDate,
+  getYearMonth,
+  incomeConceptLabels
+} from "./agro.home.shared";
 import { agroWorkspaceSections } from "./agro.workspace.config";
 import {
   categoryCatalog,
@@ -39,10 +47,10 @@ import {
   RainfallRecord
 } from "./agro.types";
 
-const animalMovementsStorageKey = "saaspro-agro-animal-movements-v2";
-const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v2";
-const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v2";
-const monthlyExchangeRatesStorageKey = "saaspro-agro-monthly-exchange-rates-v2";
+const animalMovementsStorageKey = "saaspro-agro-animal-movements-v3";
+const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v3";
+const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v3";
+const monthlyExchangeRatesStorageKey = "saaspro-agro-monthly-exchange-rates-v3";
 
 function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMovementRecord {
   const establishmentId = movement.establishmentId || getEstablishmentIdFromFieldId(movement.fieldId);
@@ -122,6 +130,7 @@ function getIncomeCollectionStatus(entry: AccountingEntry) {
 }
 
 export function AgroHomePage() {
+  const today = getTodayDate();
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
   const accountingFormPanelRef = useRef<HTMLElement | null>(null);
   const animalTableWrapRef = useRef<HTMLDivElement | null>(null);
@@ -132,7 +141,7 @@ export function AgroHomePage() {
   const syncingAnimalScrollRef = useRef<"table" | "bottom-bar" | null>(null);
   const [activeView, setActiveView] = useState<AgroView | null>(null);
   const [selectedEstablishmentId, setSelectedEstablishmentId] = useState(establishments[0]?.id ?? "");
-  const [selectedYear, setSelectedYear] = useState("2026");
+  const [selectedYear, setSelectedYear] = useState(today.slice(0, 4));
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [animalSearchTerm, setAnimalSearchTerm] = useState("");
   const [accountingSearchTerm, setAccountingSearchTerm] = useState("");
@@ -345,7 +354,7 @@ export function AgroHomePage() {
     rainfallRecords.forEach((record) => years.add(record.date.slice(0, 4)));
     years.add(today.slice(0, 4));
     return [...years].sort((left, right) => right.localeCompare(left));
-  }, [accountingEntries, animalMovements, rainfallRecords]);
+  }, [accountingEntries, animalMovements, rainfallRecords, today]);
 
   const stockBalanceMap = useMemo(() => {
     const balanceMap = new Map<string, number>();
@@ -882,7 +891,7 @@ export function AgroHomePage() {
       expenseUyuDollarized,
       totalExpenseUsdEquivalent: expenseUsd + expenseUyuDollarized
     };
-  }, [accountingEntries, animalMovements, exchangeRateByMonth, selectedFieldIds, selectedYear]);
+  }, [accountingEntries, animalMovements, exchangeRateByMonth, selectedFieldIds, selectedYear, today]);
 
   const animalLedgerSummary = useMemo(() => {
     return {
@@ -966,54 +975,78 @@ export function AgroHomePage() {
     );
   }, [summaryByField]);
 
-  const linkedOperationsRows = useMemo(() => {
-    return animalLedgerRows
-      .filter((movement) => movement.kind === "purchase" || movement.kind === "sale")
-      .map((movement) => {
-        const field = fields.find((item) => item.id === movement.fieldId);
-        const linkedEntry = movement.linkedAccountingEntryId
-          ? accountingEntries.find((entry) => entry.id === movement.linkedAccountingEntryId)
+  const accountStatementRows = useMemo(() => {
+    return accountingEntries
+      .filter((entry) => entry.type === "income")
+      .filter((entry) => {
+        if (entry.establishmentId !== selectedEstablishmentId) {
+          return false;
+        }
+
+        if (selectedYear !== "all" && !entry.date.startsWith(selectedYear)) {
+          return false;
+        }
+
+        if (selectedMonth !== "all" && entry.date.slice(5, 7) !== selectedMonth) {
+          return false;
+        }
+
+        return true;
+      })
+      .map((entry) => {
+        const field = fields.find((item) => item.id === entry.fieldId);
+        const linkedMovement = entry.linkedAnimalMovementId
+          ? animalMovements.find((movement) => movement.id === entry.linkedAnimalMovementId)
           : undefined;
 
         return {
-          id: movement.id,
-          date: movement.date,
+          id: entry.id,
+          date: entry.date,
           fieldName: field?.name ?? "-",
-          movementLabel: movementKindLabels[movement.kind],
-          quantity: movement.quantity,
-          totalAmount: movement.totalAmount,
-          currency: movement.currency ?? "USD",
-          linked: Boolean(linkedEntry),
-          collectedAmount: linkedEntry?.type === "income" ? getIncomeCollectedAmount(linkedEntry) : null,
-          pendingAmount: linkedEntry?.type === "income" ? getIncomePendingAmount(linkedEntry) : null,
-          collectionStatus: linkedEntry?.type === "income" ? getIncomeCollectionStatus(linkedEntry) : null,
-          linkedLabel: linkedEntry
-            ? `${linkedEntry.type === "income" ? "Ingreso" : "Egreso"} | ${
-                linkedEntry.type === "income"
-                  ? incomeConceptLabels[linkedEntry.concept as keyof typeof incomeConceptLabels]
-                  : expenseConceptLabels[linkedEntry.concept as keyof typeof expenseConceptLabels]
-              }`
-            : "Pendiente de relacion"
+          conceptLabel: incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels],
+          totalAmount: getIncomeExpectedAmount(entry),
+          collectedAmount: getIncomeCollectedAmount(entry),
+          pendingAmount: getIncomePendingAmount(entry),
+          collectionStatus: getIncomeCollectionStatus(entry) ?? "Pendiente",
+          currency: entry.currency,
+          originLabel: linkedMovement ? "Animales" : "Contabilidad",
+          notes: entry.notes
         };
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, animalLedgerRows]);
+  }, [accountingEntries, animalMovements, selectedEstablishmentId, selectedMonth, selectedYear]);
 
-  const linkedOperationsSummary = useMemo(() => {
-    return {
-      linked: linkedOperationsRows.filter((row) => row.linked).length,
-      pending: linkedOperationsRows.filter((row) => !row.linked).length
-    };
-  }, [linkedOperationsRows]);
+  const accountStatementSummary = useMemo(() => {
+    return accountStatementRows.reduce(
+      (summary, row) => {
+        if (row.collectionStatus === "Pendiente") {
+          summary.pending += 1;
+        } else if (row.collectionStatus === "Parcial") {
+          summary.partial += 1;
+        } else {
+          summary.collected += 1;
+        }
 
-  const visibleLinkedOperationsRows = useMemo(() => {
+        summary.pendingValue += row.pendingAmount;
+        return summary;
+      },
+      {
+        pending: 0,
+        partial: 0,
+        collected: 0,
+        pendingValue: 0
+      }
+    );
+  }, [accountStatementRows]);
+
+  const visibleAccountStatementRows = useMemo(() => {
     if (linkedOperationsStatusFilter === "all") {
-      return linkedOperationsRows;
+      return accountStatementRows;
     }
 
-    return linkedOperationsRows.filter((row) => {
+    return accountStatementRows.filter((row) => {
       if (linkedOperationsStatusFilter === "pending") {
-        return !row.linked || row.collectionStatus === "Pendiente";
+        return row.collectionStatus === "Pendiente";
       }
 
       if (linkedOperationsStatusFilter === "partial") {
@@ -1022,7 +1055,7 @@ export function AgroHomePage() {
 
       return row.collectionStatus === "Cobrado";
     });
-  }, [linkedOperationsRows, linkedOperationsStatusFilter]);
+  }, [accountStatementRows, linkedOperationsStatusFilter]);
 
   const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
   const isBirthOrDeathAnimalMovement = animalForm.kind === "birth" || animalForm.kind === "death";
@@ -1212,34 +1245,34 @@ export function AgroHomePage() {
     const collectedAmount =
       accountingForm.type === "income"
         ? accountingForm.collectedAmount.trim() === ""
-          ? netAmount
+          ? 0
           : Number(accountingForm.collectedAmount)
         : undefined;
 
     if (!Number.isFinite(grossAmount) || grossAmount <= 0) {
       showError("El importe bruto debe ser mayor a 0.");
-      return;
+      return false;
     }
 
     if (!Number.isFinite(commissionAmount) || commissionAmount < 0) {
       showError("La comision debe ser un numero valido.");
-      return;
+      return false;
     }
 
     if (!Number.isFinite(taxAmount) || taxAmount < 0) {
       showError("Los impuestos deben ser un numero valido.");
-      return;
+      return false;
     }
 
     if (accountingForm.type === "income") {
       if (collectedAmount === undefined || !Number.isFinite(collectedAmount) || collectedAmount < 0) {
         showError("El importe cobrado debe ser un numero valido.");
-        return;
+        return false;
       }
 
       if (collectedAmount > netAmount) {
         showError("El cobrado no puede ser mayor al neto de la operacion.");
-        return;
+        return false;
       }
     }
 
@@ -1278,6 +1311,7 @@ export function AgroHomePage() {
     setSelectedEstablishmentId(accountingForm.establishmentId);
     resetAccountingForm();
     showSuccess(editingAccountingEntryId ? "Movimiento contable actualizado." : "Movimiento contable guardado.");
+    return true;
   }
 
   function handleRainfallSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1423,7 +1457,6 @@ export function AgroHomePage() {
       yearMonth: rate.yearMonth,
       averageRate: `${rate.averageRate}`
     });
-    accountingFormPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function handleDeleteAnimalMovement(movementId: string) {
@@ -1807,13 +1840,17 @@ export function AgroHomePage() {
             <article className="panel wide">
               <div className="panel-header">
                 <div>
-                  <h2>Operaciones vinculadas</h2>
-                  <p>Chequeo de compras y ventas con su movimiento economico relacionado.</p>
+                  <h2>Estado de cuenta</h2>
+                  <p>Lectura de lo que esta pendiente, parcial o ya cobrado dentro del periodo activo.</p>
                 </div>
               </div>
               <div className="inline-metrics">
-                <span className="data-badge accent">Relacionadas {linkedOperationsSummary.linked}</span>
-                <span className="data-badge warning">Pendientes {linkedOperationsSummary.pending}</span>
+                <span className="data-badge warning">Pendientes {accountStatementSummary.pending}</span>
+                <span className="data-badge">Parciales {accountStatementSummary.partial}</span>
+                <span className="data-badge accent">Cobradas {accountStatementSummary.collected}</span>
+                <span className="data-badge warning">
+                  Valor a cobrar {formatMoney(accountStatementSummary.pendingValue, "USD")}
+                </span>
               </div>
               <label className="table-search">
                 <span>Estado comercial</span>
@@ -1835,39 +1872,39 @@ export function AgroHomePage() {
                     <tr>
                       <th>Fecha</th>
                       <th>Establecimiento</th>
-                      <th>Operacion</th>
-                      <th>Cantidad</th>
-                      <th>Monto</th>
+                      <th>Concepto</th>
+                      <th>Total</th>
                       <th>Cobrado</th>
                       <th>Pendiente</th>
                       <th>Estado</th>
-                      <th>Relacion contable</th>
+                      <th>Origen</th>
+                      <th>Observaciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleLinkedOperationsRows.map((row) => (
+                    {visibleAccountStatementRows.map((row) => (
                       <tr key={row.id}>
-                        <td>{row.date}</td>
+                        <td>{formatShortDate(row.date)}</td>
                         <td>{row.fieldName}</td>
-                        <td>{row.movementLabel}</td>
-                        <td>{row.quantity}</td>
-                        <td>{row.totalAmount !== undefined ? formatMoney(row.totalAmount, row.currency) : "-"}</td>
-                        <td>{row.collectedAmount !== null ? formatMoney(row.collectedAmount, row.currency) : "-"}</td>
-                        <td>{row.pendingAmount !== null ? formatMoney(row.pendingAmount, row.currency) : "-"}</td>
+                        <td>{row.conceptLabel}</td>
+                        <td>{formatMoney(row.totalAmount, row.currency)}</td>
+                        <td>{formatMoney(row.collectedAmount, row.currency)}</td>
+                        <td>{formatMoney(row.pendingAmount, row.currency)}</td>
                         <td>
                           <span
                             className={
-                              row.linked
-                                ? row.collectionStatus === "Cobrado"
-                                  ? "data-badge accent compact"
-                                  : "data-badge warning compact"
+                              row.collectionStatus === "Cobrado"
+                                ? "data-badge accent compact"
+                                : row.collectionStatus === "Parcial"
+                                  ? "data-badge compact"
                                 : "data-badge warning compact"
                             }
                           >
-                            {row.linked ? row.collectionStatus ?? "Relacionado" : "Pendiente"}
+                            {row.collectionStatus}
                           </span>
                         </td>
-                        <td>{row.linkedLabel}</td>
+                        <td>{row.originLabel}</td>
+                        <td>{row.notes || "-"}</td>
                       </tr>
                     ))}
                   </tbody>
