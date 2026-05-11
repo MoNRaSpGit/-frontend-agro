@@ -60,7 +60,7 @@ export function AgroSanitySection({
           </div>
         </div>
         <form className="form-grid" onSubmit={onSubmit}>
-          <label>
+          <label className="span-2">
             <span>Fecha</span>
             <input
               type="date"
@@ -68,7 +68,7 @@ export function AgroSanitySection({
               onChange={(event) => setSanitaryForm((current) => ({ ...current, date: event.target.value }))}
             />
           </label>
-          <label>
+          <label className="span-2">
             <span>Establecimiento</span>
             <select
               value={sanitaryForm.establishmentId}
