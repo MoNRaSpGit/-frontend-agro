@@ -7,6 +7,7 @@ import { AgroDeleteConfirmModal } from "./AgroDeleteConfirmModal";
 import { AgroMetricsGrid, AgroToolbar } from "./AgroHomeChrome";
 import { AgroOverviewSection } from "./AgroOverviewSection";
 import { AgroRainfallSection } from "./AgroRainfallSection";
+import { AgroSetupSection } from "./AgroSetupSection";
 import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
@@ -47,10 +48,10 @@ import {
   RainfallRecord
 } from "./agro.types";
 
-const animalMovementsStorageKey = "saaspro-agro-animal-movements-v3";
-const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v3";
-const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v3";
-const monthlyExchangeRatesStorageKey = "saaspro-agro-monthly-exchange-rates-v3";
+const animalMovementsStorageKey = "saaspro-agro-animal-movements-v4";
+const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v4";
+const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v4";
+const monthlyExchangeRatesStorageKey = "saaspro-agro-monthly-exchange-rates-v4";
 
 function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMovementRecord {
   const establishmentId = movement.establishmentId || getEstablishmentIdFromFieldId(movement.fieldId);
@@ -127,6 +128,14 @@ function getIncomeCollectionStatus(entry: AccountingEntry) {
   }
 
   return "Cobrado";
+}
+
+function isInitialStockLoad(movement: AnimalMovementRecord) {
+  return movement.kind === "adjustment" && movement.notes.startsWith("Carga inicial:");
+}
+
+function getMovementDirection(movement: AnimalMovementRecord) {
+  return isInitialStockLoad(movement) ? "entry" : deriveMovementDirection(movement.kind);
 }
 
 export function AgroHomePage() {
@@ -216,6 +225,21 @@ export function AgroHomePage() {
   const [exchangeRateForm, setExchangeRateForm] = useState({
     yearMonth: getYearMonth(today),
     averageRate: ""
+  });
+  const [setupCutoffDate, setSetupCutoffDate] = useState(today);
+  const [initialStockForm, setInitialStockForm] = useState({
+    establishmentId: establishments[0]?.id ?? "",
+    species: "vacunos" as AgroSpecies,
+    categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
+    quantity: "",
+    notes: ""
+  });
+  const [initialReceivableForm, setInitialReceivableForm] = useState({
+    establishmentId: establishments[0]?.id ?? "",
+    concept: "venta_vacunos" as IncomeConcept,
+    totalAmount: "",
+    collectedAmount: "",
+    notes: ""
   });
 
   function resetAnimalForm() {
@@ -342,6 +366,26 @@ export function AgroHomePage() {
     setEditingExchangeRateId(null);
   }
 
+  function resetInitialStockForm() {
+    setInitialStockForm({
+      establishmentId: establishments[0]?.id ?? "",
+      species: "vacunos" as AgroSpecies,
+      categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
+      quantity: "",
+      notes: ""
+    });
+  }
+
+  function resetInitialReceivableForm() {
+    setInitialReceivableForm({
+      establishmentId: establishments[0]?.id ?? "",
+      concept: "venta_vacunos" as IncomeConcept,
+      totalAmount: "",
+      collectedAmount: "",
+      notes: ""
+    });
+  }
+
   const visibleFields = useMemo(
     () => fields.filter((field) => field.establishmentId === selectedEstablishmentId),
     [selectedEstablishmentId]
@@ -366,7 +410,7 @@ export function AgroHomePage() {
 
     for (const movement of animalMovements) {
       const key = `${movement.fieldId}:${movement.species}:${movement.categoryCode}`;
-      const signedQuantity = deriveMovementDirection(movement.kind) === "entry" ? movement.quantity : movement.quantity * -1;
+      const signedQuantity = getMovementDirection(movement) === "entry" ? movement.quantity : movement.quantity * -1;
       balanceMap.set(key, (balanceMap.get(key) ?? 0) + signedQuantity);
     }
 
@@ -772,7 +816,7 @@ export function AgroHomePage() {
             selectedFieldIds.includes(movement.fieldId) &&
             (selectedYear === "all" || movement.date.startsWith(selectedYear)) &&
             (selectedMonth === "all" || movement.date.slice(5, 7) === selectedMonth) &&
-            deriveMovementDirection(movement.kind) === "entry"
+            getMovementDirection(movement) === "entry"
         )
         .reduce((sum, movement) => sum + movement.quantity, 0),
       exits: animalMovements
@@ -781,7 +825,7 @@ export function AgroHomePage() {
             selectedFieldIds.includes(movement.fieldId) &&
             (selectedYear === "all" || movement.date.startsWith(selectedYear)) &&
             (selectedMonth === "all" || movement.date.slice(5, 7) === selectedMonth) &&
-            deriveMovementDirection(movement.kind) === "exit"
+            getMovementDirection(movement) === "exit"
         )
         .reduce((sum, movement) => sum + movement.quantity, 0),
       incomeUsd: accountingEntries
@@ -849,7 +893,7 @@ export function AgroHomePage() {
           (movement) =>
             selectedFieldIds.includes(movement.fieldId) &&
             movement.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
-            deriveMovementDirection(movement.kind) === "entry"
+            getMovementDirection(movement) === "entry"
         )
         .reduce((sum, movement) => sum + movement.quantity, 0),
       exits: animalMovements
@@ -857,7 +901,7 @@ export function AgroHomePage() {
           (movement) =>
             selectedFieldIds.includes(movement.fieldId) &&
             movement.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
-            deriveMovementDirection(movement.kind) === "exit"
+            getMovementDirection(movement) === "exit"
         )
         .reduce((sum, movement) => sum + movement.quantity, 0),
       incomeUsd: accountingEntries
@@ -1056,6 +1100,15 @@ export function AgroHomePage() {
       return row.collectionStatus === "Cobrado";
     });
   }, [accountStatementRows, linkedOperationsStatusFilter]);
+
+  const setupSummary = useMemo(() => {
+    return {
+      stockLoads: animalMovements.filter(
+        (movement) => movement.kind === "adjustment" && movement.notes.startsWith("Carga inicial:")
+      ).length,
+      receivableLoads: accountingEntries.filter((entry) => entry.notes.startsWith("Saldo inicial:")).length
+    };
+  }, [accountingEntries, animalMovements]);
 
   const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
   const isBirthOrDeathAnimalMovement = animalForm.kind === "birth" || animalForm.kind === "death";
@@ -1340,6 +1393,80 @@ export function AgroHomePage() {
     showSuccess(editingRainfallRecordId ? "Registro de lluvia actualizado." : "Registro de lluvia guardado.");
   }
 
+  function handleInitialStockSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const quantity = Number(initialStockForm.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      showError("La cantidad inicial debe ser mayor a 0.");
+      return;
+    }
+
+    const entry: AnimalMovementRecord = {
+      id: `anm-${Date.now()}`,
+      date: setupCutoffDate,
+      establishmentId: initialStockForm.establishmentId,
+      fieldId: getFieldIdForEstablishment(initialStockForm.establishmentId),
+      species: initialStockForm.species,
+      categoryCode: initialStockForm.categoryCode,
+      kind: "adjustment",
+      quantity,
+      commissionAmount: 0,
+      taxAmount: 0,
+      notes: `Carga inicial: ${initialStockForm.notes.trim() || "stock base del establecimiento"}`
+    };
+
+    setAnimalMovements((current) => [entry, ...current]);
+    setSelectedEstablishmentId(initialStockForm.establishmentId);
+    resetInitialStockForm();
+    showSuccess("Stock inicial cargado.");
+  }
+
+  function handleInitialReceivableSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const totalAmount = Number(initialReceivableForm.totalAmount);
+    const collectedAmount =
+      initialReceivableForm.collectedAmount.trim() === "" ? 0 : Number(initialReceivableForm.collectedAmount);
+
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      showError("El total a cobrar debe ser mayor a 0.");
+      return;
+    }
+
+    if (!Number.isFinite(collectedAmount) || collectedAmount < 0) {
+      showError("El importe ya cobrado debe ser valido.");
+      return;
+    }
+
+    if (collectedAmount > totalAmount) {
+      showError("Lo ya cobrado no puede ser mayor al total.");
+      return;
+    }
+
+    const entry: AccountingEntry = {
+      id: `acc-${Date.now()}`,
+      date: setupCutoffDate,
+      establishmentId: initialReceivableForm.establishmentId,
+      fieldId: getFieldIdForEstablishment(initialReceivableForm.establishmentId),
+      type: "income",
+      concept: initialReceivableForm.concept,
+      currency: "USD",
+      grossAmount: totalAmount,
+      commissionAmount: 0,
+      taxAmount: 0,
+      netAmount: totalAmount,
+      expectedAmount: totalAmount,
+      collectedAmount,
+      notes: `Saldo inicial: ${initialReceivableForm.notes.trim() || "cuenta vieja cargada manualmente"}`
+    };
+
+    setAccountingEntries((current) => [entry, ...current]);
+    setSelectedEstablishmentId(initialReceivableForm.establishmentId);
+    resetInitialReceivableForm();
+    showSuccess("Saldo inicial a cobrar cargado.");
+  }
+
   function handleExchangeRateSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1591,7 +1718,23 @@ export function AgroHomePage() {
           />
         ) : null}
 
-                {activeView === "animals" ? (
+        {activeView === "setup" ? (
+          <AgroSetupSection
+            setupCutoffDate={setupCutoffDate}
+            initialStockForm={initialStockForm}
+            initialReceivableForm={initialReceivableForm}
+            setupSummary={setupSummary}
+            setSetupCutoffDate={setSetupCutoffDate}
+            setInitialStockForm={setInitialStockForm}
+            setInitialReceivableForm={setInitialReceivableForm}
+            resetInitialStockForm={resetInitialStockForm}
+            resetInitialReceivableForm={resetInitialReceivableForm}
+            onSubmitInitialStock={handleInitialStockSubmit}
+            onSubmitInitialReceivable={handleInitialReceivableSubmit}
+          />
+        ) : null}
+
+        {activeView === "animals" ? (
           <AgroAnimalsSection
             animalFieldRefs={animalFieldRefs}
             animalForm={animalForm}

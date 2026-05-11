@@ -21,6 +21,12 @@ export function AgroOverviewSection({
   latestAccountingEntries,
   latestAnimalMovements
 }: AgroOverviewSectionProps) {
+  function getMovementDirection(movement: AnimalMovementRecord) {
+    return movement.kind === "adjustment" && movement.notes.startsWith("Carga inicial:")
+      ? "entry"
+      : deriveMovementDirection(movement.kind);
+  }
+
   return (
     <section className="content-grid">
       <article className="panel wide">
@@ -73,8 +79,8 @@ export function AgroOverviewSection({
                     : ""}
                 </span>
               </div>
-              <strong className={deriveMovementDirection(movement.kind) === "entry" ? "tone-positive" : "tone-negative"}>
-                {deriveMovementDirection(movement.kind) === "entry" ? "+" : "-"}
+              <strong className={getMovementDirection(movement) === "entry" ? "tone-positive" : "tone-negative"}>
+                {getMovementDirection(movement) === "entry" ? "+" : "-"}
                 {movement.quantity}
               </strong>
             </div>

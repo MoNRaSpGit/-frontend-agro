@@ -15,6 +15,12 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     persistence: "local"
   },
   {
+    key: "setup",
+    label: "Carga inicial",
+    description: "Base para cargar stock y saldos viejos sin rehacer todo",
+    persistence: "local"
+  },
+  {
     key: "animals",
     label: "Animales",
     description: "Entradas, salidas y control de existencias",
