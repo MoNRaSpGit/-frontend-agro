@@ -61,7 +61,7 @@ export function AppUpdateNotice() {
 
   return (
     <aside role="status" aria-live="polite" style={noticeStyle}>
-      <strong>{isUpdating ? "Actualizando..." : "Hay una version nueva disponible."}</strong>
+      <strong>{isUpdating ? "Actualizando..." : "Hay una version nueva disponible"}</strong>
       {!isUpdating ? (
         <button type="button" onClick={handleUpdate} style={buttonStyle}>
           Actualizar
