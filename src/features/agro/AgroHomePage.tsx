@@ -457,6 +457,23 @@ export function AgroHomePage() {
     }
 
     for (const movement of animalMovements) {
+      const key = `${movement.fieldId}:${movement.species}:${movement.categoryCode}`;
+      const signedQuantity = getMovementDirection(movement) === "entry" ? movement.quantity : movement.quantity * -1;
+      balanceMap.set(key, (balanceMap.get(key) ?? 0) + signedQuantity);
+    }
+
+    return balanceMap;
+  }, [animalMovements]);
+
+  const summaryStockBalanceMap = useMemo(() => {
+    const balanceMap = new Map<string, number>();
+
+    for (const item of initialStock) {
+      const key = `${item.fieldId}:${item.species}:${item.categoryCode}`;
+      balanceMap.set(key, (balanceMap.get(key) ?? 0) + item.quantity);
+    }
+
+    for (const movement of animalMovements) {
       if (!isDateWithinStockCutoff(movement.date, selectedYear, selectedMonth)) {
         continue;
       }
@@ -520,14 +537,6 @@ export function AgroHomePage() {
           return false;
         }
 
-        if (selectedYear !== "all" && !movement.date.startsWith(selectedYear)) {
-          return false;
-        }
-
-        if (selectedMonth !== "all" && movement.date.slice(5, 7) !== selectedMonth) {
-          return false;
-        }
-
         if (!animalSearchTerm.trim()) {
           return true;
         }
@@ -549,7 +558,7 @@ export function AgroHomePage() {
         return searchBase.includes(animalSearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [animalMovements, animalSearchTerm, selectedEstablishmentId, selectedMonth, selectedYear]);
+  }, [animalMovements, animalSearchTerm, selectedEstablishmentId]);
 
   useEffect(() => {
     function syncAnimalScrollbarMetrics() {
@@ -620,14 +629,6 @@ export function AgroHomePage() {
           return false;
         }
 
-        if (selectedYear !== "all" && !entry.date.startsWith(selectedYear)) {
-          return false;
-        }
-
-        if (selectedMonth !== "all" && entry.date.slice(5, 7) !== selectedMonth) {
-          return false;
-        }
-
         if (!accountingSearchTerm.trim()) {
           return true;
         }
@@ -644,7 +645,7 @@ export function AgroHomePage() {
         return searchBase.includes(accountingSearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, accountingSearchTerm, selectedEstablishmentId, selectedMonth, selectedYear]);
+  }, [accountingEntries, accountingSearchTerm, selectedEstablishmentId]);
 
   const accountingLedgerWithConversions = useMemo(() => {
     return accountingLedgerRows.map((entry) => {
@@ -708,7 +709,7 @@ export function AgroHomePage() {
 
   const summaryByField = useMemo(() => {
     return visibleFields.map((field) => {
-      const stockRows = Array.from(stockBalanceMap.entries())
+      const stockRows = Array.from(summaryStockBalanceMap.entries())
         .filter(([key]) => key.startsWith(`${field.id}:`))
         .map(([key, quantity]) => {
           const [, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
@@ -834,7 +835,16 @@ export function AgroHomePage() {
           .sort((left, right) => right.date.localeCompare(left.date))[0]?.date
       };
     });
-  }, [accountingEntries, animalMovements, exchangeRateByMonth, rainfallRecords, selectedMonth, selectedYear, stockBalanceMap, visibleFields]);
+  }, [
+    accountingEntries,
+    animalMovements,
+    exchangeRateByMonth,
+    rainfallRecords,
+    selectedMonth,
+    selectedYear,
+    summaryStockBalanceMap,
+    visibleFields
+  ]);
 
   const periodSummary = useMemo(() => {
     const expenseUsd = accountingEntries
@@ -1008,11 +1018,7 @@ export function AgroHomePage() {
             return false;
           }
 
-          if (selectedYear !== "all" && !record.date.startsWith(selectedYear)) {
-            return false;
-          }
-
-          if (selectedMonth !== "all" && record.date.slice(5, 7) !== selectedMonth) {
+          if (rainfallForm.date && record.date !== rainfallForm.date) {
             return false;
           }
 
@@ -1029,7 +1035,7 @@ export function AgroHomePage() {
         }
       )
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [rainfallRecords, rainfallSearchTerm, selectedFieldIds, selectedMonth, selectedYear]);
+  }, [rainfallForm.date, rainfallRecords, rainfallSearchTerm, selectedFieldIds]);
 
   const sanitaryRows = useMemo(() => {
     return [...sanitaryRecords]
@@ -1038,11 +1044,7 @@ export function AgroHomePage() {
           return false;
         }
 
-        if (selectedYear !== "all" && !record.date.startsWith(selectedYear)) {
-          return false;
-        }
-
-        if (selectedMonth !== "all" && record.date.slice(5, 7) !== selectedMonth) {
+        if (sanitaryForm.date && record.date !== sanitaryForm.date) {
           return false;
         }
 
@@ -1058,7 +1060,7 @@ export function AgroHomePage() {
         return searchBase.includes(sanitarySearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [sanitaryRecords, sanitarySearchTerm, selectedFieldIds, selectedMonth, selectedYear]);
+  }, [sanitaryForm.date, sanitaryRecords, sanitarySearchTerm, selectedFieldIds]);
 
   const visibleExchangeRates = useMemo(() => {
     return [...monthlyExchangeRates].sort((left, right) => right.yearMonth.localeCompare(left.yearMonth));

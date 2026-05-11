@@ -45,7 +45,7 @@ export function AgroToolbar({
         </select>
       </label>
       <label className="period-picker">
-        <span>Ano</span>
+        <span>Año</span>
         <select value={selectedYear} onChange={(event) => onYearChange(event.target.value)}>
           <option value="all">Todos</option>
           {availableYears.map((year) => (
