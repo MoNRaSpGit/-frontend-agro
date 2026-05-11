@@ -172,9 +172,9 @@ export function AgroHomePage() {
   const animalFieldRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({});
   const syncingAnimalScrollRef = useRef<"table" | "bottom-bar" | null>(null);
   const [activeView, setActiveView] = useState<AgroView | null>(null);
-  const [establishments, setEstablishments] = useState<Establishment[]>(initialEstablishments);
-  const [fields, setFields] = useState<FieldUnit[]>(initialFields);
-  const [selectedEstablishmentId, setSelectedEstablishmentId] = useState(initialEstablishments[0]?.id ?? "");
+  const [establishments, setEstablishments] = useState<Establishment[]>([]);
+  const [fields, setFields] = useState<FieldUnit[]>([]);
+  const [selectedEstablishmentId, setSelectedEstablishmentId] = useState("");
   const [selectedYear, setSelectedYear] = useState(today.slice(0, 4));
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [animalSearchTerm, setAnimalSearchTerm] = useState("");
@@ -205,8 +205,8 @@ export function AgroHomePage() {
 
   const [animalForm, setAnimalForm] = useState({
     date: today,
-    establishmentId: initialEstablishments[0]?.id ?? "",
-    fieldId: getFieldIdForEstablishmentFrom(initialFields, initialEstablishments[0]?.id ?? ""),
+    establishmentId: "",
+    fieldId: "",
     species: "vacunos" as AgroSpecies,
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     kind: "purchase" as AnimalMovementKind,
@@ -224,8 +224,8 @@ export function AgroHomePage() {
 
   const [accountingForm, setAccountingForm] = useState({
     date: today,
-    establishmentId: initialEstablishments[0]?.id ?? "",
-    fieldId: getFieldIdForEstablishmentFrom(initialFields, initialEstablishments[0]?.id ?? ""),
+    establishmentId: "",
+    fieldId: "",
     type: "income" as AccountingEntryType,
     concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
     currency: "USD" as MoneyCurrency,
@@ -238,15 +238,15 @@ export function AgroHomePage() {
 
   const [rainfallForm, setRainfallForm] = useState({
     date: today,
-    establishmentId: initialEstablishments[0]?.id ?? "",
-    fieldId: getFieldIdForEstablishmentFrom(initialFields, initialEstablishments[0]?.id ?? ""),
+    establishmentId: "",
+    fieldId: "",
     millimeters: "",
     notes: ""
   });
   const [sanitaryForm, setSanitaryForm] = useState({
     date: today,
-    establishmentId: initialEstablishments[0]?.id ?? "",
-    fieldId: getFieldIdForEstablishmentFrom(initialFields, initialEstablishments[0]?.id ?? ""),
+    establishmentId: "",
+    fieldId: "",
     quantity: "",
     treatment: "",
     notes: ""
@@ -257,7 +257,7 @@ export function AgroHomePage() {
     averageRate: ""
   });
   const [setupCutoffDate, setSetupCutoffDate] = useState(today);
-  const [setupEstablishmentId, setSetupEstablishmentId] = useState(initialEstablishments[0]?.id ?? "");
+  const [setupEstablishmentId, setSetupEstablishmentId] = useState("");
   const [setupSpecies, setSetupSpecies] = useState<AgroSpecies>("vacunos");
   const [newEstablishmentForm, setNewEstablishmentForm] = useState({
     name: ""
@@ -1250,6 +1250,13 @@ export function AgroHomePage() {
         }
 
         const message = error instanceof Error ? error.message : "No se pudo cargar el workspace de agro.";
+        setEstablishments([]);
+        setFields([]);
+        setAnimalMovements([]);
+        setAccountingEntries([]);
+        setRainfallRecords([]);
+        setSanitaryRecords([]);
+        setMonthlyExchangeRates([]);
         setWorkspaceLoadError(message);
         showError(message);
       } finally {
