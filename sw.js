@@ -1,6 +1,6 @@
 /* global self, caches, fetch, URL */
 
-const CACHE_NAME = "saaspro-agro-v1";
+const CACHE_NAME = "saaspro-agro-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
