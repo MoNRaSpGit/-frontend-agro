@@ -120,30 +120,6 @@ export function AgroSetupSection({
           <section className="subpanel">
             <div className="panel-header">
               <div>
-                <h2>Crear campo</h2>
-                <p>Agrega un establecimiento nuevo para usarlo en todo agro.</p>
-              </div>
-            </div>
-            <div className="form-grid">
-              <label>
-                <span>Nombre</span>
-                <input
-                  type="text"
-                  value={newEstablishmentForm.name}
-                  onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, name: event.target.value }))}
-                />
-              </label>
-              <div className="action-row span-2">
-                <button type="button" className="primary-button" onClick={onAddEstablishment}>
-                  Crear campo
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section className="subpanel">
-            <div className="panel-header">
-              <div>
                 <h2>Stock inicial de animales</h2>
                 <p>Base actual del establecimiento para la especie seleccionada.</p>
               </div>
@@ -228,6 +204,7 @@ export function AgroSetupSection({
             </div>
           </section>
         </div>
+
         <div className="action-row top-gap">
           <button type="button" className="primary-button" onClick={onSubmitInitialLoad}>
             Guardar carga inicial
@@ -243,6 +220,30 @@ export function AgroSetupSection({
             Limpiar
           </button>
         </div>
+
+        <section className="subpanel top-gap">
+          <div className="panel-header">
+            <div>
+              <h2>Crear campo</h2>
+              <p>Agrega un establecimiento nuevo para usarlo en todo agro.</p>
+            </div>
+          </div>
+          <div className="form-grid">
+            <label>
+              <span>Nombre</span>
+              <input
+                type="text"
+                value={newEstablishmentForm.name}
+                onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, name: event.target.value }))}
+              />
+            </label>
+            <div className="action-row span-2">
+              <button type="button" className="primary-button" onClick={onAddEstablishment}>
+                Crear campo
+              </button>
+            </div>
+          </div>
+        </section>
       </article>
     </section>
   );
