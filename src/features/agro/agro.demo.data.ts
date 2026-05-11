@@ -227,7 +227,7 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     totalAmount: 4640,
     currency: "USD",
     linkedAccountingEntryId: "acc-10",
-    notes: "Venta cobrada al contado para cubrir el caso cobrado."
+    notes: "Venta pendiente de cobro en Santa Clara para cubrir el caso pendiente."
   }
 ];
 
@@ -381,9 +381,9 @@ export const initialAccountingEntries: AccountingEntry[] = [
     taxAmount: 46,
     netAmount: 4640,
     expectedAmount: 4640,
-    collectedAmount: 4640,
+    collectedAmount: 0,
     linkedAnimalMovementId: "anm-8",
-    notes: "Venta de vacunos de Santa Clara cobrada al contado."
+    notes: "Venta de vacunos de Santa Clara pendiente de cobro."
   }
 ];
 

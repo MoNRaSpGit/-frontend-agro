@@ -1679,7 +1679,7 @@ export function AgroHomePage() {
                         <strong>{formatMoney(item.incomeUsd, "USD")}</strong>
                       </div>
                       <div className="list-row">
-                        <span>Ingreso pendiente de cobro</span>
+                        <span>Valor pendiente de cobro</span>
                         <strong>{formatMoney(item.pendingIncomeUsd, "USD")}</strong>
                       </div>
                       <div className="list-row">
@@ -1740,7 +1740,7 @@ export function AgroHomePage() {
                   <strong>{formatMoney(periodSummary.incomeUsd, "USD")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Pendiente de cobro</span>
+                  <span>Valor pendiente de cobro</span>
                   <strong>{formatMoney(periodSummary.pendingIncomeUsd, "USD")}</strong>
                 </div>
                 <div className="list-row">
@@ -1782,7 +1782,7 @@ export function AgroHomePage() {
                   <strong>{formatMoney(annualSummary.incomeUsd, "USD")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Pendiente de cobro</span>
+                  <span>Valor pendiente de cobro</span>
                   <strong>{formatMoney(annualSummary.pendingIncomeUsd, "USD")}</strong>
                 </div>
                 <div className="list-row">
