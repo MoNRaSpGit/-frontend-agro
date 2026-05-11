@@ -1,0 +1,26 @@
+{
+  "name": "SaasPro Agro",
+  "short_name": "Agro",
+  "description": "Control del establecimiento, animales, contabilidad, lluvia y resumen.",
+  "start_url": "/-frontend-agro/",
+  "scope": "/-frontend-agro/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#d8cfbe",
+  "theme_color": "#3f5f32",
+  "lang": "es-UY",
+  "icons": [
+    {
+      "src": "/-frontend-agro/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/-frontend-agro/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
