@@ -80,8 +80,16 @@ export interface AccountingEntry {
   commissionAmount: number;
   taxAmount: number;
   netAmount: number;
+  expectedAmount?: number;
+  collectedAmount?: number;
   linkedAnimalMovementId?: string;
   notes: string;
+}
+
+export interface MonthlyExchangeRate {
+  id: string;
+  yearMonth: string;
+  averageRate: number;
 }
 
 export interface RainfallRecord {

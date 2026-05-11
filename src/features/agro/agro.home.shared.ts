@@ -61,6 +61,25 @@ export function formatShortDate(value: string) {
   return `${Number(day)}/${Number(month)}/${year.slice(-2)}`;
 }
 
+export function getYearMonth(value: string) {
+  if (!value || value.length < 7) {
+    return "";
+  }
+
+  return value.slice(0, 7);
+}
+
+export function formatYearMonth(value: string) {
+  const [year, month] = value.split("-");
+  const monthLabel = periodMonthOptions.find((item) => item.value === month)?.label;
+
+  if (!year || !monthLabel) {
+    return value;
+  }
+
+  return `${monthLabel} ${year}`;
+}
+
 export function getNetAmount(
   type: AccountingEntryType,
   grossAmount: number,

@@ -1,6 +1,6 @@
 # Agro - Bitacora
 
-Fecha de actualizacion: 2026-05-08
+Fecha de actualizacion: 2026-05-11
 
 ## Regla de este archivo
 
@@ -17,6 +17,69 @@ Aca si corresponde anotar:
 ## Corte actual
 
 `agro` quedo en un corte activo publicado para esperar devolucion del cliente.
+
+## Ultimo corte funcional
+
+En este corte quedaron resueltos dos puntos funcionales principales pedidos para `Contabilidad` y `Resumen`:
+
+1. `Tipo de cambio promedio mensual`
+
+- se agrego una carga mensual de tipo de cambio promedio
+- el dato se registra por `mes`
+- los `egresos en UYU` del mes ahora pueden convertirse a `USD`
+- en contabilidad ya se muestra:
+  - `egresos USD directos`
+  - `egresos UYU`
+  - `egresos UYU pasados a USD`
+  - `total egresos USD equivalentes`
+
+2. `Resumen` mas lineal
+
+- la vista `Resumen` dejo de priorizar tarjetas tipo globitos
+- se paso a una lectura mas corta, tipo item + valor
+- el cambio aplica a:
+  - alertas
+  - resumen por establecimiento
+  - resumen del periodo
+  - resumen anual
+- en esa misma lectura ya quedo visible la parte de dolarizacion de egresos en pesos
+
+## Aclaracion del corte
+
+- el ajuste visual del reparto de ancho entre `Cargar movimiento de caja` y `Tipo de cambio promedio mensual` fue un retoque de UX aparte
+- lo importante de este corte funcional fue:
+  - `tipo de cambio promedio mensual`
+  - `resumen` mas lineal
+
+## Corte siguiente ya aplicado
+
+Sobre ese corte anterior se agrego una segunda capa funcional en `Contabilidad`:
+
+1. `Cobro pendiente / parcial / cobrado`
+
+- los `ingresos` ahora pueden separar:
+  - `total`
+  - `cobrado`
+  - `pendiente`
+- desde esos datos el sistema deriva estado:
+  - `Pendiente`
+  - `Parcial`
+  - `Cobrado`
+
+2. `Resumen` ajustado a cobros reales
+
+- el `Resumen` ya no toma todos los ingresos como si estuvieran cobrados
+- ahora muestra:
+  - `ingresos cobrados`
+  - `ingresos pendientes de cobro`
+
+## Aclaracion de este corte
+
+- el ajuste final de ancho `35 / 65` entre:
+  - `Cargar movimiento de caja`
+  - `Tipo de cambio promedio mensual`
+
+fue una mejora de UX del mismo tramo, pero el cambio funcional central fue la separacion entre `cobrado` y `pendiente`
 
 ## Lo que quedo alineado
 
@@ -37,20 +100,22 @@ Aca si corresponde anotar:
 
 ## Validacion ejecutada
 
+- `lint`: OK
 - `typecheck`: OK
+- `test`: OK
 - `test:smoke`: OK
 - `test:functional`: OK
 - `build`: OK
-- `push`: hecho en el corte previo publicado
-- `deploy`: hecho en el corte previo publicado
+- `push`: pendiente de este corte
+- `deploy`: pendiente de este corte
 
 ## Donde quedamos
 
-El siguiente paso no es meter funcionalidad grande.
+El siguiente paso ya no es revisar estos dos puntos.
 
-Primero conviene:
+Lo que queda por seguir bajando ahora es:
 
-1. esperar respuesta del cliente
-2. registrar feedback fino de `Animales`, `Contabilidad`, `Lluvia` y `Resumen`
-3. ajustar detalles menores
-4. decidir que parte del backend de `agro` se endurece primero
+1. decidir si la logica de `cobro pendiente` tambien debe aparecer desde `Animales`
+2. seguir afinando lenguaje y lectura con cliente
+3. revisar si conviene sumar filtros especificos para `Pendiente / Parcial / Cobrado`
+4. seguir endureciendo documentacion funcional del modulo

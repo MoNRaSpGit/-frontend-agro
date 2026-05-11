@@ -4,6 +4,7 @@ import {
   CategoryDefinition,
   Establishment,
   FieldUnit,
+  MonthlyExchangeRate,
   RainfallRecord,
   StockSnapshot
 } from "./agro.types";
@@ -350,4 +351,12 @@ export const initialRainfallRecords: RainfallRecord[] = [
   { id: "rain-2", date: "2026-05-03", fieldId: "field-est-1", millimeters: 12, notes: "Aporte corto en Santa Clara." },
   { id: "rain-3", date: "2026-05-04", fieldId: "field-est-2", millimeters: 25, notes: "Buen evento para verdeos en El Ombu." },
   { id: "rain-4", date: "2026-05-06", fieldId: "field-est-2", millimeters: 9, notes: "Lluvia liviana en El Ombu." }
+];
+
+export const initialMonthlyExchangeRates: MonthlyExchangeRate[] = [
+  {
+    id: "fx-2026-05",
+    yearMonth: "2026-05",
+    averageRate: 40.5
+  }
 ];

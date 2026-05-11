@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { expenseConceptLabels, formatMoney, formatShortDate, getNetAmount, incomeConceptLabels } from "./agro.home.shared";
+import { expenseConceptLabels, formatMoney, formatShortDate, formatYearMonth, getNetAmount } from "./agro.home.shared";
 import { currencyLabels, establishments, fields, getFieldIdForEstablishment } from "./agro.demo.data";
-import { AccountingEntry, AccountingEntryType, ExpenseConcept, IncomeConcept, MoneyCurrency } from "./agro.types";
+import { AccountingEntry, AccountingEntryType, ExpenseConcept, IncomeConcept, MonthlyExchangeRate, MoneyCurrency } from "./agro.types";
 
 interface AgroAccountingSectionProps {
   accountingFormPanelRef: React.RefObject<HTMLElement | null>;
@@ -15,14 +15,46 @@ interface AgroAccountingSectionProps {
     grossAmount: string;
     commissionAmount: string;
     taxAmount: string;
+    collectedAmount: string;
     notes: string;
   };
+  exchangeRateForm: {
+    yearMonth: string;
+    averageRate: string;
+  };
   accountingLedgerRows: AccountingEntry[];
+  accountingLedgerWithConversions: Array<
+    AccountingEntry & {
+      expectedAmount: number;
+      collectedAmount: number;
+      pendingAmount: number;
+      collectionStatus: string | null;
+      exchangeRateAverage: number | null;
+      usdEquivalent: number | null;
+    }
+  >;
   accountingSearchTerm: string;
   editingAccountingEntryId: string | null;
+  editingExchangeRateId: string | null;
+  monthlyExchangeRates: MonthlyExchangeRate[];
   projectedNet: number;
+  accountingCollectionSummary: {
+    incomeUsd: number;
+    pendingIncomeUsd: number;
+    expenseUsdDirect: number;
+    expenseUyu: number;
+    expenseUyuDollarized: number;
+    totalExpenseUsdEquivalent: number;
+  };
   requestDeleteAccountingEntry: (entryId: string) => void;
+  resetExchangeRateForm: () => void;
   resetAccountingForm: () => void;
+  setExchangeRateForm: React.Dispatch<
+    React.SetStateAction<{
+      yearMonth: string;
+      averageRate: string;
+    }>
+  >;
   setAccountingForm: React.Dispatch<
     React.SetStateAction<{
       date: string;
@@ -34,27 +66,41 @@ interface AgroAccountingSectionProps {
       grossAmount: string;
       commissionAmount: string;
       taxAmount: string;
+      collectedAmount: string;
       notes: string;
     }>
   >;
   setAccountingSearchTerm: (value: string) => void;
   onEditEntry: (entryId: string) => void;
+  onEditExchangeRate: (rateId: string) => void;
+  onDeleteExchangeRate: (rateId: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSubmitExchangeRate: (event: React.FormEvent<HTMLFormElement>) => void;
 }
 
 export function AgroAccountingSection({
   accountingFormPanelRef,
   accountingForm,
+  exchangeRateForm,
   accountingLedgerRows,
+  accountingLedgerWithConversions,
   accountingSearchTerm,
   editingAccountingEntryId,
+  editingExchangeRateId,
+  monthlyExchangeRates,
   projectedNet,
+  accountingCollectionSummary,
   requestDeleteAccountingEntry,
+  resetExchangeRateForm,
   resetAccountingForm,
+  setExchangeRateForm,
   setAccountingForm,
   setAccountingSearchTerm,
   onEditEntry,
-  onSubmit
+  onEditExchangeRate,
+  onDeleteExchangeRate,
+  onSubmit,
+  onSubmitExchangeRate
 }: AgroAccountingSectionProps) {
   const accountingTableWrapRef = useRef<HTMLDivElement | null>(null);
   const accountingTableRef = useRef<HTMLTableElement | null>(null);
@@ -126,8 +172,8 @@ export function AgroAccountingSection({
   }, [accountingLedgerRows]);
 
   return (
-    <section className="content-grid">
-      <article ref={accountingFormPanelRef} className="panel">
+    <section className="content-grid accounting-top-grid">
+      <article ref={accountingFormPanelRef} className="panel accounting-split-panel accounting-form-panel">
         <div className="panel-header">
           <div>
             <h2>Cargar movimiento de caja</h2>
@@ -193,7 +239,12 @@ export function AgroAccountingSection({
               }
             >
               {accountingForm.type === "income"
-                ? Object.entries(incomeConceptLabels).map(([value, label]) => (
+                ? Object.entries({
+                    venta_vacunos: "Venta de vacunos",
+                    venta_ovinos: "Venta de ovinos",
+                    venta_lana: "Venta de lana",
+                    venta_equinos: "Venta de equinos"
+                  }).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
@@ -253,6 +304,18 @@ export function AgroAccountingSection({
               onChange={(event) => setAccountingForm((current) => ({ ...current, taxAmount: event.target.value }))}
             />
           </label>
+          {accountingForm.type === "income" ? (
+            <label>
+              <span>Cobrado</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={accountingForm.collectedAmount}
+                onChange={(event) => setAccountingForm((current) => ({ ...current, collectedAmount: event.target.value }))}
+              />
+            </label>
+          ) : null}
           <label className="span-2">
             <span>Observaciones</span>
             <textarea
@@ -274,6 +337,11 @@ export function AgroAccountingSection({
                 accountingForm.currency
               )}
             </strong>
+            {accountingForm.type === "income" ? (
+              <small>
+                Pendiente {formatMoney(Math.max(0, (Number(accountingForm.grossAmount) || 0) - (Number(accountingForm.commissionAmount) || 0) - (Number(accountingForm.taxAmount) || 0) - (Number(accountingForm.collectedAmount) || 0)), "USD")}
+              </small>
+            ) : null}
           </div>
           <div className="action-row span-2">
             <button type="submit" className="primary-button">
@@ -288,6 +356,78 @@ export function AgroAccountingSection({
         </form>
       </article>
 
+      <article className="panel accounting-split-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Tipo de cambio promedio mensual</h2>
+            <p>Carga el promedio del mes para dolarizar los egresos en pesos.</p>
+          </div>
+        </div>
+        <form className="form-grid" onSubmit={onSubmitExchangeRate}>
+          <label>
+            <span>Mes</span>
+            <input
+              type="month"
+              value={exchangeRateForm.yearMonth}
+              onChange={(event) => setExchangeRateForm((current) => ({ ...current, yearMonth: event.target.value }))}
+            />
+          </label>
+          <label>
+            <span>TC promedio</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={exchangeRateForm.averageRate}
+              onChange={(event) => setExchangeRateForm((current) => ({ ...current, averageRate: event.target.value }))}
+            />
+          </label>
+          <div className="projection-card span-2 compact-card">
+            <span>Egresos UYU pasados a USD</span>
+            <strong>{formatMoney(accountingCollectionSummary.expenseUyuDollarized, "USD")}</strong>
+          </div>
+          <div className="action-row span-2">
+            <button type="submit" className="primary-button">
+              {editingExchangeRateId ? "Guardar TC" : "Agregar TC"}
+            </button>
+            {editingExchangeRateId ? (
+              <button type="button" className="ghost-button" onClick={resetExchangeRateForm}>
+                Cancelar edicion
+              </button>
+            ) : null}
+          </div>
+        </form>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Mes</th>
+                <th>TC promedio</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monthlyExchangeRates.map((item) => (
+                <tr key={item.id}>
+                  <td>{formatYearMonth(item.yearMonth)}</td>
+                  <td>{item.averageRate.toFixed(2)}</td>
+                  <td>
+                    <div className="table-actions">
+                      <button type="button" className="ghost-button" onClick={() => onEditExchangeRate(item.id)}>
+                        Editar
+                      </button>
+                      <button type="button" className="ghost-button danger" onClick={() => onDeleteExchangeRate(item.id)}>
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
       <article className="panel wide">
         <div className="panel-header">
           <div>
@@ -297,6 +437,11 @@ export function AgroAccountingSection({
         </div>
         <div className="inline-metrics">
           <span className="data-badge accent">Neto visible {formatMoney(projectedNet, accountingForm.currency)}</span>
+          <span className="data-badge">Ingresos cobrados {formatMoney(accountingCollectionSummary.incomeUsd, "USD")}</span>
+          <span className="data-badge warning">Pendiente de cobro {formatMoney(accountingCollectionSummary.pendingIncomeUsd, "USD")}</span>
+          <span className="data-badge">Egresos USD {formatMoney(accountingCollectionSummary.expenseUsdDirect, "USD")}</span>
+          <span className="data-badge">UYU a USD {formatMoney(accountingCollectionSummary.expenseUyuDollarized, "USD")}</span>
+          <span className="data-badge accent">Total egresos USD eq. {formatMoney(accountingCollectionSummary.totalExpenseUsdEquivalent, "USD")}</span>
         </div>
         <label className="table-search">
           <span>Buscar en contabilidad</span>
@@ -319,13 +464,17 @@ export function AgroAccountingSection({
                 <th>Bruto</th>
                 <th>Comision</th>
                 <th>IVA</th>
-                <th>Neto</th>
+                <th>Total</th>
+                <th>Cobrado</th>
+                <th>Pendiente</th>
+                <th>Estado</th>
+                <th>UYU a USD</th>
                 <th>Relacionado</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {accountingLedgerRows.map((entry) => {
+              {accountingLedgerWithConversions.map((entry) => {
                 const field = fields.find((item) => item.id === entry.fieldId);
                 return (
                   <tr key={entry.id}>
@@ -334,7 +483,12 @@ export function AgroAccountingSection({
                     <td>{entry.type === "income" ? "Ingreso" : "Egreso"}</td>
                     <td>
                       {entry.type === "income"
-                        ? incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels]
+                        ? {
+                            venta_vacunos: "Venta de vacunos",
+                            venta_ovinos: "Venta de ovinos",
+                            venta_lana: "Venta de lana",
+                            venta_equinos: "Venta de equinos"
+                          }[entry.concept as IncomeConcept]
                         : expenseConceptLabels[entry.concept as keyof typeof expenseConceptLabels]}
                     </td>
                     <td>{entry.currency}</td>
@@ -342,6 +496,10 @@ export function AgroAccountingSection({
                     <td>{formatMoney(entry.commissionAmount, entry.currency)}</td>
                     <td>{formatMoney(entry.taxAmount, entry.currency)}</td>
                     <td>{formatMoney(entry.netAmount, entry.currency)}</td>
+                    <td>{entry.type === "income" ? formatMoney(entry.collectedAmount, entry.currency) : "-"}</td>
+                    <td>{entry.type === "income" ? formatMoney(entry.pendingAmount, entry.currency) : "-"}</td>
+                    <td>{entry.collectionStatus ?? "-"}</td>
+                    <td>{entry.usdEquivalent !== null ? formatMoney(entry.usdEquivalent, "USD") : "-"}</td>
                     <td>{entry.linkedAnimalMovementId ? "Si" : "No"}</td>
                     <td>
                       <div className="table-actions">

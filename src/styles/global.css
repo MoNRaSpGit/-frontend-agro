@@ -340,6 +340,18 @@ button {
   grid-column: 1 / -1;
 }
 
+.accounting-split-panel {
+  min-width: 0;
+}
+
+.accounting-top-grid {
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+}
+
+.accounting-form-panel .form-grid {
+  grid-template-columns: 1fr;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
