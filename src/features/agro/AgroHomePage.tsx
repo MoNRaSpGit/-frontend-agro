@@ -227,16 +227,14 @@ export function AgroHomePage() {
     averageRate: ""
   });
   const [setupCutoffDate, setSetupCutoffDate] = useState(today);
+  const [setupEstablishmentId, setSetupEstablishmentId] = useState(establishments[0]?.id ?? "");
+  const [setupSpecies, setSetupSpecies] = useState<AgroSpecies>("vacunos");
   const [initialStockForm, setInitialStockForm] = useState({
-    establishmentId: establishments[0]?.id ?? "",
-    species: "vacunos" as AgroSpecies,
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     quantity: "",
     notes: ""
   });
   const [initialReceivableForm, setInitialReceivableForm] = useState({
-    establishmentId: establishments[0]?.id ?? "",
-    concept: "venta_vacunos" as IncomeConcept,
     totalAmount: "",
     collectedAmount: "",
     notes: ""
@@ -368,9 +366,7 @@ export function AgroHomePage() {
 
   function resetInitialStockForm() {
     setInitialStockForm({
-      establishmentId: establishments[0]?.id ?? "",
-      species: "vacunos" as AgroSpecies,
-      categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
+      categoryCode: categoryCatalog[setupSpecies][0]?.code ?? "",
       quantity: "",
       notes: ""
     });
@@ -378,8 +374,6 @@ export function AgroHomePage() {
 
   function resetInitialReceivableForm() {
     setInitialReceivableForm({
-      establishmentId: establishments[0]?.id ?? "",
-      concept: "venta_vacunos" as IncomeConcept,
       totalAmount: "",
       collectedAmount: "",
       notes: ""
@@ -1138,6 +1132,15 @@ export function AgroHomePage() {
     writeJsonStorage(monthlyExchangeRatesStorageKey, monthlyExchangeRates);
   }, [monthlyExchangeRates]);
 
+  useEffect(() => {
+    setInitialStockForm((current) => ({
+      ...current,
+      categoryCode: categoryCatalog[setupSpecies].some((item) => item.code === current.categoryCode)
+        ? current.categoryCode
+        : categoryCatalog[setupSpecies][0]?.code ?? ""
+    }));
+  }, [setupSpecies]);
+
   function showSuccess(message: string) {
     toast.success(message, { autoClose: 2400 });
   }
@@ -1405,9 +1408,9 @@ export function AgroHomePage() {
     const entry: AnimalMovementRecord = {
       id: `anm-${Date.now()}`,
       date: setupCutoffDate,
-      establishmentId: initialStockForm.establishmentId,
-      fieldId: getFieldIdForEstablishment(initialStockForm.establishmentId),
-      species: initialStockForm.species,
+      establishmentId: setupEstablishmentId,
+      fieldId: getFieldIdForEstablishment(setupEstablishmentId),
+      species: setupSpecies,
       categoryCode: initialStockForm.categoryCode,
       kind: "adjustment",
       quantity,
@@ -1417,7 +1420,7 @@ export function AgroHomePage() {
     };
 
     setAnimalMovements((current) => [entry, ...current]);
-    setSelectedEstablishmentId(initialStockForm.establishmentId);
+    setSelectedEstablishmentId(setupEstablishmentId);
     resetInitialStockForm();
     showSuccess("Stock inicial cargado.");
   }
@@ -1447,10 +1450,10 @@ export function AgroHomePage() {
     const entry: AccountingEntry = {
       id: `acc-${Date.now()}`,
       date: setupCutoffDate,
-      establishmentId: initialReceivableForm.establishmentId,
-      fieldId: getFieldIdForEstablishment(initialReceivableForm.establishmentId),
+      establishmentId: setupEstablishmentId,
+      fieldId: getFieldIdForEstablishment(setupEstablishmentId),
       type: "income",
-      concept: initialReceivableForm.concept,
+      concept: getIncomeConceptForSpecies(setupSpecies),
       currency: "USD",
       grossAmount: totalAmount,
       commissionAmount: 0,
@@ -1462,7 +1465,7 @@ export function AgroHomePage() {
     };
 
     setAccountingEntries((current) => [entry, ...current]);
-    setSelectedEstablishmentId(initialReceivableForm.establishmentId);
+    setSelectedEstablishmentId(setupEstablishmentId);
     resetInitialReceivableForm();
     showSuccess("Saldo inicial a cobrar cargado.");
   }
@@ -1721,10 +1724,14 @@ export function AgroHomePage() {
         {activeView === "setup" ? (
           <AgroSetupSection
             setupCutoffDate={setupCutoffDate}
+            setupEstablishmentId={setupEstablishmentId}
+            setupSpecies={setupSpecies}
             initialStockForm={initialStockForm}
             initialReceivableForm={initialReceivableForm}
             setupSummary={setupSummary}
             setSetupCutoffDate={setSetupCutoffDate}
+            setSetupEstablishmentId={setSetupEstablishmentId}
+            setSetupSpecies={setSetupSpecies}
             setInitialStockForm={setInitialStockForm}
             setInitialReceivableForm={setInitialReceivableForm}
             resetInitialStockForm={resetInitialStockForm}
