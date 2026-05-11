@@ -153,6 +153,20 @@ function getMovementDirection(movement: AnimalMovementRecord) {
   return isInitialStockLoad(movement) ? "entry" : deriveMovementDirection(movement.kind);
 }
 
+function isDateWithinStockCutoff(date: string, selectedYear: string, selectedMonth: string) {
+  if (selectedYear === "all") {
+    return true;
+  }
+
+  const yearMonth = date.slice(0, 7);
+
+  if (selectedMonth === "all") {
+    return date.slice(0, 4) <= selectedYear;
+  }
+
+  return yearMonth <= `${selectedYear}-${selectedMonth}`;
+}
+
 export function AgroHomePage() {
   const today = getTodayDate();
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
@@ -443,13 +457,17 @@ export function AgroHomePage() {
     }
 
     for (const movement of animalMovements) {
+      if (!isDateWithinStockCutoff(movement.date, selectedYear, selectedMonth)) {
+        continue;
+      }
+
       const key = `${movement.fieldId}:${movement.species}:${movement.categoryCode}`;
       const signedQuantity = getMovementDirection(movement) === "entry" ? movement.quantity : movement.quantity * -1;
       balanceMap.set(key, (balanceMap.get(key) ?? 0) + signedQuantity);
     }
 
     return balanceMap;
-  }, [animalMovements]);
+  }, [animalMovements, selectedMonth, selectedYear]);
 
   const stockBySpecies = useMemo(() => {
     const speciesTotals: Record<AgroSpecies, number> = {
