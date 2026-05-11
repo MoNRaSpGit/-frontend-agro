@@ -81,6 +81,37 @@ Sobre ese corte anterior se agrego una segunda capa funcional en `Contabilidad`:
 
 fue una mejora de UX del mismo tramo, pero el cambio funcional central fue la separacion entre `cobrado` y `pendiente`
 
+## Corte siguiente ya aplicado
+
+Sobre ese bloque anterior se termino de bajar la relacion entre `Animales` y `Contabilidad` para ventas:
+
+1. `Venta desde Animales con cobro real`
+
+- una venta cargada desde `Animales` ya no nace obligatoriamente como cobrada
+- ahora permite cargar `cobrado` directamente en el formulario de la venta
+- desde ahi el asiento relacionado en `Contabilidad` nace con:
+  - `total`
+  - `cobrado`
+  - `pendiente`
+- esto deja resuelto el caso de:
+  - vender hoy
+  - cobrar parcial o cobrar a plazo despues
+
+2. `Filtros por estado`
+
+- en `Contabilidad` ya hay filtro por:
+  - `Todos`
+  - `Pendiente`
+  - `Parcial`
+  - `Cobrado`
+- en `Operaciones vinculadas` quedo el mismo criterio de lectura comercial
+
+## Aclaracion de este corte
+
+- estos ultimos cambios fueron mas de operacion y lectura que de layout
+- no se cambio el modelo base de caja
+- se afino la forma de registrar y revisar `cuentas a cobrar` nacidas desde `Animales`
+
 ## Lo que quedo alineado
 
 - `Inicio`, `Animales`, `Contabilidad`, `Lluvia` y `Resumen` como vistas visibles
@@ -111,11 +142,11 @@ fue una mejora de UX del mismo tramo, pero el cambio funcional central fue la se
 
 ## Donde quedamos
 
-El siguiente paso ya no es revisar estos dos puntos.
+El siguiente paso ya no es solo conectar `Animales` con `Contabilidad`.
 
 Lo que queda por seguir bajando ahora es:
 
-1. decidir si la logica de `cobro pendiente` tambien debe aparecer desde `Animales`
-2. seguir afinando lenguaje y lectura con cliente
-3. revisar si conviene sumar filtros especificos para `Pendiente / Parcial / Cobrado`
+1. seguir afinando lenguaje y lectura con cliente
+2. decidir si conviene mostrar mas resumen comercial rapido en `Inicio` o `Resumen`
+3. revisar si hace falta algun filtro adicional por `moneda`, `rubro` o `establecimiento`
 4. seguir endureciendo documentacion funcional del modulo

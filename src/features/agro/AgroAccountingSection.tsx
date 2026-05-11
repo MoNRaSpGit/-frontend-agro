@@ -4,6 +4,7 @@ import { currencyLabels, establishments, fields, getFieldIdForEstablishment } fr
 import { AccountingEntry, AccountingEntryType, ExpenseConcept, IncomeConcept, MonthlyExchangeRate, MoneyCurrency } from "./agro.types";
 
 interface AgroAccountingSectionProps {
+  accountingStatusFilter: "all" | "pending" | "partial" | "collected";
   accountingFormPanelRef: React.RefObject<HTMLElement | null>;
   accountingForm: {
     date: string;
@@ -70,6 +71,7 @@ interface AgroAccountingSectionProps {
       notes: string;
     }>
   >;
+  setAccountingStatusFilter: (value: "all" | "pending" | "partial" | "collected") => void;
   setAccountingSearchTerm: (value: string) => void;
   onEditEntry: (entryId: string) => void;
   onEditExchangeRate: (rateId: string) => void;
@@ -79,6 +81,7 @@ interface AgroAccountingSectionProps {
 }
 
 export function AgroAccountingSection({
+  accountingStatusFilter,
   accountingFormPanelRef,
   accountingForm,
   exchangeRateForm,
@@ -95,6 +98,7 @@ export function AgroAccountingSection({
   resetAccountingForm,
   setExchangeRateForm,
   setAccountingForm,
+  setAccountingStatusFilter,
   setAccountingSearchTerm,
   onEditEntry,
   onEditExchangeRate,
@@ -451,6 +455,20 @@ export function AgroAccountingSection({
             value={accountingSearchTerm}
             onChange={(event) => setAccountingSearchTerm(event.target.value)}
           />
+        </label>
+        <label className="table-search">
+          <span>Estado de cobro</span>
+          <select
+            value={accountingStatusFilter}
+            onChange={(event) =>
+              setAccountingStatusFilter(event.target.value as "all" | "pending" | "partial" | "collected")
+            }
+          >
+            <option value="all">Todos</option>
+            <option value="pending">Pendiente</option>
+            <option value="partial">Parcial</option>
+            <option value="collected">Cobrado</option>
+          </select>
         </label>
         <div ref={accountingTableWrapRef} className="table-wrap">
           <table ref={accountingTableRef}>

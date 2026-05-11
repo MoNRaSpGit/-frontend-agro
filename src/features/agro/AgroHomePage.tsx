@@ -136,6 +136,8 @@ export function AgroHomePage() {
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [animalSearchTerm, setAnimalSearchTerm] = useState("");
   const [accountingSearchTerm, setAccountingSearchTerm] = useState("");
+  const [accountingStatusFilter, setAccountingStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
+  const [linkedOperationsStatusFilter, setLinkedOperationsStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
   const [rainfallSearchTerm, setRainfallSearchTerm] = useState("");
   const [editingAnimalMovementId, setEditingAnimalMovementId] = useState<string | null>(null);
   const [editingAccountingEntryId, setEditingAccountingEntryId] = useState<string | null>(null);
@@ -572,6 +574,28 @@ export function AgroHomePage() {
     });
   }, [accountingLedgerRows, exchangeRateByMonth]);
 
+  const visibleAccountingLedgerWithConversions = useMemo(() => {
+    if (accountingStatusFilter === "all") {
+      return accountingLedgerWithConversions;
+    }
+
+    return accountingLedgerWithConversions.filter((entry) => {
+      if (entry.type !== "income") {
+        return false;
+      }
+
+      if (accountingStatusFilter === "pending") {
+        return entry.collectionStatus === "Pendiente";
+      }
+
+      if (accountingStatusFilter === "partial") {
+        return entry.collectionStatus === "Parcial";
+      }
+
+      return entry.collectionStatus === "Cobrado";
+    });
+  }, [accountingLedgerWithConversions, accountingStatusFilter]);
+
   const selectedFieldIds = useMemo(
     () => fields.filter((field) => field.establishmentId === selectedEstablishmentId).map((field) => field.id),
     [selectedEstablishmentId]
@@ -996,6 +1020,24 @@ export function AgroHomePage() {
       pending: linkedOperationsRows.filter((row) => !row.linked).length
     };
   }, [linkedOperationsRows]);
+
+  const visibleLinkedOperationsRows = useMemo(() => {
+    if (linkedOperationsStatusFilter === "all") {
+      return linkedOperationsRows;
+    }
+
+    return linkedOperationsRows.filter((row) => {
+      if (linkedOperationsStatusFilter === "pending") {
+        return !row.linked || row.collectionStatus === "Pendiente";
+      }
+
+      if (linkedOperationsStatusFilter === "partial") {
+        return row.collectionStatus === "Parcial";
+      }
+
+      return row.collectionStatus === "Cobrado";
+    });
+  }, [linkedOperationsRows, linkedOperationsStatusFilter]);
 
   const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
   const isBirthOrDeathAnimalMovement = animalForm.kind === "birth" || animalForm.kind === "death";
@@ -1565,11 +1607,12 @@ export function AgroHomePage() {
 
         {activeView === "accounting" ? (
           <AgroAccountingSection
+            accountingStatusFilter={accountingStatusFilter}
             accountingFormPanelRef={accountingFormPanelRef}
             accountingForm={accountingForm}
             exchangeRateForm={exchangeRateForm}
-            accountingLedgerRows={accountingLedgerRows}
-            accountingLedgerWithConversions={accountingLedgerWithConversions}
+            accountingLedgerRows={visibleAccountingLedgerWithConversions}
+            accountingLedgerWithConversions={visibleAccountingLedgerWithConversions}
             accountingSearchTerm={accountingSearchTerm}
             editingAccountingEntryId={editingAccountingEntryId}
             editingExchangeRateId={editingExchangeRateId}
@@ -1581,6 +1624,7 @@ export function AgroHomePage() {
             resetAccountingForm={resetAccountingForm}
             setExchangeRateForm={setExchangeRateForm}
             setAccountingForm={setAccountingForm}
+            setAccountingStatusFilter={setAccountingStatusFilter}
             setAccountingSearchTerm={setAccountingSearchTerm}
             onEditEntry={handleEditAccountingEntry}
             onEditExchangeRate={handleEditExchangeRate}
@@ -1818,6 +1862,20 @@ export function AgroHomePage() {
                 <span className="data-badge accent">Relacionadas {linkedOperationsSummary.linked}</span>
                 <span className="data-badge warning">Pendientes {linkedOperationsSummary.pending}</span>
               </div>
+              <label className="table-search">
+                <span>Estado comercial</span>
+                <select
+                  value={linkedOperationsStatusFilter}
+                  onChange={(event) =>
+                    setLinkedOperationsStatusFilter(event.target.value as "all" | "pending" | "partial" | "collected")
+                  }
+                >
+                  <option value="all">Todas</option>
+                  <option value="pending">Pendientes</option>
+                  <option value="partial">Parciales</option>
+                  <option value="collected">Cobradas</option>
+                </select>
+              </label>
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -1834,7 +1892,7 @@ export function AgroHomePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {linkedOperationsRows.map((row) => (
+                    {visibleLinkedOperationsRows.map((row) => (
                       <tr key={row.id}>
                         <td>{row.date}</td>
                         <td>{row.fieldName}</td>
