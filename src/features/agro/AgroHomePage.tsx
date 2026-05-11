@@ -1231,12 +1231,10 @@ export function AgroHomePage() {
           return;
         }
 
-        const nextEstablishments =
-          snapshot.data.establishments && snapshot.data.establishments.length > 0
-            ? snapshot.data.establishments
-            : initialEstablishments;
-        const nextFields =
-          snapshot.data.fields && snapshot.data.fields.length > 0 ? snapshot.data.fields : initialFields;
+        const nextEstablishments = Array.isArray(snapshot.data.establishments)
+          ? snapshot.data.establishments
+          : initialEstablishments;
+        const nextFields = Array.isArray(snapshot.data.fields) ? snapshot.data.fields : initialFields;
 
         setEstablishments(nextEstablishments);
         setFields(nextFields);
