@@ -1,10 +1,11 @@
-import { fields } from "./agro.demo.data";
+import { establishments, fields, getFieldIdForEstablishment } from "./agro.demo.data";
 import { formatShortDate } from "./agro.home.shared";
 
 interface AgroRainfallSectionProps {
   editingRainfallRecordId: string | null;
   rainfallForm: {
     date: string;
+    establishmentId: string;
     fieldId: string;
     millimeters: string;
     notes: string;
@@ -22,13 +23,13 @@ interface AgroRainfallSectionProps {
   setRainfallForm: React.Dispatch<
     React.SetStateAction<{
       date: string;
+      establishmentId: string;
       fieldId: string;
       millimeters: string;
       notes: string;
     }>
   >;
   setRainfallSearchTerm: (value: string) => void;
-  visibleFields: { id: string; name: string }[];
   onEditRainfallRecord: (recordId: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }
@@ -42,7 +43,6 @@ export function AgroRainfallSection({
   requestDeleteRainfallRecord,
   setRainfallForm,
   setRainfallSearchTerm,
-  visibleFields,
   onEditRainfallRecord,
   onSubmit
 }: AgroRainfallSectionProps) {
@@ -51,8 +51,8 @@ export function AgroRainfallSection({
       <article className="panel">
         <div className="panel-header">
           <div>
-            <h2>Cargar lluvia por campo</h2>
-            <p>Carga manual para llevar el registro de lluvias del campo.</p>
+            <h2>Cargar lluvia por establecimiento</h2>
+            <p>Carga manual para llevar el registro de lluvias del establecimiento.</p>
           </div>
         </div>
         <form className="form-grid" onSubmit={onSubmit}>
@@ -65,14 +65,21 @@ export function AgroRainfallSection({
             />
           </label>
           <label>
-            <span>Campo</span>
+            <span>Establecimiento</span>
             <select
-              value={rainfallForm.fieldId}
-              onChange={(event) => setRainfallForm((current) => ({ ...current, fieldId: event.target.value }))}
+              value={rainfallForm.establishmentId}
+              onChange={(event) => {
+                const nextEstablishmentId = event.target.value;
+                setRainfallForm((current) => ({
+                  ...current,
+                  establishmentId: nextEstablishmentId,
+                  fieldId: getFieldIdForEstablishment(nextEstablishmentId)
+                }));
+              }}
             >
-              {visibleFields.map((field) => (
-                <option key={field.id} value={field.id}>
-                  {field.name}
+              {establishments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
                 </option>
               ))}
             </select>
@@ -119,7 +126,7 @@ export function AgroRainfallSection({
           <span>Buscar en lluvias</span>
           <input
             type="search"
-            placeholder="Campo, fecha, observacion o mm..."
+            placeholder="Establecimiento, fecha, observacion o mm..."
             value={rainfallSearchTerm}
             onChange={(event) => setRainfallSearchTerm(event.target.value)}
           />
@@ -129,7 +136,7 @@ export function AgroRainfallSection({
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Campo</th>
+                <th>Establecimiento</th>
                 <th>Milimetros</th>
                 <th>Observaciones</th>
                 <th>Acciones</th>

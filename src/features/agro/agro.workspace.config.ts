@@ -23,19 +23,19 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
   {
     key: "accounting",
     label: "Contabilidad",
-    description: "Caja por moneda, rubro y campo",
+    description: "Caja por moneda, rubro y establecimiento",
     persistence: "local"
   },
   {
     key: "rainfall",
     label: "Lluvia",
-    description: "Carga y bitacora de lluvias por campo",
+    description: "Carga y bitacora de lluvias por establecimiento",
     persistence: "local"
   },
   {
     key: "summary",
     label: "Resumen",
-    description: "Control por campo, categorias y alertas",
+    description: "Control por establecimiento, categorias y alertas",
     persistence: "future"
   }
 ];

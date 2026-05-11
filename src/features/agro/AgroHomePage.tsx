@@ -9,13 +9,14 @@ import { AgroOverviewSection } from "./AgroOverviewSection";
 import { AgroRainfallSection } from "./AgroRainfallSection";
 import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
-import { expenseConceptLabels, formatMoney, formatNumber, formatShortDate, getNetAmount, incomeConceptLabels, today } from "./agro.home.shared";
+import { expenseConceptLabels, formatMoney, getNetAmount, incomeConceptLabels, today } from "./agro.home.shared";
 import { agroWorkspaceSections } from "./agro.workspace.config";
 import {
   categoryCatalog,
-  currencyLabels,
   establishments,
   fields,
+  getEstablishmentIdFromFieldId,
+  getFieldIdForEstablishment,
   initialAccountingEntries,
   initialAnimalMovements,
   initialRainfallRecords,
@@ -39,6 +40,38 @@ import {
 const animalMovementsStorageKey = "saaspro-agro-animal-movements-v1";
 const accountingEntriesStorageKey = "saaspro-agro-accounting-entries-v1";
 const rainfallRecordsStorageKey = "saaspro-agro-rainfall-records-v1";
+
+function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMovementRecord {
+  const establishmentId = movement.establishmentId || getEstablishmentIdFromFieldId(movement.fieldId);
+  const fieldId = getFieldIdForEstablishment(establishmentId);
+
+  return {
+    ...movement,
+    establishmentId,
+    fieldId
+  };
+}
+
+function normalizeAccountingEntry(entry: AccountingEntry): AccountingEntry {
+  const establishmentId = entry.establishmentId || getEstablishmentIdFromFieldId(entry.fieldId);
+  const fieldId = getFieldIdForEstablishment(establishmentId);
+
+  return {
+    ...entry,
+    establishmentId,
+    fieldId
+  };
+}
+
+function normalizeRainfallRecord(record: RainfallRecord): RainfallRecord {
+  const establishmentId = getEstablishmentIdFromFieldId(record.fieldId);
+  const fieldId = getFieldIdForEstablishment(establishmentId);
+
+  return {
+    ...record,
+    fieldId
+  };
+}
 
 export function AgroHomePage() {
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
@@ -68,19 +101,19 @@ export function AgroHomePage() {
     message: string;
   } | null>(null);
   const [animalMovements, setAnimalMovements] = useState<AnimalMovementRecord[]>(() =>
-    readJsonStorage(animalMovementsStorageKey, initialAnimalMovements)
+    readJsonStorage(animalMovementsStorageKey, initialAnimalMovements).map(normalizeAnimalMovementRecord)
   );
   const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>(() =>
-    readJsonStorage(accountingEntriesStorageKey, initialAccountingEntries)
+    readJsonStorage(accountingEntriesStorageKey, initialAccountingEntries).map(normalizeAccountingEntry)
   );
   const [rainfallRecords, setRainfallRecords] = useState<RainfallRecord[]>(() =>
-    readJsonStorage(rainfallRecordsStorageKey, initialRainfallRecords)
+    readJsonStorage(rainfallRecordsStorageKey, initialRainfallRecords).map(normalizeRainfallRecord)
   );
 
   const [animalForm, setAnimalForm] = useState({
     date: today,
     establishmentId: establishments[0]?.id ?? "",
-    fieldId: fields[0]?.id ?? "",
+    fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
     species: "vacunos" as AgroSpecies,
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     kind: "purchase" as AnimalMovementKind,
@@ -98,7 +131,7 @@ export function AgroHomePage() {
   const [accountingForm, setAccountingForm] = useState({
     date: today,
     establishmentId: establishments[0]?.id ?? "",
-    fieldId: fields[0]?.id ?? "",
+    fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
     type: "income" as AccountingEntryType,
     concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
     currency: "USD" as MoneyCurrency,
@@ -110,7 +143,8 @@ export function AgroHomePage() {
 
   const [rainfallForm, setRainfallForm] = useState({
     date: today,
-    fieldId: fields[0]?.id ?? "",
+    establishmentId: establishments[0]?.id ?? "",
+    fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
     millimeters: "",
     notes: ""
   });
@@ -119,7 +153,7 @@ export function AgroHomePage() {
     setAnimalForm({
       date: today,
       establishmentId: establishments[0]?.id ?? "",
-      fieldId: fields[0]?.id ?? "",
+      fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
       species: "vacunos" as AgroSpecies,
       categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
       kind: "purchase" as AnimalMovementKind,
@@ -203,7 +237,7 @@ export function AgroHomePage() {
     setAccountingForm({
       date: today,
       establishmentId: establishments[0]?.id ?? "",
-      fieldId: fields[0]?.id ?? "",
+      fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
       type: "income" as AccountingEntryType,
       concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
       currency: "USD" as MoneyCurrency,
@@ -218,7 +252,8 @@ export function AgroHomePage() {
   function resetRainfallForm() {
     setRainfallForm({
       date: today,
-      fieldId: fields[0]?.id ?? "",
+      establishmentId: establishments[0]?.id ?? "",
+      fieldId: getFieldIdForEstablishment(establishments[0]?.id ?? ""),
       millimeters: "",
       notes: ""
     });
@@ -550,7 +585,7 @@ export function AgroHomePage() {
           .sort((left, right) => right.date.localeCompare(left.date))[0]?.date
       };
     });
-  }, [accountingEntries, animalMovements, rainfallRecords, selectedEstablishmentId, selectedMonth, selectedYear, stockBalanceMap, visibleFields]);
+  }, [accountingEntries, animalMovements, rainfallRecords, selectedMonth, selectedYear, stockBalanceMap, visibleFields]);
 
   const periodSummary = useMemo(() => {
     return {
@@ -663,21 +698,6 @@ export function AgroHomePage() {
       linkedCommercialRows: animalLedgerRows.filter((movement) => Boolean(movement.linkedAccountingEntryId)).length
     };
   }, [animalLedgerRows]);
-
-  const accountingLedgerSummary = useMemo(() => {
-    return {
-      incomeUsd: accountingLedgerRows
-        .filter((entry) => entry.type === "income" && entry.currency === "USD")
-        .reduce((sum, entry) => sum + entry.netAmount, 0),
-      expenseUsd: accountingLedgerRows
-        .filter((entry) => entry.type === "expense" && entry.currency === "USD")
-        .reduce((sum, entry) => sum + entry.netAmount, 0),
-      expenseUyu: accountingLedgerRows
-        .filter((entry) => entry.type === "expense" && entry.currency === "UYU")
-        .reduce((sum, entry) => sum + entry.netAmount, 0),
-      linkedRows: accountingLedgerRows.filter((entry) => Boolean(entry.linkedAnimalMovementId)).length
-    };
-  }, [accountingLedgerRows]);
 
   const rainfallRows = useMemo(() => {
     return [...rainfallRecords]
@@ -879,7 +899,7 @@ export function AgroHomePage() {
       id: nextMovementId,
       date: animalForm.date,
       establishmentId: animalForm.establishmentId,
-      fieldId: animalForm.fieldId,
+      fieldId: getFieldIdForEstablishment(animalForm.establishmentId),
       species: animalForm.species,
       categoryCode: animalForm.categoryCode,
       kind: animalForm.kind,
@@ -907,7 +927,7 @@ export function AgroHomePage() {
         id: nextAccountingId,
         date: animalForm.date,
         establishmentId: animalForm.establishmentId,
-        fieldId: animalForm.fieldId,
+        fieldId: getFieldIdForEstablishment(animalForm.establishmentId),
         type: entryType,
         concept: accountingConcept,
         currency: animalForm.currency,
@@ -965,7 +985,7 @@ export function AgroHomePage() {
       id: editingAccountingEntryId ?? `acc-${Date.now()}`,
       date: accountingForm.date,
       establishmentId: accountingForm.establishmentId,
-      fieldId: accountingForm.fieldId,
+      fieldId: getFieldIdForEstablishment(accountingForm.establishmentId),
       type: accountingForm.type,
       concept: accountingForm.concept,
       currency: accountingForm.currency,
@@ -1005,7 +1025,7 @@ export function AgroHomePage() {
     const rainfallEntry: RainfallRecord = {
       id: editingRainfallRecordId ?? `rain-${Date.now()}`,
       date: rainfallForm.date,
-      fieldId: rainfallForm.fieldId,
+      fieldId: getFieldIdForEstablishment(rainfallForm.establishmentId),
       millimeters,
       notes: rainfallForm.notes.trim()
     };
@@ -1083,6 +1103,7 @@ export function AgroHomePage() {
     setEditingRainfallRecordId(recordId);
     setRainfallForm({
       date: record.date,
+      establishmentId: field?.establishmentId ?? establishments[0]?.id ?? "",
       fieldId: record.fieldId,
       millimeters: `${record.millimeters}`,
       notes: record.notes
@@ -1147,7 +1168,7 @@ export function AgroHomePage() {
       kind: "rainfall",
       id: recordId,
       title: "Eliminar registro de lluvia",
-      message: "Este registro se va a borrar del historial de lluvias del campo."
+      message: "Este registro se va a borrar del historial de lluvias del establecimiento."
     });
   }
 
@@ -1186,7 +1207,7 @@ export function AgroHomePage() {
     <main className="app-shell">
       <ProductShell
         title="Agro"
-        subtitle="Control del campo"
+        subtitle="Control del establecimiento"
         badge=""
         navItems={agroWorkspaceSections}
         activeKey={activeView}
@@ -1257,10 +1278,8 @@ export function AgroHomePage() {
             resetAccountingForm={resetAccountingForm}
             setAccountingForm={setAccountingForm}
             setAccountingSearchTerm={setAccountingSearchTerm}
-            visibleFields={visibleFields}
             onEditEntry={handleEditAccountingEntry}
             onSubmit={handleAccountingSubmit}
-            selectedEstablishmentId={selectedEstablishmentId}
           />
         ) : null}
 
@@ -1274,7 +1293,6 @@ export function AgroHomePage() {
             requestDeleteRainfallRecord={requestDeleteRainfallRecord}
             setRainfallForm={setRainfallForm}
             setRainfallSearchTerm={setRainfallSearchTerm}
-            visibleFields={visibleFields}
             onEditRainfallRecord={handleEditRainfallRecord}
             onSubmit={handleRainfallSubmit}
           />
@@ -1286,7 +1304,7 @@ export function AgroHomePage() {
               <div className="panel-header">
                 <div>
                   <h2>Alertas y pendientes</h2>
-                  <p>Lectura rapida para ver que campos o registros conviene revisar a mano.</p>
+                  <p>Lectura rapida para ver que establecimientos o registros conviene revisar a mano.</p>
                 </div>
               </div>
               <div className="report-summary-grid">
@@ -1295,19 +1313,19 @@ export function AgroHomePage() {
                   <strong>{summaryAlerts.totalAlerts}</strong>
                 </article>
                 <article className="report-summary-card warning-card">
-                  <span>Campos sin lluvia</span>
+                  <span>Establecimientos sin lluvia</span>
                   <strong>{summaryAlerts.fieldsWithoutRain}</strong>
                 </article>
                 <article className="report-summary-card warning-card">
-                  <span>Campos con ajustes</span>
+                  <span>Establecimientos con ajustes</span>
                   <strong>{summaryAlerts.fieldsWithAdjustments}</strong>
                 </article>
                 <article className="report-summary-card warning-card">
-                  <span>Campos con muertes</span>
+                  <span>Establecimientos con muertes</span>
                   <strong>{summaryAlerts.fieldsWithDeaths}</strong>
                 </article>
                 <article className="report-summary-card warning-card">
-                  <span>Campos sin existencias</span>
+                  <span>Establecimientos sin existencias</span>
                   <strong>{summaryAlerts.fieldsWithoutStock}</strong>
                 </article>
               </div>
@@ -1316,8 +1334,8 @@ export function AgroHomePage() {
             <article className="panel wide">
               <div className="panel-header">
                 <div>
-                  <h2>Resumen por campo</h2>
-                  <p>Control de existencias, compras, ventas y caja separado por campo.</p>
+                  <h2>Resumen por establecimiento</h2>
+                  <p>Control de existencias, compras, ventas y caja separado por establecimiento.</p>
                 </div>
               </div>
               <div className="report-stack">
@@ -1439,7 +1457,7 @@ export function AgroHomePage() {
                   <thead>
                     <tr>
                       <th>Fecha</th>
-                      <th>Campo</th>
+                      <th>Establecimiento</th>
                       <th>Operacion</th>
                       <th>Cantidad</th>
                       <th>Monto</th>
@@ -1472,14 +1490,14 @@ export function AgroHomePage() {
               <div className="panel-header">
                 <div>
                   <h2>Control fino por categoria</h2>
-                  <p>Lectura para revisar existencias por campo, especie y categoria dentro del periodo elegido.</p>
+                  <p>Lectura para revisar existencias por establecimiento, especie y categoria dentro del periodo elegido.</p>
                 </div>
               </div>
               <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>Campo</th>
+                      <th>Establecimiento</th>
                       <th>Especie</th>
                       <th>Categoria</th>
                       <th>Total actual</th>

@@ -75,7 +75,7 @@ export function AgroMetricsGrid({ accountingTotals, stockBySpecies }: AgroMetric
       <article className="metric-card">
         <span>Total vacunos</span>
         <strong>{stockBySpecies.vacunos}</strong>
-        <small>Existencias actuales por categoria y por campo.</small>
+        <small>Existencias actuales por categoria y por establecimiento.</small>
       </article>
       <article className="metric-card">
         <span>Total ovinos</span>
@@ -92,7 +92,7 @@ export function AgroMetricsGrid({ accountingTotals, stockBySpecies }: AgroMetric
         <strong>
           {formatMoney(accountingTotals.UYU.expense, "UYU")} | {formatMoney(accountingTotals.USD.expense, "USD")}
         </strong>
-        <small>Separados por moneda para revisar mejor la caja del campo.</small>
+        <small>Separados por moneda para revisar mejor la caja del establecimiento.</small>
       </article>
     </section>
   );

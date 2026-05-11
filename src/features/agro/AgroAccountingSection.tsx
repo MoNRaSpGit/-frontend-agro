@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { expenseConceptLabels, formatMoney, formatShortDate, getNetAmount, incomeConceptLabels } from "./agro.home.shared";
-import { currencyLabels, fields } from "./agro.demo.data";
-import { AccountingEntryType, ExpenseConcept, IncomeConcept, MoneyCurrency } from "./agro.types";
+import { currencyLabels, establishments, fields, getFieldIdForEstablishment } from "./agro.demo.data";
+import { AccountingEntry, AccountingEntryType, ExpenseConcept, IncomeConcept, MoneyCurrency } from "./agro.types";
 
 interface AgroAccountingSectionProps {
   accountingFormPanelRef: React.RefObject<HTMLElement | null>;
@@ -17,13 +17,12 @@ interface AgroAccountingSectionProps {
     taxAmount: string;
     notes: string;
   };
-  accountingLedgerRows: any[];
+  accountingLedgerRows: AccountingEntry[];
   accountingSearchTerm: string;
   editingAccountingEntryId: string | null;
   projectedNet: number;
   requestDeleteAccountingEntry: (entryId: string) => void;
   resetAccountingForm: () => void;
-  selectedEstablishmentId: string;
   setAccountingForm: React.Dispatch<
     React.SetStateAction<{
       date: string;
@@ -39,7 +38,6 @@ interface AgroAccountingSectionProps {
     }>
   >;
   setAccountingSearchTerm: (value: string) => void;
-  visibleFields: { id: string; name: string; establishmentId: string }[];
   onEditEntry: (entryId: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }
@@ -55,7 +53,6 @@ export function AgroAccountingSection({
   resetAccountingForm,
   setAccountingForm,
   setAccountingSearchTerm,
-  visibleFields,
   onEditEntry,
   onSubmit
 }: AgroAccountingSectionProps) {
@@ -134,7 +131,7 @@ export function AgroAccountingSection({
         <div className="panel-header">
           <div>
             <h2>Cargar movimiento de caja</h2>
-            <p>Alta de ingresos y gastos por rubro, campo y moneda.</p>
+            <p>Alta de ingresos y gastos por rubro, establecimiento y moneda.</p>
           </div>
         </div>
         <form className="form-grid" onSubmit={onSubmit}>
@@ -147,14 +144,21 @@ export function AgroAccountingSection({
             />
           </label>
           <label>
-            <span>Campo</span>
+            <span>Establecimiento</span>
             <select
-              value={accountingForm.fieldId}
-              onChange={(event) => setAccountingForm((current) => ({ ...current, fieldId: event.target.value }))}
+              value={accountingForm.establishmentId}
+              onChange={(event) => {
+                const nextEstablishmentId = event.target.value;
+                setAccountingForm((current) => ({
+                  ...current,
+                  establishmentId: nextEstablishmentId,
+                  fieldId: getFieldIdForEstablishment(nextEstablishmentId)
+                }));
+              }}
             >
-              {visibleFields.map((field) => (
-                <option key={field.id} value={field.id}>
-                  {field.name}
+              {establishments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
                 </option>
               ))}
             </select>
@@ -298,7 +302,7 @@ export function AgroAccountingSection({
           <span>Buscar en contabilidad</span>
           <input
             type="search"
-            placeholder="Campo, fecha, rubro, moneda o nota..."
+            placeholder="Establecimiento, fecha, rubro, moneda o nota..."
             value={accountingSearchTerm}
             onChange={(event) => setAccountingSearchTerm(event.target.value)}
           />
@@ -308,7 +312,7 @@ export function AgroAccountingSection({
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Campo</th>
+                <th>Establecimiento</th>
                 <th>Tipo</th>
                 <th>Rubro</th>
                 <th>Moneda</th>

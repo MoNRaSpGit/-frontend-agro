@@ -1,6 +1,6 @@
-import { categoryCatalog, currencyLabels, establishments, fields, movementKindLabels, speciesLabels } from "./agro.demo.data";
+import { categoryCatalog, currencyLabels, establishments, getFieldIdForEstablishment, fields, movementKindLabels, speciesLabels } from "./agro.demo.data";
 import { formatMoney, formatNumber, formatShortDate } from "./agro.home.shared";
-import { AgroSpecies, AnimalMovementKind, MoneyCurrency } from "./agro.types";
+import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, MoneyCurrency } from "./agro.types";
 
 interface AgroAnimalsSectionProps {
   animalFieldRefs: React.MutableRefObject<Record<string, HTMLInputElement | HTMLSelectElement | null>>;
@@ -23,7 +23,7 @@ interface AgroAnimalsSectionProps {
   };
   animalFormErrors: Record<string, string>;
   animalFormPanelRef: React.RefObject<HTMLElement | null>;
-  animalLedgerRows: any[];
+  animalLedgerRows: AnimalMovementRecord[];
   animalLedgerSummary: {
     purchases: number;
     sales: number;
@@ -129,7 +129,7 @@ export function AgroAnimalsSection({
               onChange={(event) => {
                 clearAnimalFieldError("establishmentId");
                 const nextEstablishmentId = event.target.value;
-                const nextFieldId = fields.find((field) => field.establishmentId === nextEstablishmentId)?.id ?? "";
+                const nextFieldId = getFieldIdForEstablishment(nextEstablishmentId);
                 setAnimalForm((current) => ({
                   ...current,
                   establishmentId: nextEstablishmentId,
@@ -142,25 +142,6 @@ export function AgroAnimalsSection({
                   {item.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className={animalFormErrors.fieldId ? "field-error" : undefined}>
-            <span>Campo</span>
-            <select
-              ref={registerAnimalFieldRef("fieldId")}
-              value={animalForm.fieldId}
-              onChange={(event) => {
-                clearAnimalFieldError("fieldId");
-                setAnimalForm((current) => ({ ...current, fieldId: event.target.value }));
-              }}
-            >
-              {fields
-                .filter((field) => field.establishmentId === animalForm.establishmentId)
-                .map((field) => (
-                  <option key={field.id} value={field.id}>
-                    {field.name}
-                  </option>
-                ))}
             </select>
           </label>
           <label className={animalFormErrors.kind ? "field-error" : undefined}>
@@ -341,7 +322,7 @@ export function AgroAnimalsSection({
           {isAdjustmentAnimalMovement ? (
             <div className="projection-card span-2 compact-card">
               <span>Ajuste de existencias</span>
-              <strong>Usalo para corregir diferencias entre lo que hay en el campo y lo que figura cargado.</strong>
+              <strong>Usalo para corregir diferencias entre lo que hay en el establecimiento y lo que figura cargado.</strong>
             </div>
           ) : null}
           <label className="span-2">
@@ -388,7 +369,7 @@ export function AgroAnimalsSection({
           <span>Buscar en animales</span>
           <input
             type="search"
-            placeholder="Campo, categoria, especie, fecha o nota..."
+            placeholder="Establecimiento, categoria, especie, fecha o nota..."
             value={animalSearchTerm}
             onChange={(event) => setAnimalSearchTerm(event.target.value)}
           />
@@ -398,7 +379,7 @@ export function AgroAnimalsSection({
             <thead>
               <tr>
                 <th className="cell-date">Fecha</th>
-                <th className="cell-field">Campo</th>
+                <th className="cell-field">Establecimiento</th>
                 <th className="cell-kind">Movimiento</th>
                 <th className="cell-number">Cantidad</th>
                 <th className="cell-category">Categoria</th>

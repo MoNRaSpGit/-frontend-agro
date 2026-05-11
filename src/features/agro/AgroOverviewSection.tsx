@@ -43,13 +43,13 @@ export function AgroOverviewSection({
           <div className="list-row">
             <div>
               <strong>Contabilidad</strong>
-              <span>Los ingresos van en USD y los gastos se separan en UYU y USD por campo.</span>
+              <span>Los ingresos van en USD y los gastos se separan en UYU y USD por establecimiento.</span>
             </div>
           </div>
           <div className="list-row">
             <div>
               <strong>Resumen</strong>
-              <span>Se juntan existencias, movimientos y lluvias por campo para control y revision.</span>
+              <span>Se juntan existencias, movimientos y lluvias por establecimiento para control y revision.</span>
             </div>
           </div>
         </div>

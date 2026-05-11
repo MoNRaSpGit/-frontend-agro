@@ -33,12 +33,27 @@ export const establishments: Establishment[] = [
 ];
 
 export const fields: FieldUnit[] = [
-  { id: "field-1", establishmentId: "est-1", name: "Campo A", notes: "Campo de cria y destete." },
-  { id: "field-2", establishmentId: "est-1", name: "Campo B", notes: "Campo de ovejas y reserva." },
-  { id: "field-3", establishmentId: "est-1", name: "Casco", notes: "Caballada y apoyo operativo." },
-  { id: "field-4", establishmentId: "est-2", name: "Campo 1", notes: "Campo mixto con foco en recria." },
-  { id: "field-5", establishmentId: "est-2", name: "Campo 2", notes: "Campo liviano para ovinos." }
+  { id: "field-est-1", establishmentId: "est-1", name: "Santa Clara", notes: "Operacion consolidada del establecimiento." },
+  { id: "field-est-2", establishmentId: "est-2", name: "El Ombu", notes: "Operacion consolidada del establecimiento." }
 ];
+
+const legacyFieldEstablishmentMap: Record<string, string> = {
+  "field-1": "est-1",
+  "field-2": "est-1",
+  "field-3": "est-1",
+  "field-4": "est-2",
+  "field-5": "est-2",
+  "field-est-1": "est-1",
+  "field-est-2": "est-2"
+};
+
+export function getFieldIdForEstablishment(establishmentId: string) {
+  return fields.find((field) => field.establishmentId === establishmentId)?.id ?? "";
+}
+
+export function getEstablishmentIdFromFieldId(fieldId: string) {
+  return legacyFieldEstablishmentMap[fieldId] ?? fields.find((field) => field.id === fieldId)?.establishmentId ?? "";
+}
 
 export const categoryCatalog: Record<string, CategoryDefinition[]> = {
   vacunos: [
@@ -72,13 +87,13 @@ export const categoryCatalog: Record<string, CategoryDefinition[]> = {
 };
 
 export const initialStock: StockSnapshot[] = [
-  { fieldId: "field-1", species: "vacunos", categoryCode: "2", quantity: 124 },
-  { fieldId: "field-1", species: "vacunos", categoryCode: "9", quantity: 48 },
-  { fieldId: "field-2", species: "ovinos", categoryCode: "2", quantity: 210 },
-  { fieldId: "field-2", species: "ovinos", categoryCode: "8", quantity: 64 },
-  { fieldId: "field-3", species: "equinos", categoryCode: "3", quantity: 9 },
-  { fieldId: "field-4", species: "vacunos", categoryCode: "6", quantity: 87 },
-  { fieldId: "field-5", species: "ovinos", categoryCode: "5", quantity: 92 }
+  { fieldId: "field-est-1", species: "vacunos", categoryCode: "2", quantity: 124 },
+  { fieldId: "field-est-1", species: "vacunos", categoryCode: "9", quantity: 48 },
+  { fieldId: "field-est-1", species: "ovinos", categoryCode: "2", quantity: 210 },
+  { fieldId: "field-est-1", species: "ovinos", categoryCode: "8", quantity: 64 },
+  { fieldId: "field-est-1", species: "equinos", categoryCode: "3", quantity: 9 },
+  { fieldId: "field-est-2", species: "vacunos", categoryCode: "6", quantity: 87 },
+  { fieldId: "field-est-2", species: "ovinos", categoryCode: "5", quantity: 92 }
 ];
 
 export const initialAnimalMovements: AnimalMovementRecord[] = [
@@ -86,7 +101,7 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     id: "anm-1",
     date: "2026-05-02",
     establishmentId: "est-1",
-    fieldId: "field-1",
+    fieldId: "field-est-1",
     species: "vacunos",
     categoryCode: "9",
     kind: "birth",
@@ -99,7 +114,7 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     id: "anm-2",
     date: "2026-05-03",
     establishmentId: "est-1",
-    fieldId: "field-2",
+    fieldId: "field-est-1",
     species: "ovinos",
     categoryCode: "7",
     kind: "sale",
@@ -111,13 +126,13 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     totalAmount: 2814,
     currency: "USD",
     linkedAccountingEntryId: "acc-2",
-    notes: "Venta por campo chico."
+    notes: "Venta registrada en Santa Clara."
   },
   {
     id: "anm-3",
     date: "2026-05-04",
     establishmentId: "est-2",
-    fieldId: "field-4",
+    fieldId: "field-est-2",
     species: "vacunos",
     categoryCode: "6",
     kind: "purchase",
@@ -136,33 +151,33 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     id: "anm-4",
     date: "2026-05-04",
     establishmentId: "est-1",
-    fieldId: "field-3",
+    fieldId: "field-est-1",
     species: "equinos",
     categoryCode: "4",
     kind: "birth",
     quantity: 2,
     commissionAmount: 0,
     taxAmount: 0,
-    notes: "Potrillos del casco."
+    notes: "Potrillos registrados en Santa Clara."
   },
   {
     id: "anm-5",
     date: "2026-05-05",
     establishmentId: "est-2",
-    fieldId: "field-5",
+    fieldId: "field-est-2",
     species: "ovinos",
     categoryCode: "8",
     kind: "death",
     quantity: 3,
     commissionAmount: 0,
     taxAmount: 0,
-    notes: "Baja puntual del campo."
+    notes: "Baja puntual de El Ombu."
   },
   {
     id: "anm-6",
     date: "2026-05-06",
     establishmentId: "est-2",
-    fieldId: "field-4",
+    fieldId: "field-est-2",
     species: "vacunos",
     categoryCode: "5",
     kind: "sale",
@@ -180,7 +195,7 @@ export const initialAnimalMovements: AnimalMovementRecord[] = [
     id: "anm-7",
     date: "2026-05-06",
     establishmentId: "est-1",
-    fieldId: "field-2",
+    fieldId: "field-est-1",
     species: "ovinos",
     categoryCode: "2",
     kind: "purchase",
@@ -202,7 +217,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     id: "acc-1",
     date: "2026-05-01",
     establishmentId: "est-1",
-    fieldId: "field-1",
+    fieldId: "field-est-1",
     type: "income",
     concept: "venta_vacunos",
     currency: "USD",
@@ -216,7 +231,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     id: "acc-2",
     date: "2026-05-02",
     establishmentId: "est-1",
-    fieldId: "field-2",
+    fieldId: "field-est-1",
     type: "income",
     concept: "venta_ovinos",
     currency: "USD",
@@ -225,13 +240,13 @@ export const initialAccountingEntries: AccountingEntry[] = [
     taxAmount: 42,
     netAmount: 2814,
     linkedAnimalMovementId: "anm-2",
-    notes: "Venta de ovinos del Campo 2."
+    notes: "Venta de ovinos de Santa Clara."
   },
   {
     id: "acc-3",
     date: "2026-05-04",
     establishmentId: "est-2",
-    fieldId: "field-4",
+    fieldId: "field-est-2",
     type: "expense",
     concept: "compra_animales",
     currency: "USD",
@@ -246,7 +261,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     id: "acc-4",
     date: "2026-05-05",
     establishmentId: "est-1",
-    fieldId: "field-1",
+    fieldId: "field-est-1",
     type: "expense",
     concept: "sanidad",
     currency: "UYU",
@@ -260,7 +275,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     id: "acc-5",
     date: "2026-05-06",
     establishmentId: "est-2",
-    fieldId: "field-4",
+    fieldId: "field-est-2",
     type: "income",
     concept: "venta_vacunos",
     currency: "USD",
@@ -269,13 +284,13 @@ export const initialAccountingEntries: AccountingEntry[] = [
     taxAmount: 74,
     netAmount: 5945,
     linkedAnimalMovementId: "anm-6",
-    notes: "Venta complementaria de campo liviano."
+    notes: "Venta complementaria de El Ombu."
   },
   {
     id: "acc-6",
     date: "2026-05-06",
     establishmentId: "est-2",
-    fieldId: "field-5",
+    fieldId: "field-est-2",
     type: "expense",
     concept: "alimentacion",
     currency: "UYU",
@@ -289,7 +304,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     id: "acc-7",
     date: "2026-05-06",
     establishmentId: "est-1",
-    fieldId: "field-2",
+    fieldId: "field-est-1",
     type: "expense",
     concept: "compra_animales",
     currency: "USD",
@@ -304,7 +319,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     id: "acc-8",
     date: "2026-05-07",
     establishmentId: "est-1",
-    fieldId: "field-3",
+    fieldId: "field-est-1",
     type: "expense",
     concept: "combustible",
     currency: "UYU",
@@ -318,7 +333,7 @@ export const initialAccountingEntries: AccountingEntry[] = [
     id: "acc-9",
     date: "2026-05-07",
     establishmentId: "est-2",
-    fieldId: "field-4",
+    fieldId: "field-est-2",
     type: "expense",
     concept: "mantenimiento",
     currency: "UYU",
@@ -331,8 +346,8 @@ export const initialAccountingEntries: AccountingEntry[] = [
 ];
 
 export const initialRainfallRecords: RainfallRecord[] = [
-  { id: "rain-1", date: "2026-05-01", fieldId: "field-1", millimeters: 18, notes: "Lluvia pareja." },
-  { id: "rain-2", date: "2026-05-03", fieldId: "field-2", millimeters: 12, notes: "Aporte corto." },
-  { id: "rain-3", date: "2026-05-04", fieldId: "field-4", millimeters: 25, notes: "Buen evento para verdeos." },
-  { id: "rain-4", date: "2026-05-06", fieldId: "field-5", millimeters: 9, notes: "Lluvia liviana." }
+  { id: "rain-1", date: "2026-05-01", fieldId: "field-est-1", millimeters: 18, notes: "Lluvia pareja en Santa Clara." },
+  { id: "rain-2", date: "2026-05-03", fieldId: "field-est-1", millimeters: 12, notes: "Aporte corto en Santa Clara." },
+  { id: "rain-3", date: "2026-05-04", fieldId: "field-est-2", millimeters: 25, notes: "Buen evento para verdeos en El Ombu." },
+  { id: "rain-4", date: "2026-05-06", fieldId: "field-est-2", millimeters: 9, notes: "Lluvia liviana en El Ombu." }
 ];
