@@ -18,6 +18,7 @@ interface AgroAnimalsSectionProps {
     freightAmount: string;
     commissionAmount: string;
     taxAmount: string;
+    collectedAmount: string;
     currency: MoneyCurrency;
     notes: string;
   };
@@ -62,6 +63,7 @@ interface AgroAnimalsSectionProps {
       freightAmount: string;
       commissionAmount: string;
       taxAmount: string;
+      collectedAmount: string;
       currency: MoneyCurrency;
       notes: string;
     }>
@@ -296,8 +298,20 @@ export function AgroAnimalsSection({
                     clearAnimalFieldError("taxAmount");
                     setAnimalForm((current) => ({ ...current, taxAmount: event.target.value }));
                   }}
-                />
-              </label>
+                  />
+                </label>
+              {animalForm.kind === "sale" ? (
+                <label className={animalFormErrors.collectedAmount ? "field-error" : undefined}>
+                  <span>Cobrado</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={animalForm.collectedAmount}
+                    onChange={(event) => setAnimalForm((current) => ({ ...current, collectedAmount: event.target.value }))}
+                  />
+                </label>
+              ) : null}
               <label>
                 <span>Moneda</span>
                 <select
@@ -337,6 +351,11 @@ export function AgroAnimalsSection({
             <div className="projection-card span-2">
               <span>Monto total proyectado</span>
               <strong>{formatMoney(projectedAnimalTotal, animalForm.currency)}</strong>
+              {animalForm.kind === "sale" ? (
+                <small>
+                  Pendiente {formatMoney(Math.max(0, projectedAnimalTotal - (Number(animalForm.collectedAmount) || 0)), animalForm.currency)}
+                </small>
+              ) : null}
             </div>
           ) : null}
           <div className="action-row span-2">

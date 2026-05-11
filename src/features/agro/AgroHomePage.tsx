@@ -175,6 +175,7 @@ export function AgroHomePage() {
     freightAmount: "",
     commissionAmount: "",
     taxAmount: "",
+    collectedAmount: "",
     currency: "USD" as MoneyCurrency,
     notes: ""
   });
@@ -221,6 +222,7 @@ export function AgroHomePage() {
       freightAmount: "",
       commissionAmount: "",
       taxAmount: "",
+      collectedAmount: "",
       currency: "USD" as MoneyCurrency,
       notes: ""
     });
@@ -263,7 +265,8 @@ export function AgroHomePage() {
         return {
           ...current,
           kind,
-          earTag: ""
+          earTag: "",
+          collectedAmount: ""
         };
       }
 
@@ -272,7 +275,8 @@ export function AgroHomePage() {
           ...current,
           kind,
           earTag: "",
-          freightAmount: ""
+          freightAmount: "",
+          collectedAmount: current.collectedAmount || "0"
         };
       }
 
@@ -285,6 +289,7 @@ export function AgroHomePage() {
         freightAmount: "",
         commissionAmount: "",
         taxAmount: "",
+        collectedAmount: "",
         currency: "USD"
       };
     });
@@ -970,6 +975,9 @@ export function AgroHomePage() {
           totalAmount: movement.totalAmount,
           currency: movement.currency ?? "USD",
           linked: Boolean(linkedEntry),
+          collectedAmount: linkedEntry?.type === "income" ? getIncomeCollectedAmount(linkedEntry) : null,
+          pendingAmount: linkedEntry?.type === "income" ? getIncomePendingAmount(linkedEntry) : null,
+          collectionStatus: linkedEntry?.type === "income" ? getIncomeCollectionStatus(linkedEntry) : null,
           linkedLabel: linkedEntry
             ? `${linkedEntry.type === "income" ? "Ingreso" : "Egreso"} | ${
                 linkedEntry.type === "income"
@@ -1034,6 +1042,7 @@ export function AgroHomePage() {
     const freightAmount = Number(animalForm.freightAmount);
     const commissionAmount = Number(animalForm.commissionAmount);
     const taxAmount = Number(animalForm.taxAmount);
+    const collectedAmount = animalForm.kind === "sale" ? Number(animalForm.collectedAmount || "0") : undefined;
     const commercialMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
     const nextErrors: Record<string, string> = {};
 
@@ -1088,6 +1097,14 @@ export function AgroHomePage() {
       ? calculateAnimalTotal(quantity, unitPrice, normalizedCommission, normalizedTax, normalizedFreight)
       : undefined;
 
+    if (animalForm.kind === "sale") {
+      if (collectedAmount === undefined || !Number.isFinite(collectedAmount) || collectedAmount < 0) {
+        nextErrors.collectedAmount = "Falta agregar un cobrado valido.";
+      } else if (totalAmount !== undefined && collectedAmount > totalAmount) {
+        nextErrors.collectedAmount = "El cobrado no puede ser mayor al total de la venta.";
+      }
+    }
+
     const entryType: AccountingEntryType = animalForm.kind === "sale" ? "income" : "expense";
     const accountingConcept =
       animalForm.kind === "sale" ? getIncomeConceptForSpecies(animalForm.species) : "compra_animales";
@@ -1135,8 +1152,8 @@ export function AgroHomePage() {
         commissionAmount: normalizedCommission,
         taxAmount: normalizedTax,
         netAmount: totalAmount,
-        expectedAmount: totalAmount,
-        collectedAmount: totalAmount,
+        expectedAmount: entryType === "income" ? totalAmount : undefined,
+        collectedAmount: entryType === "income" ? collectedAmount ?? 0 : undefined,
         linkedAnimalMovementId: nextMovementId,
         notes: animalForm.notes.trim()
       };
@@ -1297,6 +1314,10 @@ export function AgroHomePage() {
       return;
     }
 
+    const linkedEntry = movement.linkedAccountingEntryId
+      ? accountingEntries.find((item) => item.id === movement.linkedAccountingEntryId)
+      : undefined;
+
     setEditingAnimalMovementId(movementId);
     setSelectedEstablishmentId(movement.establishmentId);
     setAnimalForm({
@@ -1313,6 +1334,7 @@ export function AgroHomePage() {
       freightAmount: movement.freightAmount !== undefined ? `${movement.freightAmount}` : "",
       commissionAmount: movement.commissionAmount !== undefined ? `${movement.commissionAmount}` : "",
       taxAmount: movement.taxAmount !== undefined ? `${movement.taxAmount}` : "",
+      collectedAmount: movement.kind === "sale" ? `${linkedEntry && linkedEntry.type === "income" ? getIncomeCollectedAmount(linkedEntry) : 0}` : "",
       currency: movement.currency ?? "USD",
       notes: movement.notes
     });
@@ -1805,6 +1827,8 @@ export function AgroHomePage() {
                       <th>Operacion</th>
                       <th>Cantidad</th>
                       <th>Monto</th>
+                      <th>Cobrado</th>
+                      <th>Pendiente</th>
                       <th>Estado</th>
                       <th>Relacion contable</th>
                     </tr>
@@ -1817,9 +1841,19 @@ export function AgroHomePage() {
                         <td>{row.movementLabel}</td>
                         <td>{row.quantity}</td>
                         <td>{row.totalAmount !== undefined ? formatMoney(row.totalAmount, row.currency) : "-"}</td>
+                        <td>{row.collectedAmount !== null ? formatMoney(row.collectedAmount, row.currency) : "-"}</td>
+                        <td>{row.pendingAmount !== null ? formatMoney(row.pendingAmount, row.currency) : "-"}</td>
                         <td>
-                          <span className={row.linked ? "data-badge accent compact" : "data-badge warning compact"}>
-                            {row.linked ? "Relacionado" : "Pendiente"}
+                          <span
+                            className={
+                              row.linked
+                                ? row.collectionStatus === "Cobrado"
+                                  ? "data-badge accent compact"
+                                  : "data-badge warning compact"
+                                : "data-badge warning compact"
+                            }
+                          >
+                            {row.linked ? row.collectionStatus ?? "Relacionado" : "Pendiente"}
                           </span>
                         </td>
                         <td>{row.linkedLabel}</td>
