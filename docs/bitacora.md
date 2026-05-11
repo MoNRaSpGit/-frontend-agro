@@ -18,6 +18,37 @@ Aca si corresponde anotar:
 
 `agro` quedo en un corte activo publicado para esperar devolucion del cliente.
 
+## Ultimo corte aplicado
+
+En este ultimo tramo quedaron cerrados tres puntos operativos:
+
+1. `Persistencia real en backend`
+
+- el frontend dejo de depender solo de almacenamiento local
+- el workspace publico de `agro` ahora se lee y se guarda contra backend
+- el endpoint operativo es:
+  - `GET /api/v1/agro/workspace/public`
+  - `PUT /api/v1/agro/workspace/public`
+
+2. `App vacia para carga del cliente`
+
+- se limpio la data de prueba del workspace publico en produccion
+- la app ahora puede arrancar realmente en cero
+- eso permite que el cliente cargue sus establecimientos, stock, lluvia, sanidad y contabilidad desde su propia base
+
+3. `Cartel de actualizacion`
+
+- la app ahora genera metadata de build propia
+- si hay una version nueva publicada mientras el usuario tiene una pestaña vieja abierta:
+  - aparece el cartel `Actualizar`
+  - al aceptarlo, la pagina se refresca
+
+## Aclaracion de este corte
+
+- para probar el cartel se hicieron microcambios de texto y accesibilidad
+- no fueron cambios funcionales grandes del producto
+- sirvieron para confirmar que el detector de nueva version funciona en produccion
+
 ## Ultimo corte funcional
 
 En este corte quedaron resueltos dos puntos funcionales principales pedidos para `Contabilidad` y `Resumen`:
@@ -137,8 +168,8 @@ Sobre ese bloque anterior se termino de bajar la relacion entre `Animales` y `Co
 - `test:smoke`: OK
 - `test:functional`: OK
 - `build`: OK
-- `push`: pendiente de este corte
-- `deploy`: pendiente de este corte
+- `push`: OK
+- `deploy`: OK
 
 ## Donde quedamos
 

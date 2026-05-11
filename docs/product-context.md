@@ -1,13 +1,15 @@
 # Agro - Contexto funcional inicial
 
-Fecha de actualizacion: 2026-05-08
+Fecha de actualizacion: 2026-05-11
 
 ## Definicion actual del producto
 
 `agro` se interpreta hoy como un producto con varios bloques funcionales dentro de una sola app:
 
+- carga inicial operativa
 - control de stock animal
 - contabilidad operativa
+- registro sanitario
 - registro de lluvia por campo
 - resumen operativo por establecimiento
 
@@ -48,6 +50,7 @@ La contabilidad del cliente hoy se entiende como:
 - egresos
 - lectura por moneda
 - lectura por campo
+- seguimiento de cobro real
 
 ### Ingresos iniciales
 
@@ -64,12 +67,32 @@ La contabilidad del cliente hoy se entiende como:
 - comision
 - impuestos
 - neto
+- cobrado
+- pendiente
+
+### Criterio comercial actual
+
+- un ingreso puede quedar `Pendiente`
+- tambien puede quedar `Parcial`
+- solo pasa a `Cobrado` cuando el cobro cubre el total
+- los egresos en `UYU` pueden pasarse a `USD` usando tipo de cambio promedio mensual
 
 ### Gastos
 
 Se mantienen inicialmente en una planilla mas generica para no sobredisenar antes de validar con el cliente.
 
-## Bloque 3 - Lluvia
+## Bloque 3 - Sanidad
+
+La sanidad hoy vive en una vista propia y permite:
+
+- cargar fecha
+- cargar establecimiento
+- cargar especie
+- cargar cantidad
+- cargar tratamiento
+- revisar bitacora sanitaria
+
+## Bloque 4 - Lluvia
 
 La lluvia hoy vive en una vista propia dentro del frontend y permite:
 
@@ -77,7 +100,7 @@ La lluvia hoy vive en una vista propia dentro del frontend y permite:
 - revisar bitacora cronologica
 - editar y eliminar registros cargados en demo
 
-## Bloque 4 - Resumen
+## Bloque 5 - Resumen
 
 `Resumen` queda como tablero de lectura general del establecimiento.
 
@@ -86,6 +109,16 @@ Su funcion en este corte es:
 - consolidar lectura por campo
 - mostrar indicadores y alertas
 - ayudar a contrastar lo cargado contra la realidad operativa
+- mostrar tambien estado de cuenta comercial
+
+## Bloque 6 - Carga inicial
+
+La carga inicial permite:
+
+- sembrar stock base por establecimiento y especie
+- sembrar saldo contable base
+- crear nuevos establecimientos
+- cargar una fecha de referencia para arrancar ordenado
 
 ## Relacion entre stock y contabilidad
 
@@ -93,19 +126,26 @@ No se endurece en backend todavia.
 
 La demo deja visible que podrian vincularse, pero sin obligarlo en todos los casos.
 
-## Regla tecnica actual del demo
+## Regla tecnica actual
 
-En esta etapa:
+En este corte:
 
-- la operacion del frontend vive principalmente en persistencia local
-- el objetivo principal es validar flujos, lenguaje y lectura operativa con cliente
-- el backend de `agro` todavia no endurece stock, contabilidad ni lluvia como modelo oficial
+- la operacion visible del frontend persiste en backend usando el workspace publico
+- el objetivo principal sigue siendo validar flujos, lenguaje y lectura operativa con cliente
+- el backend ya guarda:
+  - establecimientos
+  - campos
+  - animales
+  - contabilidad
+  - lluvia
+  - sanidad
+  - tipos de cambio mensuales
 
 ## Alcance backend relacionado
 
-El backend conserva un cascaron temprano de `agro` con foco en discovery tecnico y capabilities base.
+El backend conserva discovery tecnico y capabilities base, pero ademas ya expone el workspace publico de la app.
 
-Eso hoy no se refleja como una vista visible del frontend, pero sigue siendo parte del estado tecnico del modulo.
+Eso hoy se usa directamente desde la UI para leer y guardar la operacion del cliente.
 
 ## Fuente de categorias
 
