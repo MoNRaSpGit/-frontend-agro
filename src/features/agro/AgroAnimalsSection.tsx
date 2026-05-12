@@ -1,4 +1,4 @@
-import { categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
+import { animalMovementFormKinds, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
 import { formatMoney, formatNumber, formatShortDate } from "./agro.home.shared";
 import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, FieldUnit, MoneyCurrency } from "./agro.types";
 
@@ -11,6 +11,7 @@ interface AgroAnimalsSectionProps {
     date: string;
     establishmentId: string;
     fieldId: string;
+    transferDestinationEstablishmentId: string;
     species: AgroSpecies;
     categoryCode: string;
     kind: AnimalMovementKind;
@@ -57,6 +58,7 @@ interface AgroAnimalsSectionProps {
       date: string;
       establishmentId: string;
       fieldId: string;
+      transferDestinationEstablishmentId: string;
       species: AgroSpecies;
       categoryCode: string;
       kind: AnimalMovementKind;
@@ -160,13 +162,35 @@ export function AgroAnimalsSection({
               value={animalForm.kind}
               onChange={(event) => handleAnimalKindChange(event.target.value as AnimalMovementKind)}
             >
-              {Object.entries(movementKindLabels).map(([value, label]) => (
+              {animalMovementFormKinds.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {movementKindLabels[value]}
                 </option>
               ))}
             </select>
           </label>
+          {animalForm.kind === "transfer" ? (
+            <label className={animalFormErrors.transferDestinationEstablishmentId ? "field-error" : undefined}>
+              <span>Campo destino</span>
+              <select
+                ref={registerAnimalFieldRef("transferDestinationEstablishmentId")}
+                value={animalForm.transferDestinationEstablishmentId}
+                onChange={(event) => {
+                  clearAnimalFieldError("transferDestinationEstablishmentId");
+                  setAnimalForm((current) => ({
+                    ...current,
+                    transferDestinationEstablishmentId: event.target.value
+                  }));
+                }}
+              >
+                {establishments.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className={animalFormErrors.species ? "field-error" : undefined}>
             <span>Especie</span>
             <select
@@ -338,6 +362,12 @@ export function AgroAnimalsSection({
             <div className="projection-card span-2 compact-card">
               <span>Movimiento sin impacto economico</span>
               <strong>No lleva precio, flete, comision, IVA ni moneda.</strong>
+            </div>
+          ) : null}
+          {animalForm.kind === "transfer" ? (
+            <div className="projection-card span-2 compact-card">
+              <span>Traslado entre campos</span>
+              <strong>Al guardar, baja stock en el origen y sube el mismo stock en el destino automaticamente.</strong>
             </div>
           ) : null}
           {isAdjustmentAnimalMovement ? (

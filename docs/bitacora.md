@@ -194,3 +194,16 @@ Lectura funcional actual pedida:
 
 - `traslados` cubren movimientos entre campos o lugares sin compra ni venta
 - `faltantes` cubren desaparicion, robo u otras diferencias no explicadas como venta o muerte
+
+## Ajuste funcional posterior
+
+El traslado ya no se piensa como dos cargas manuales separadas.
+
+Ahora la direccion de producto pasa a ser:
+
+- un solo tipo `Traslado`
+- se indica `campo origen`
+- se indica `campo destino`
+- al guardar:
+  - baja stock en origen
+  - sube stock en destino

@@ -161,6 +161,10 @@ function getFieldIdForEstablishmentFrom(fields: FieldUnit[], establishmentId: st
   return fields.find((field) => field.establishmentId === establishmentId)?.id ?? "";
 }
 
+function isTransferMovementKind(kind: AnimalMovementKind) {
+  return kind === "transfer" || kind === "transfer_in" || kind === "transfer_out";
+}
+
 export function AgroHomePage() {
   const today = getTodayDate();
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
@@ -207,6 +211,7 @@ export function AgroHomePage() {
     date: today,
     establishmentId: "",
     fieldId: "",
+    transferDestinationEstablishmentId: "",
     species: "vacunos" as AgroSpecies,
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     kind: "purchase" as AnimalMovementKind,
@@ -278,6 +283,7 @@ export function AgroHomePage() {
       date: today,
       establishmentId: establishments[0]?.id ?? "",
       fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
+      transferDestinationEstablishmentId: establishments[1]?.id ?? establishments[0]?.id ?? "",
       species: "vacunos" as AgroSpecies,
       categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
       kind: "purchase" as AnimalMovementKind,
@@ -332,6 +338,7 @@ export function AgroHomePage() {
           ...current,
           kind,
           earTag: "",
+          transferDestinationEstablishmentId: "",
           collectedAmount: ""
         };
       }
@@ -341,6 +348,7 @@ export function AgroHomePage() {
           ...current,
           kind,
           earTag: "",
+          transferDestinationEstablishmentId: "",
           freightAmount: "",
           collectedAmount: current.collectedAmount || "0"
         };
@@ -350,6 +358,10 @@ export function AgroHomePage() {
         ...current,
         kind,
         earTag: kind === "death" && current.species === "vacunos" ? current.earTag : "",
+        transferDestinationEstablishmentId:
+          kind === "transfer"
+            ? current.transferDestinationEstablishmentId || establishments.find((item) => item.id !== current.establishmentId)?.id || current.establishmentId
+            : "",
         weightKg: "",
         unitPrice: "",
         freightAmount: "",
@@ -1322,8 +1334,7 @@ export function AgroHomePage() {
   const isBirthOrDeathAnimalMovement =
     animalForm.kind === "birth" ||
     animalForm.kind === "death" ||
-    animalForm.kind === "transfer_in" ||
-    animalForm.kind === "transfer_out" ||
+    animalForm.kind === "transfer" ||
     animalForm.kind === "shortage";
   const isAdjustmentAnimalMovement = animalForm.kind === "adjustment";
   const isCattleDeathWithEarTag = requiresEarTag(animalForm.kind, animalForm.species);
@@ -1410,6 +1421,7 @@ export function AgroHomePage() {
     const taxAmount = Number(animalForm.taxAmount);
     const collectedAmount = animalForm.kind === "sale" ? Number(animalForm.collectedAmount || "0") : undefined;
     const commercialMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
+    const isTransferMovement = animalForm.kind === "transfer";
     const nextErrors: Record<string, string> = {};
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -1418,6 +1430,14 @@ export function AgroHomePage() {
 
     if (isCattleDeathWithEarTag && !animalForm.earTag.trim()) {
       nextErrors.earTag = "Falta agregar el numero de caravana.";
+    }
+
+    if (isTransferMovement) {
+      if (!animalForm.transferDestinationEstablishmentId) {
+        nextErrors.transferDestinationEstablishmentId = "Falta elegir el campo destino.";
+      } else if (animalForm.transferDestinationEstablishmentId === animalForm.establishmentId) {
+        nextErrors.transferDestinationEstablishmentId = "El destino debe ser distinto del origen.";
+      }
     }
 
     if (commercialMovement) {
@@ -1456,6 +1476,18 @@ export function AgroHomePage() {
       ? animalMovements.find((movement) => movement.id === editingAnimalMovementId)
       : undefined;
     const nextMovementId = editingAnimalMovementId ?? `anm-${Date.now()}`;
+    const nextPairedTransferMovementId =
+      isTransferMovement || existingMovement?.pairedTransferMovementId
+        ? existingMovement?.pairedTransferMovementId ?? `anm-${Date.now()}-pair`
+        : undefined;
+    const transferOutMovementId =
+      isTransferMovement && existingMovement?.kind === "transfer_in" && existingMovement.pairedTransferMovementId
+        ? existingMovement.pairedTransferMovementId
+        : nextMovementId;
+    const transferInMovementId =
+      isTransferMovement && existingMovement?.kind === "transfer_in" && existingMovement.pairedTransferMovementId
+        ? existingMovement.id
+        : nextPairedTransferMovementId;
     const normalizedFreight = commercialMovement && Number.isFinite(freightAmount) ? freightAmount : 0;
     const normalizedCommission = commercialMovement && Number.isFinite(commissionAmount) ? commissionAmount : 0;
     const normalizedTax = commercialMovement && Number.isFinite(taxAmount) ? taxAmount : 0;
@@ -1496,14 +1528,38 @@ export function AgroHomePage() {
       totalAmount,
       currency: commercialMovement ? animalForm.currency : undefined,
       linkedAccountingEntryId: nextAccountingId,
+      pairedTransferMovementId: nextPairedTransferMovementId,
       notes: animalForm.notes.trim()
     };
 
-    setAnimalMovements((current) =>
-      editingAnimalMovementId
-        ? current.map((item) => (item.id === editingAnimalMovementId ? movement : item))
-        : [movement, ...current]
-    );
+    const nextMovements = isTransferMovement
+      ? [
+          {
+            ...movement,
+            id: transferOutMovementId,
+            kind: "transfer_out" as AnimalMovementKind,
+            pairedTransferMovementId: transferInMovementId
+          },
+          {
+            ...movement,
+            id: transferInMovementId!,
+            establishmentId: animalForm.transferDestinationEstablishmentId,
+            fieldId: getFieldIdForEstablishmentFrom(fields, animalForm.transferDestinationEstablishmentId),
+            kind: "transfer_in" as AnimalMovementKind,
+            pairedTransferMovementId: transferOutMovementId
+          }
+        ]
+      : [movement];
+
+    setAnimalMovements((current) => {
+      const idsToReplace = new Set(
+        editingAnimalMovementId
+          ? [editingAnimalMovementId, existingMovement?.pairedTransferMovementId].filter(Boolean) as string[]
+          : []
+      );
+      const baseRows = idsToReplace.size > 0 ? current.filter((item) => !idsToReplace.has(item.id)) : current;
+      return [...nextMovements, ...baseRows];
+    });
 
     if (commercialMovement && nextAccountingId && totalAmount !== undefined) {
       const accountingEntry: AccountingEntry = {
@@ -1834,6 +1890,7 @@ export function AgroHomePage() {
       date: movement.date,
       establishmentId: movement.establishmentId,
       fieldId: movement.fieldId,
+      transferDestinationEstablishmentId: "",
       species: movement.species,
       categoryCode: movement.categoryCode,
       kind: movement.kind,
@@ -1848,6 +1905,22 @@ export function AgroHomePage() {
       currency: movement.currency ?? "USD",
       notes: movement.notes
     });
+    if (isTransferMovementKind(movement.kind) && movement.pairedTransferMovementId) {
+      const pairedMovement = animalMovements.find((item) => item.id === movement.pairedTransferMovementId);
+      if (pairedMovement) {
+        setAnimalForm((current) => ({
+          ...current,
+          kind: "transfer",
+          establishmentId: movement.kind === "transfer_out" ? movement.establishmentId : pairedMovement.establishmentId,
+          fieldId:
+            movement.kind === "transfer_out"
+              ? movement.fieldId
+              : getFieldIdForEstablishmentFrom(fields, pairedMovement.establishmentId),
+          transferDestinationEstablishmentId:
+            movement.kind === "transfer_out" ? pairedMovement.establishmentId : movement.establishmentId
+        }));
+      }
+    }
     animalFormPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -1928,8 +2001,9 @@ export function AgroHomePage() {
 
   function handleDeleteAnimalMovement(movementId: string) {
     const movement = animalMovements.find((item) => item.id === movementId);
-    setAnimalMovements((current) => current.filter((item) => item.id !== movementId));
-    if (editingAnimalMovementId === movementId) {
+    const idsToDelete = new Set([movementId, movement?.pairedTransferMovementId].filter(Boolean) as string[]);
+    setAnimalMovements((current) => current.filter((item) => !idsToDelete.has(item.id)));
+    if (editingAnimalMovementId === movementId || editingAnimalMovementId === movement?.pairedTransferMovementId) {
       resetAnimalForm();
     }
 

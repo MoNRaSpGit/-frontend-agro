@@ -7,6 +7,7 @@ export type AnimalMovementKind =
   | "sale"
   | "birth"
   | "death"
+  | "transfer"
   | "transfer_in"
   | "transfer_out"
   | "shortage"
@@ -73,6 +74,7 @@ export interface AnimalMovementRecord {
   totalAmount?: number;
   currency?: MoneyCurrency;
   linkedAccountingEntryId?: string;
+  pairedTransferMovementId?: string;
   notes: string;
 }
 
