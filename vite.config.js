@@ -20,6 +20,8 @@ function resolveGitShortSha() {
 }
 var frontendReleaseSha = process.env.VITE_RELEASE_SHA || process.env.RELEASE_SHA || resolveGitShortSha();
 var frontendReleaseCreatedAt = process.env.VITE_RELEASE_CREATED_AT || process.env.RELEASE_CREATED_AT || new Date().toISOString();
+var DEV_SERVER_PORT = 5173;
+var PREVIEW_SERVER_PORT = 4173;
 export default defineConfig(function (_a) {
     var mode = _a.mode;
     var appBuildMeta = JSON.stringify({
@@ -30,6 +32,14 @@ export default defineConfig(function (_a) {
     }, null, 2);
     return {
         base: "/-frontend-agro/",
+        server: {
+            port: DEV_SERVER_PORT,
+            strictPort: true
+        },
+        preview: {
+            port: PREVIEW_SERVER_PORT,
+            strictPort: true
+        },
         plugins: [
             react(),
             {

@@ -31,7 +31,8 @@ interface AgroAnimalsSectionProps {
   animalLedgerSummary: {
     purchases: number;
     sales: number;
-    birthsAndDeaths: number;
+    stockInternalMoves: number;
+    stockIncidents: number;
     linkedCommercialRows: number;
   };
   animalSearchTerm: string;
@@ -113,7 +114,7 @@ export function AgroAnimalsSection({
         <div className="panel-header">
           <div>
             <h2>Cargar movimiento de animales</h2>
-            <p>Alta de compras, ventas, nacimientos, muertes o ajustes.</p>
+            <p>Alta de compras, ventas, nacimientos, muertes, traslados, faltantes o ajustes.</p>
           </div>
         </div>
         <form className="form-grid" onSubmit={handleAnimalSubmit}>
@@ -387,7 +388,8 @@ export function AgroAnimalsSection({
         <div className="inline-metrics">
           <span className="data-badge">Compras {animalLedgerSummary.purchases}</span>
           <span className="data-badge">Ventas {animalLedgerSummary.sales}</span>
-          <span className="data-badge">Nacimientos y muertes {animalLedgerSummary.birthsAndDeaths}</span>
+          <span className="data-badge">Traslados {animalLedgerSummary.stockInternalMoves}</span>
+          <span className="data-badge">Nacimientos, muertes y faltantes {animalLedgerSummary.stockIncidents}</span>
           <span className="data-badge accent">Relacionados a contabilidad {animalLedgerSummary.linkedCommercialRows}</span>
         </div>
         <label className="table-search">

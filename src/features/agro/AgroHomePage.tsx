@@ -841,8 +841,17 @@ export function AgroHomePage() {
         adjustments: movementRows
           .filter((movement) => movement.kind === "adjustment")
           .reduce((sum, movement) => sum + movement.quantity, 0),
+        transfersIn: movementRows
+          .filter((movement) => movement.kind === "transfer_in")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        transfersOut: movementRows
+          .filter((movement) => movement.kind === "transfer_out")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
         deaths: movementRows
           .filter((movement) => movement.kind === "death")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        shortages: movementRows
+          .filter((movement) => movement.kind === "shortage")
           .reduce((sum, movement) => sum + movement.quantity, 0),
         lastRainfallDate: rainfallRecords
           .filter((record) => {
@@ -1031,8 +1040,11 @@ export function AgroHomePage() {
     return {
       purchases: animalLedgerRows.filter((movement) => movement.kind === "purchase").length,
       sales: animalLedgerRows.filter((movement) => movement.kind === "sale").length,
-      birthsAndDeaths: animalLedgerRows.filter(
-        (movement) => movement.kind === "birth" || movement.kind === "death"
+      stockInternalMoves: animalLedgerRows.filter(
+        (movement) => movement.kind === "transfer_in" || movement.kind === "transfer_out"
+      ).length,
+      stockIncidents: animalLedgerRows.filter(
+        (movement) => movement.kind === "birth" || movement.kind === "death" || movement.kind === "shortage"
       ).length,
       linkedCommercialRows: animalLedgerRows.filter((movement) => Boolean(movement.linkedAccountingEntryId)).length
     };
@@ -1307,7 +1319,12 @@ export function AgroHomePage() {
   ]);
 
   const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
-  const isBirthOrDeathAnimalMovement = animalForm.kind === "birth" || animalForm.kind === "death";
+  const isBirthOrDeathAnimalMovement =
+    animalForm.kind === "birth" ||
+    animalForm.kind === "death" ||
+    animalForm.kind === "transfer_in" ||
+    animalForm.kind === "transfer_out" ||
+    animalForm.kind === "shortage";
   const isAdjustmentAnimalMovement = animalForm.kind === "adjustment";
   const isCattleDeathWithEarTag = requiresEarTag(animalForm.kind, animalForm.species);
 
@@ -2224,6 +2241,18 @@ export function AgroHomePage() {
                         <strong>{item.sales}</strong>
                       </div>
                       <div className="list-row">
+                        <span>Traslados ingreso</span>
+                        <strong>{item.transfersIn}</strong>
+                      </div>
+                      <div className="list-row">
+                        <span>Traslados egreso</span>
+                        <strong>{item.transfersOut}</strong>
+                      </div>
+                      <div className="list-row">
+                        <span>Faltantes</span>
+                        <strong>{item.shortages}</strong>
+                      </div>
+                      <div className="list-row">
                         <span>Lluvia acumulada</span>
                         <strong>{item.rainfallTotal} mm</strong>
                       </div>
@@ -2258,6 +2287,12 @@ export function AgroHomePage() {
                       ) : null}
                       {item.deaths > 0 ? (
                         <span className="data-badge warning">Muertes registradas: {item.deaths}</span>
+                      ) : null}
+                      {item.shortages > 0 ? (
+                        <span className="data-badge warning">Faltantes registrados: {item.shortages}</span>
+                      ) : null}
+                      {item.transfersIn > 0 || item.transfersOut > 0 ? (
+                        <span className="data-badge compact">Traslados {item.transfersIn} / {item.transfersOut}</span>
                       ) : null}
                       {item.lastRainfallDate ? (
                         <span className="data-badge compact">Ultima lluvia {item.lastRainfallDate}</span>

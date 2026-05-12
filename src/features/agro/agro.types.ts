@@ -2,7 +2,15 @@ export type AgroView = "overview" | "setup" | "animals" | "accounting" | "sanity
 
 export type AgroSpecies = "vacunos" | "ovinos" | "equinos";
 
-export type AnimalMovementKind = "purchase" | "sale" | "birth" | "death" | "adjustment";
+export type AnimalMovementKind =
+  | "purchase"
+  | "sale"
+  | "birth"
+  | "death"
+  | "transfer_in"
+  | "transfer_out"
+  | "shortage"
+  | "adjustment";
 
 export type AccountingEntryType = "income" | "expense";
 

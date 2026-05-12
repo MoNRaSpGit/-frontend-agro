@@ -181,3 +181,16 @@ Lo que queda por seguir bajando ahora es:
 2. decidir si conviene mostrar mas resumen comercial rapido en `Inicio` o `Resumen`
 3. revisar si hace falta algun filtro adicional por `moneda`, `rubro` o `establecimiento`
 4. seguir endureciendo documentacion funcional del modulo
+
+## Pedido cliente nuevo
+
+En `Animales` el cliente pidio ampliar los tipos de movimiento para contemplar operacion real de campo:
+
+- `Traslado ingreso`
+- `Traslado egreso`
+- `Faltante`
+
+Lectura funcional actual pedida:
+
+- `traslados` cubren movimientos entre campos o lugares sin compra ni venta
+- `faltantes` cubren desaparicion, robo u otras diferencias no explicadas como venta o muerte

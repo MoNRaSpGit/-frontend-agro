@@ -21,6 +21,9 @@ export const movementKindLabels = {
   sale: "Venta",
   birth: "Nacimiento",
   death: "Muerte",
+  transfer_in: "Traslado ingreso",
+  transfer_out: "Traslado egreso",
+  shortage: "Faltante",
   adjustment: "Ajuste"
 } as const;
 

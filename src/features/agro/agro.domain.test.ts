@@ -15,8 +15,11 @@ describe("agro functional round", () => {
   it("derives stock direction from movement kind", () => {
     expect(deriveMovementDirection("purchase")).toBe("entry");
     expect(deriveMovementDirection("birth")).toBe("entry");
+    expect(deriveMovementDirection("transfer_in")).toBe("entry");
     expect(deriveMovementDirection("sale")).toBe("exit");
     expect(deriveMovementDirection("death")).toBe("exit");
+    expect(deriveMovementDirection("transfer_out")).toBe("exit");
+    expect(deriveMovementDirection("shortage")).toBe("exit");
   });
 
   it("requires ear tag only for cattle deaths", () => {

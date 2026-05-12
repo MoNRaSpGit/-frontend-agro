@@ -82,7 +82,7 @@ export function AgroMetricsGrid({ accountingTotals, stockBySpecies }: AgroMetric
       <article className="metric-card">
         <span>Total ovinos</span>
         <strong>{stockBySpecies.ovinos}</strong>
-        <small>Incluye compras, ventas, nacimientos y muertes registradas.</small>
+        <small>Incluye compras, ventas, traslados, nacimientos, muertes y faltantes.</small>
       </article>
       <article className="metric-card">
         <span>Ingresos USD</span>
