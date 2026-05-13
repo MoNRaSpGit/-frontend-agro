@@ -12,6 +12,8 @@ import { AgroSetupSection } from "./AgroSetupSection";
 import { fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
+  describeAnimalMovementDetail,
+  formatCategoryLabel,
   expenseConceptLabels,
   formatMoney,
   formatShortDate,
@@ -757,7 +759,7 @@ export function AgroHomePage() {
           return {
             species,
             categoryCode,
-            categoryLabel: category?.label ?? categoryCode,
+            categoryLabel: category ? formatCategoryLabel(category.label) : categoryCode,
             quantity
           };
         })
@@ -820,11 +822,32 @@ export function AgroHomePage() {
         },
         { vacunos: 0, ovinos: 0, equinos: 0 } as Record<AgroSpecies, number>
       );
+      const specialMovementRows = movementRows
+        .filter((movement) => movement.kind === "shortage" || movement.kind === "transfer_in" || movement.kind === "transfer_out")
+        .sort((left, right) => right.date.localeCompare(left.date))
+        .slice(0, 3)
+        .map((movement) => {
+          const categoryLabel =
+            (() => {
+              const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+              return category ? formatCategoryLabel(category.label) : speciesLabels[movement.species];
+            })();
+
+          return {
+            id: movement.id,
+            date: movement.date,
+            kind: movement.kind,
+            quantity: movement.quantity,
+            categoryLabel,
+            detail: describeAnimalMovementDetail(movement, animalMovements, fields)
+          };
+        });
 
       return {
         field,
         stockRows,
         speciesTotals,
+        specialMovementRows,
         purchases: movementRows
           .filter((movement) => movement.kind === "purchase")
           .reduce((sum, movement) => sum + movement.quantity, 0),
@@ -888,6 +911,7 @@ export function AgroHomePage() {
     accountingEntries,
     animalMovements,
     exchangeRateByMonth,
+    fields,
     rainfallRecords,
     selectedMonth,
     selectedYear,
@@ -2178,12 +2202,12 @@ export function AgroHomePage() {
         {activeView === "animals" ? (
           <AgroAnimalsSection
             establishments={establishments}
-            fields={fields}
             getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             animalFieldRefs={animalFieldRefs}
             animalForm={animalForm}
             animalFormErrors={animalFormErrors}
             animalFormPanelRef={animalFormPanelRef}
+            animalMovements={animalMovements}
             animalLedgerRows={animalLedgerRows}
             animalLedgerSummary={animalLedgerSummary}
             animalSearchTerm={animalSearchTerm}
@@ -2377,6 +2401,19 @@ export function AgroHomePage() {
                         <span className="data-badge warning">Sin existencias visibles</span>
                       ) : null}
                     </div>
+                    {item.specialMovementRows.length > 0 ? (
+                      <div className="report-note-list">
+                        {item.specialMovementRows.map((movement) => (
+                          <div key={movement.id} className="report-note-row">
+                            <strong>
+                              {formatShortDate(movement.date)} | {movement.kind === "shortage" ? "Faltante" : "Traslado"} x{" "}
+                              {movement.quantity} | {movement.categoryLabel}
+                            </strong>
+                            <span>{movement.detail ?? "-"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </article>
                 ))}
               </div>

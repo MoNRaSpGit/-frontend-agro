@@ -1,4 +1,4 @@
-import { AccountingEntryType, MoneyCurrency } from "./agro.types";
+import { AccountingEntryType, AnimalMovementRecord, FieldUnit, MoneyCurrency } from "./agro.types";
 
 export const incomeConceptLabels = {
   venta_vacunos: "Venta de vacunos",
@@ -84,6 +84,10 @@ export function formatYearMonth(value: string) {
   return `${monthLabel} ${year}`;
 }
 
+export function formatCategoryLabel(label: string) {
+  return label.replace(/^\d+\)\s*/, "").trim();
+}
+
 export function getNetAmount(
   type: AccountingEntryType,
   grossAmount: number,
@@ -95,4 +99,34 @@ export function getNetAmount(
   }
 
   return grossAmount + commissionAmount + taxAmount;
+}
+
+export function describeAnimalMovementDetail(
+  movement: AnimalMovementRecord,
+  animalMovements: AnimalMovementRecord[],
+  fields: FieldUnit[]
+) {
+  if (movement.kind === "shortage") {
+    return movement.notes.trim() || null;
+  }
+
+  if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
+    const sourceMovement =
+      movement.kind === "transfer_out"
+        ? movement
+        : animalMovements.find((item) => item.id === movement.pairedTransferMovementId) ?? movement;
+    const destinationMovement =
+      movement.kind === "transfer_in"
+        ? movement
+        : animalMovements.find((item) => item.id === movement.pairedTransferMovementId) ?? movement;
+    const sourceField = fields.find((field) => field.id === sourceMovement.fieldId)?.name ?? "campo origen";
+    const destinationField = fields.find((field) => field.id === destinationMovement.fieldId)?.name ?? "campo destino";
+    const notes = movement.notes.trim();
+
+    return notes
+      ? `Del campo ${sourceField} al campo ${destinationField}. ${notes}`
+      : `Del campo ${sourceField} al campo ${destinationField}.`;
+  }
+
+  return null;
 }

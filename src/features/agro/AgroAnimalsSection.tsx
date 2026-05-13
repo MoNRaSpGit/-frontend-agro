@@ -1,10 +1,9 @@
 import { animalMovementFormKinds, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
-import { formatMoney, formatNumber, formatShortDate } from "./agro.home.shared";
-import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, FieldUnit, MoneyCurrency } from "./agro.types";
+import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate } from "./agro.home.shared";
+import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, MoneyCurrency } from "./agro.types";
 
 interface AgroAnimalsSectionProps {
   establishments: Establishment[];
-  fields: FieldUnit[];
   getFieldIdForEstablishment: (establishmentId: string) => string;
   animalFieldRefs: React.MutableRefObject<Record<string, HTMLInputElement | HTMLSelectElement | null>>;
   animalForm: {
@@ -28,6 +27,7 @@ interface AgroAnimalsSectionProps {
   };
   animalFormErrors: Record<string, string>;
   animalFormPanelRef: React.RefObject<HTMLElement | null>;
+  animalMovements: AnimalMovementRecord[];
   animalLedgerRows: AnimalMovementRecord[];
   animalLedgerSummary: {
     purchases: number;
@@ -81,11 +81,11 @@ interface AgroAnimalsSectionProps {
 
 export function AgroAnimalsSection({
   establishments,
-  fields,
   getFieldIdForEstablishment,
   animalForm,
   animalFormErrors,
   animalFormPanelRef,
+  animalMovements,
   animalLedgerRows,
   animalLedgerSummary,
   animalSearchTerm,
@@ -110,6 +110,33 @@ export function AgroAnimalsSection({
   showAnimalFloatingScrollbar,
   onEditMovement
 }: AgroAnimalsSectionProps) {
+  function getMovementLabel(movement: AnimalMovementRecord) {
+    if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
+      return "Traslado";
+    }
+
+    return movementKindLabels[movement.kind as keyof typeof movementKindLabels];
+  }
+
+  function getMovementDestinationLabel(movement: AnimalMovementRecord) {
+    if (movement.kind === "transfer_out" || movement.kind === "transfer_in") {
+      const pairedMovement = movement.pairedTransferMovementId
+        ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
+        : undefined;
+      const pairedEstablishmentName = pairedMovement
+        ? establishments.find((item) => item.id === pairedMovement.establishmentId)?.name
+        : undefined;
+
+      if (!pairedEstablishmentName) {
+        return "-";
+      }
+
+      return pairedEstablishmentName;
+    }
+
+    return "-";
+  }
+
   return (
     <section className="content-grid">
       <article ref={animalFormPanelRef} className="panel">
@@ -438,6 +465,8 @@ export function AgroAnimalsSection({
                 <th className="cell-date">Fecha</th>
                 <th className="cell-field">Establecimiento</th>
                 <th className="cell-kind">Movimiento</th>
+                <th className="cell-detail">Campo destino</th>
+                <th className="cell-description">Descripcion</th>
                 <th className="cell-number">Cantidad</th>
                 <th className="cell-category">Categoria</th>
                 <th className="cell-tag">Caravana</th>
@@ -453,15 +482,18 @@ export function AgroAnimalsSection({
             </thead>
             <tbody>
               {animalLedgerRows.map((movement) => {
-                const field = fields.find((item) => item.id === movement.fieldId);
+                const establishment = establishments.find((item) => item.id === movement.establishmentId);
                 const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+                const movementDestinationLabel = getMovementDestinationLabel(movement);
                 return (
                   <tr key={movement.id}>
                     <td className="cell-date">{formatShortDate(movement.date)}</td>
-                    <td className="cell-field">{field?.name ?? "-"}</td>
-                    <td className="cell-kind">{movementKindLabels[movement.kind as keyof typeof movementKindLabels]}</td>
+                    <td className="cell-field">{establishment?.name ?? "-"}</td>
+                    <td className="cell-kind">{getMovementLabel(movement)}</td>
+                    <td className="cell-detail">{movementDestinationLabel}</td>
+                    <td className="cell-description">{movement.notes.trim() || "-"}</td>
                     <td className="cell-number">{movement.quantity}</td>
-                    <td className="cell-category">{category?.label ?? movement.categoryCode}</td>
+                    <td className="cell-category">{category ? formatCategoryLabel(category.label) : movement.categoryCode}</td>
                     <td className="cell-tag">{movement.earTag ?? "-"}</td>
                     <td className="cell-number">{formatNumber(movement.weightKg)}</td>
                     <td className="cell-money">

@@ -21,6 +21,14 @@ export function AgroOverviewSection({
   latestAccountingEntries,
   latestAnimalMovements
 }: AgroOverviewSectionProps) {
+  function getMovementLabel(movement: AnimalMovementRecord) {
+    if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
+      return "Traslado";
+    }
+
+    return movementKindLabels[movement.kind];
+  }
+
   function getMovementDirection(movement: AnimalMovementRecord) {
     return movement.kind === "adjustment" && movement.notes.startsWith("Carga inicial:")
       ? "entry"
@@ -71,7 +79,7 @@ export function AgroOverviewSection({
           {latestAnimalMovements.map((movement) => (
             <div key={movement.id} className="list-row">
               <div>
-                <strong>{movementKindLabels[movement.kind]}</strong>
+                <strong>{getMovementLabel(movement)}</strong>
                 <span>
                   {movement.date} | {speciesLabels[movement.species]}
                   {movement.kind === "death" && movement.species === "vacunos" && movement.earTag

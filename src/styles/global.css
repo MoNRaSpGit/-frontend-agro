@@ -687,6 +687,31 @@ th {
   min-width: 110px;
 }
 
+.animal-ledger-table .cell-detail {
+  min-width: 180px;
+  line-height: 1.4;
+}
+
+.animal-ledger-table .cell-description {
+  min-width: 180px;
+  line-height: 1.4;
+}
+
+.movement-detail-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.movement-detail-cell strong {
+  font-size: 0.95rem;
+}
+
+.movement-detail-text {
+  color: #3a4738;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 .animal-ledger-table .cell-category {
   min-width: 240px;
   line-height: 1.35;
@@ -829,6 +854,32 @@ th {
 .report-row-head span,
 .income-bar-head span {
   color: #3a4738;
+}
+
+.report-note-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.report-note-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 252, 245, 0.72);
+  border: 1px solid rgba(60, 77, 49, 0.08);
+}
+
+.report-note-row strong {
+  color: #243120;
+  font-size: 0.92rem;
+}
+
+.report-note-row span {
+  color: #3a4738;
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .mini-stats {
