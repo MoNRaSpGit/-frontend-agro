@@ -1049,10 +1049,6 @@ th {
     justify-content: stretch;
   }
 
-  .summary-grid {
-    display: none;
-  }
-
   .establishment-picker {
     min-width: 0;
     width: 100%;

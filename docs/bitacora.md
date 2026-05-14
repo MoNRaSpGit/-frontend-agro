@@ -235,7 +235,12 @@ En este corte se alineo la UI para que el selector superior marque el contexto o
 
 - se corrigio el layout para que las planillas con scroll horizontal no estiren los formularios en celular
 - los paneles y formularios ahora pueden encogerse normal aunque la tabla siga teniendo ancho propio
-- en mobile tambien se ocultan las cuatro metricas grandes superiores para evitar ruido visual
+
+## Ajuste posterior sobre mobile
+
+- se mantuvo la correccion de ancho de formularios en celular
+- las cuatro metricas grandes superiores volvieron a quedar visibles en mobile
+- no se sostuvo el cambio de ocultarlas
 
 ## Validacion ejecutada en este corte
 
@@ -249,3 +254,12 @@ En este corte se alineo la UI para que el selector superior marque el contexto o
 ## Estado del corte
 
 - listo para `push` y `deploy`
+
+## PF final del ajuste posterior
+
+- `lint`: OK
+- `typecheck`: OK
+- `test`: OK
+- `test:smoke`: OK
+- `test:functional`: OK
+- `build`: OK
