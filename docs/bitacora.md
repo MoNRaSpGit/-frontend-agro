@@ -207,3 +207,45 @@ Ahora la direccion de producto pasa a ser:
 - al guardar:
   - baja stock en origen
   - sube stock en destino
+
+## Corte siguiente ya aplicado
+
+En este corte se alineo la UI para que el selector superior marque el contexto operativo real del modulo:
+
+1. `Campo visible como verdad unica`
+
+- el selector superior de `campo`, `ano` y `mes` vuelve a ser la referencia principal
+- cuando el usuario cambia ese `campo visible`:
+  - `Animales`
+  - `Contabilidad`
+  - `Lluvia`
+  - `Sanidad`
+  - `Resumen`
+
+  pasan a trabajar sobre ese mismo establecimiento
+
+2. `Formularios sin duplicar origen`
+
+- en `Animales` ya no se elige otra vez el establecimiento de origen
+- en `Traslado` el origen queda tomado del selector superior
+- el formulario solo pide `campo destino`
+- en `Contabilidad`, `Lluvia` y `Sanidad` el establecimiento activo queda visible como lectura, sin selector duplicado
+
+3. `Ajuste mobile de ancho`
+
+- se corrigio el layout para que las planillas con scroll horizontal no estiren los formularios en celular
+- los paneles y formularios ahora pueden encogerse normal aunque la tabla siga teniendo ancho propio
+- en mobile tambien se ocultan las cuatro metricas grandes superiores para evitar ruido visual
+
+## Validacion ejecutada en este corte
+
+- `lint`: OK
+- `typecheck`: OK
+- `test`: OK
+- `test:smoke`: OK
+- `test:functional`: OK
+- `build`: OK
+
+## Estado del corte
+
+- listo para `push` y `deploy`

@@ -37,7 +37,7 @@ export function AgroToolbar({
   return (
     <section className="toolbar">
       <label className="establishment-picker">
-        <span>Establecimiento visible</span>
+        <span>Campo visible</span>
         <select value={selectedEstablishmentId} onChange={(event) => onEstablishmentChange(event.target.value)}>
           {establishments.map((item) => (
             <option key={item.id} value={item.id}>
@@ -47,7 +47,7 @@ export function AgroToolbar({
         </select>
       </label>
       <label className="period-picker">
-        <span>Año</span>
+        <span>Ano</span>
         <select value={selectedYear} onChange={(event) => onYearChange(event.target.value)}>
           <option value="all">Todos</option>
           {availableYears.map((year) => (

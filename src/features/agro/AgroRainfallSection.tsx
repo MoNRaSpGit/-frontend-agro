@@ -4,7 +4,6 @@ import { Establishment, FieldUnit } from "./agro.types";
 interface AgroRainfallSectionProps {
   establishments: Establishment[];
   fields: FieldUnit[];
-  getFieldIdForEstablishment: (establishmentId: string) => string;
   editingRainfallRecordId: string | null;
   rainfallForm: {
     date: string;
@@ -40,7 +39,6 @@ interface AgroRainfallSectionProps {
 export function AgroRainfallSection({
   establishments,
   fields,
-  getFieldIdForEstablishment,
   editingRainfallRecordId,
   rainfallForm,
   rainfallRows,
@@ -52,6 +50,8 @@ export function AgroRainfallSection({
   onEditRainfallRecord,
   onSubmit
 }: AgroRainfallSectionProps) {
+  const selectedEstablishment = establishments.find((item) => item.id === rainfallForm.establishmentId);
+
   return (
     <section className="content-grid">
       <article className="panel">
@@ -71,24 +71,8 @@ export function AgroRainfallSection({
             />
           </label>
           <label className="span-2">
-            <span>Establecimiento</span>
-            <select
-              value={rainfallForm.establishmentId}
-              onChange={(event) => {
-                const nextEstablishmentId = event.target.value;
-                setRainfallForm((current) => ({
-                  ...current,
-                  establishmentId: nextEstablishmentId,
-                  fieldId: getFieldIdForEstablishment(nextEstablishmentId)
-                }));
-              }}
-            >
-              {establishments.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <span>Campo activo</span>
+            <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
           </label>
           <label>
             <span>Milimetros</span>

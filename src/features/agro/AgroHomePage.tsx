@@ -481,6 +481,44 @@ export function AgroHomePage() {
     }));
   }, [establishments, fields, selectedEstablishmentId]);
 
+  useEffect(() => {
+    if (!selectedEstablishmentId) {
+      return;
+    }
+
+    const selectedFieldId = getFieldIdForEstablishmentFrom(fields, selectedEstablishmentId);
+    const defaultTransferDestinationId =
+      establishments.find((item) => item.id !== selectedEstablishmentId)?.id ?? selectedEstablishmentId;
+
+    setSetupEstablishmentId((current) => (current === selectedEstablishmentId ? current : selectedEstablishmentId));
+    setAnimalForm((current) => ({
+      ...current,
+      establishmentId: selectedEstablishmentId,
+      fieldId: selectedFieldId,
+      transferDestinationEstablishmentId:
+        current.kind === "transfer"
+          ? current.transferDestinationEstablishmentId && current.transferDestinationEstablishmentId !== selectedEstablishmentId
+            ? current.transferDestinationEstablishmentId
+            : defaultTransferDestinationId
+          : current.transferDestinationEstablishmentId
+    }));
+    setAccountingForm((current) => ({
+      ...current,
+      establishmentId: selectedEstablishmentId,
+      fieldId: selectedFieldId
+    }));
+    setRainfallForm((current) => ({
+      ...current,
+      establishmentId: selectedEstablishmentId,
+      fieldId: selectedFieldId
+    }));
+    setSanitaryForm((current) => ({
+      ...current,
+      establishmentId: selectedEstablishmentId,
+      fieldId: selectedFieldId
+    }));
+  }, [establishments, fields, selectedEstablishmentId]);
+
   const availableYears = useMemo(() => {
     const years = new Set<string>();
     animalMovements.forEach((movement) => years.add(movement.date.slice(0, 4)));
@@ -2202,7 +2240,6 @@ export function AgroHomePage() {
         {activeView === "animals" ? (
           <AgroAnimalsSection
             establishments={establishments}
-            getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             animalFieldRefs={animalFieldRefs}
             animalForm={animalForm}
             animalFormErrors={animalFormErrors}
@@ -2238,7 +2275,6 @@ export function AgroHomePage() {
           <AgroAccountingSection
             establishments={establishments}
             fields={fields}
-            getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             accountingStatusFilter={accountingStatusFilter}
             accountingFormPanelRef={accountingFormPanelRef}
             accountingForm={accountingForm}
@@ -2269,7 +2305,6 @@ export function AgroHomePage() {
           <AgroRainfallSection
             establishments={establishments}
             fields={fields}
-            getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             editingRainfallRecordId={editingRainfallRecordId}
             rainfallForm={rainfallForm}
             rainfallRows={rainfallRows}
@@ -2287,7 +2322,6 @@ export function AgroHomePage() {
           <AgroSanitySection
             establishments={establishments}
             fields={fields}
-            getFieldIdForEstablishment={(establishmentId) => getFieldIdForEstablishmentFrom(fields, establishmentId)}
             editingSanitaryRecordId={editingSanitaryRecordId}
             sanitaryForm={sanitaryForm}
             sanitaryRows={sanitaryRows}

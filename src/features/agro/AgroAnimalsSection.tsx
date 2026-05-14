@@ -4,7 +4,6 @@ import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, M
 
 interface AgroAnimalsSectionProps {
   establishments: Establishment[];
-  getFieldIdForEstablishment: (establishmentId: string) => string;
   animalFieldRefs: React.MutableRefObject<Record<string, HTMLInputElement | HTMLSelectElement | null>>;
   animalForm: {
     date: string;
@@ -81,7 +80,6 @@ interface AgroAnimalsSectionProps {
 
 export function AgroAnimalsSection({
   establishments,
-  getFieldIdForEstablishment,
   animalForm,
   animalFormErrors,
   animalFormPanelRef,
@@ -110,6 +108,8 @@ export function AgroAnimalsSection({
   showAnimalFloatingScrollbar,
   onEditMovement
 }: AgroAnimalsSectionProps) {
+  const selectedEstablishment = establishments.find((item) => item.id === animalForm.establishmentId);
+
   function getMovementLabel(movement: AnimalMovementRecord) {
     if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
       return "Traslado";
@@ -159,28 +159,9 @@ export function AgroAnimalsSection({
               }}
             />
           </label>
-          <label className={animalFormErrors.establishmentId ? "field-error" : undefined}>
-            <span>Establecimiento</span>
-            <select
-              ref={registerAnimalFieldRef("establishmentId")}
-              value={animalForm.establishmentId}
-              onChange={(event) => {
-                clearAnimalFieldError("establishmentId");
-                const nextEstablishmentId = event.target.value;
-                const nextFieldId = getFieldIdForEstablishment(nextEstablishmentId);
-                setAnimalForm((current) => ({
-                  ...current,
-                  establishmentId: nextEstablishmentId,
-                  fieldId: nextFieldId
-                }));
-              }}
-            >
-              {establishments.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+          <label>
+            <span>Campo origen</span>
+            <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
           </label>
           <label className={animalFormErrors.kind ? "field-error" : undefined}>
             <span>Movimiento</span>

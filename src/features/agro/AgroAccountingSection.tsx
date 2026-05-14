@@ -15,7 +15,6 @@ import {
 interface AgroAccountingSectionProps {
   establishments: Establishment[];
   fields: FieldUnit[];
-  getFieldIdForEstablishment: (establishmentId: string) => string;
   accountingStatusFilter: "all" | "pending" | "partial" | "collected";
   accountingFormPanelRef: React.RefObject<HTMLElement | null>;
   accountingForm: {
@@ -94,7 +93,6 @@ interface AgroAccountingSectionProps {
 export function AgroAccountingSection({
   establishments,
   fields,
-  getFieldIdForEstablishment,
   accountingStatusFilter,
   accountingFormPanelRef,
   accountingForm,
@@ -119,6 +117,7 @@ export function AgroAccountingSection({
   onSubmit,
   onSubmitExchangeRate
 }: AgroAccountingSectionProps) {
+  const selectedEstablishment = establishments.find((item) => item.id === accountingForm.establishmentId);
   const accountingTableWrapRef = useRef<HTMLDivElement | null>(null);
   const accountingTableRef = useRef<HTMLTableElement | null>(null);
   const accountingTableScrollbarRef = useRef<HTMLDivElement | null>(null);
@@ -245,24 +244,8 @@ export function AgroAccountingSection({
             />
           </label>
           <label>
-            <span>Establecimiento</span>
-            <select
-              value={accountingForm.establishmentId}
-              onChange={(event) => {
-                const nextEstablishmentId = event.target.value;
-                setAccountingForm((current) => ({
-                  ...current,
-                  establishmentId: nextEstablishmentId,
-                  fieldId: getFieldIdForEstablishment(nextEstablishmentId)
-                }));
-              }}
-            >
-              {establishments.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <span>Campo activo</span>
+            <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
           </label>
           <label>
             <span>Tipo</span>

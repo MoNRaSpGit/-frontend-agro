@@ -4,7 +4,6 @@ import { Establishment, FieldUnit } from "./agro.types";
 interface AgroSanitySectionProps {
   establishments: Establishment[];
   fields: FieldUnit[];
-  getFieldIdForEstablishment: (establishmentId: string) => string;
   editingSanitaryRecordId: string | null;
   sanitaryForm: {
     date: string;
@@ -44,7 +43,6 @@ interface AgroSanitySectionProps {
 export function AgroSanitySection({
   establishments,
   fields,
-  getFieldIdForEstablishment,
   editingSanitaryRecordId,
   sanitaryForm,
   sanitaryRows,
@@ -56,6 +54,8 @@ export function AgroSanitySection({
   onEditSanitaryRecord,
   onSubmit
 }: AgroSanitySectionProps) {
+  const selectedEstablishment = establishments.find((item) => item.id === sanitaryForm.establishmentId);
+
   return (
     <section className="content-grid">
       <article className="panel">
@@ -75,24 +75,8 @@ export function AgroSanitySection({
             />
           </label>
           <label className="span-2">
-            <span>Establecimiento</span>
-            <select
-              value={sanitaryForm.establishmentId}
-              onChange={(event) => {
-                const nextEstablishmentId = event.target.value;
-                setSanitaryForm((current) => ({
-                  ...current,
-                  establishmentId: nextEstablishmentId,
-                  fieldId: getFieldIdForEstablishment(nextEstablishmentId)
-                }));
-              }}
-            >
-              {establishments.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <span>Campo activo</span>
+            <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
           </label>
           <label>
             <span>Cantidad de animales</span>
