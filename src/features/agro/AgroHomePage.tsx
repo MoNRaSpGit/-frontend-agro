@@ -20,6 +20,7 @@ import {
   getNetAmount,
   getTodayDate,
   getYearMonth,
+  isLivestockPurchaseEntry,
   incomeConceptLabels
 } from "./agro.home.shared";
 import { agroWorkspaceSections } from "./agro.workspace.config";
@@ -165,6 +166,35 @@ function getFieldIdForEstablishmentFrom(fields: FieldUnit[], establishmentId: st
 
 function isTransferMovementKind(kind: AnimalMovementKind) {
   return kind === "transfer" || kind === "transfer_in" || kind === "transfer_out";
+}
+
+function summarizeExpenses(entries: AccountingEntry[], exchangeRateByMonth: Record<string, number>) {
+  return entries.reduce(
+    (summary, entry) => {
+      if (entry.type !== "expense") {
+        return summary;
+      }
+
+      const expenseGroup = isLivestockPurchaseEntry(entry) ? "livestockPurchase" : "operational";
+      const currencyGroup = entry.currency === "USD" ? "usd" : "uyu";
+
+      if (currencyGroup === "usd") {
+        summary[expenseGroup].usd += entry.netAmount;
+      } else {
+        summary[expenseGroup].uyu += entry.netAmount;
+        const exchangeRate = exchangeRateByMonth[getYearMonth(entry.date)];
+        if (exchangeRate) {
+          summary[expenseGroup].uyuDollarized += entry.netAmount / exchangeRate;
+        }
+      }
+
+      return summary;
+    },
+    {
+      livestockPurchase: { usd: 0, uyu: 0, uyuDollarized: 0 },
+      operational: { usd: 0, uyu: 0, uyuDollarized: 0 }
+    }
+  );
 }
 
 export function AgroHomePage() {
@@ -566,7 +596,7 @@ export function AgroHomePage() {
     return balanceMap;
   }, [animalMovements, selectedMonth, selectedYear]);
 
-  const stockBySpecies = useMemo(() => {
+  const globalStockBySpecies = useMemo(() => {
     const speciesTotals: Record<AgroSpecies, number> = {
       vacunos: 0,
       ovinos: 0,
@@ -581,19 +611,51 @@ export function AgroHomePage() {
     return speciesTotals;
   }, [stockBalanceMap]);
 
-  const accountingTotals = useMemo(() => {
-    return accountingEntries.reduce(
-      (summary, entry) => {
-        const bucket = entry.type === "income" ? "income" : "expense";
-        summary[entry.currency][bucket] += entry.netAmount;
-        return summary;
-      },
-      {
-        USD: { income: 0, expense: 0 },
-        UYU: { income: 0, expense: 0 }
-      }
+  const stockBySpecies = useMemo(() => {
+    const selectedFieldIds = new Set(
+      fields.filter((field) => field.establishmentId === selectedEstablishmentId).map((field) => field.id)
     );
-  }, [accountingEntries]);
+    const speciesTotals: Record<AgroSpecies, number> = {
+      vacunos: 0,
+      ovinos: 0,
+      equinos: 0
+    };
+
+    for (const [key, quantity] of stockBalanceMap.entries()) {
+      const [fieldId, species] = key.split(":") as [string, AgroSpecies, string];
+      if (!selectedFieldIds.has(fieldId)) {
+        continue;
+      }
+      speciesTotals[species] += quantity;
+    }
+
+    return speciesTotals;
+  }, [fields, selectedEstablishmentId, stockBalanceMap]);
+
+  const accountingTotals = useMemo(() => {
+    return accountingEntries
+      .filter((entry) => entry.establishmentId === selectedEstablishmentId)
+      .reduce(
+        (summary, entry) => {
+          if (entry.type === "income") {
+            summary[entry.currency].income += entry.netAmount;
+            return summary;
+          }
+
+          if (isLivestockPurchaseEntry(entry)) {
+            summary[entry.currency].livestockPurchaseExpense += entry.netAmount;
+          } else {
+            summary[entry.currency].operationalExpense += entry.netAmount;
+          }
+
+          return summary;
+        },
+        {
+          USD: { income: 0, livestockPurchaseExpense: 0, operationalExpense: 0 },
+          UYU: { income: 0, livestockPurchaseExpense: 0, operationalExpense: 0 }
+        }
+      );
+  }, [accountingEntries, selectedEstablishmentId]);
 
   const exchangeRateByMonth = useMemo(() => {
     return monthlyExchangeRates.reduce<Record<string, number>>((accumulator, item) => {
@@ -603,12 +665,18 @@ export function AgroHomePage() {
   }, [monthlyExchangeRates]);
 
   const latestAnimalMovements = useMemo(() => {
-    return [...animalMovements].sort((left, right) => right.date.localeCompare(left.date)).slice(0, 6);
-  }, [animalMovements]);
+    return [...animalMovements]
+      .filter((movement) => movement.establishmentId === selectedEstablishmentId)
+      .sort((left, right) => right.date.localeCompare(left.date))
+      .slice(0, 6);
+  }, [animalMovements, selectedEstablishmentId]);
 
   const latestAccountingEntries = useMemo(() => {
-    return [...accountingEntries].sort((left, right) => right.date.localeCompare(left.date)).slice(0, 6);
-  }, [accountingEntries]);
+    return [...accountingEntries]
+      .filter((entry) => entry.establishmentId === selectedEstablishmentId)
+      .sort((left, right) => right.date.localeCompare(left.date))
+      .slice(0, 6);
+  }, [accountingEntries, selectedEstablishmentId]);
 
   const animalLedgerRows = useMemo(() => {
     return [...animalMovements]
@@ -833,6 +901,7 @@ export function AgroHomePage() {
 
         return true;
       });
+      const expenseSummary = summarizeExpenses(accountingRows, exchangeRateByMonth);
       const rainfallTotal = rainfallRecords
         .filter((record) => {
           if (record.fieldId !== field.id) {
@@ -898,18 +967,15 @@ export function AgroHomePage() {
         pendingIncomeUsd: accountingRows
           .filter((entry) => entry.type === "income" && entry.currency === "USD")
           .reduce((sum, entry) => sum + getIncomePendingAmount(entry), 0),
-        expenseUsd: accountingRows
-          .filter((entry) => entry.type === "expense" && entry.currency === "USD")
-          .reduce((sum, entry) => sum + entry.netAmount, 0),
-        expenseUyu: accountingRows
-          .filter((entry) => entry.type === "expense" && entry.currency === "UYU")
-          .reduce((sum, entry) => sum + entry.netAmount, 0),
-        expenseUyuDollarized: accountingRows
-          .filter((entry) => entry.type === "expense" && entry.currency === "UYU")
-          .reduce((sum, entry) => {
-            const exchangeRate = exchangeRateByMonth[getYearMonth(entry.date)];
-            return exchangeRate ? sum + entry.netAmount / exchangeRate : sum;
-          }, 0),
+        livestockPurchaseExpenseUsd: expenseSummary.livestockPurchase.usd,
+        livestockPurchaseExpenseUyu: expenseSummary.livestockPurchase.uyu,
+        livestockPurchaseExpenseUyuDollarized: expenseSummary.livestockPurchase.uyuDollarized,
+        totalLivestockPurchaseExpenseUsdEquivalent:
+          expenseSummary.livestockPurchase.usd + expenseSummary.livestockPurchase.uyuDollarized,
+        operationalExpenseUsd: expenseSummary.operational.usd,
+        operationalExpenseUyu: expenseSummary.operational.uyu,
+        operationalExpenseUyuDollarized: expenseSummary.operational.uyuDollarized,
+        totalOperationalExpenseUsdEquivalent: expenseSummary.operational.usd + expenseSummary.operational.uyuDollarized,
         rainfallTotal,
         adjustments: movementRows
           .filter((movement) => movement.kind === "adjustment")
@@ -958,29 +1024,13 @@ export function AgroHomePage() {
   ]);
 
   const periodSummary = useMemo(() => {
-    const expenseUsd = accountingEntries
-      .filter(
-        (entry) =>
-          selectedFieldIds.includes(entry.fieldId) &&
-          (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
-          (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth) &&
-          entry.type === "expense" &&
-          entry.currency === "USD"
-      )
-      .reduce((sum, entry) => sum + entry.netAmount, 0);
-    const expenseUyuDollarized = accountingEntries
-      .filter(
-        (entry) =>
-          selectedFieldIds.includes(entry.fieldId) &&
-          (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
-          (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth) &&
-          entry.type === "expense" &&
-          entry.currency === "UYU"
-      )
-      .reduce((sum, entry) => {
-        const exchangeRate = exchangeRateByMonth[getYearMonth(entry.date)];
-        return exchangeRate ? sum + entry.netAmount / exchangeRate : sum;
-      }, 0);
+    const filteredAccountingEntries = accountingEntries.filter(
+      (entry) =>
+        selectedFieldIds.includes(entry.fieldId) &&
+        (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
+        (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth)
+    );
+    const expenseSummary = summarizeExpenses(filteredAccountingEntries, exchangeRateByMonth);
 
     return {
       entries: animalMovements
@@ -1021,44 +1071,88 @@ export function AgroHomePage() {
             entry.currency === "USD"
         )
         .reduce((sum, entry) => sum + getIncomePendingAmount(entry), 0),
-      expenseUsd,
-      expenseUyu: accountingEntries
-        .filter(
-          (entry) =>
-            selectedFieldIds.includes(entry.fieldId) &&
-            (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
-            (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth) &&
-            entry.type === "expense" &&
-            entry.currency === "UYU"
-        )
-        .reduce((sum, entry) => sum + entry.netAmount, 0),
-      expenseUyuDollarized,
-      totalExpenseUsdEquivalent: expenseUsd + expenseUyuDollarized
+      livestockPurchaseExpenseUsd: expenseSummary.livestockPurchase.usd,
+      livestockPurchaseExpenseUyu: expenseSummary.livestockPurchase.uyu,
+      livestockPurchaseExpenseUyuDollarized: expenseSummary.livestockPurchase.uyuDollarized,
+      totalLivestockPurchaseExpenseUsdEquivalent:
+        expenseSummary.livestockPurchase.usd + expenseSummary.livestockPurchase.uyuDollarized,
+      operationalExpenseUsd: expenseSummary.operational.usd,
+      operationalExpenseUyu: expenseSummary.operational.uyu,
+      operationalExpenseUyuDollarized: expenseSummary.operational.uyuDollarized,
+      totalOperationalExpenseUsdEquivalent: expenseSummary.operational.usd + expenseSummary.operational.uyuDollarized
     };
   }, [accountingEntries, animalMovements, exchangeRateByMonth, selectedFieldIds, selectedMonth, selectedYear]);
 
+  const globalPeriodSummary = useMemo(() => {
+    const filteredAccountingEntries = accountingEntries.filter(
+      (entry) =>
+        selectedYear === "all" || entry.date.startsWith(selectedYear)
+    ).filter((entry) => selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth);
+    const expenseSummary = summarizeExpenses(filteredAccountingEntries, exchangeRateByMonth);
+
+    return {
+      establishmentCount: establishments.length,
+      fieldCount: fields.length,
+      entries: animalMovements
+        .filter(
+          (movement) =>
+            (selectedYear === "all" || movement.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || movement.date.slice(5, 7) === selectedMonth) &&
+            getMovementDirection(movement) === "entry"
+        )
+        .reduce((sum, movement) => sum + movement.quantity, 0),
+      exits: animalMovements
+        .filter(
+          (movement) =>
+            (selectedYear === "all" || movement.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || movement.date.slice(5, 7) === selectedMonth) &&
+            getMovementDirection(movement) === "exit"
+        )
+        .reduce((sum, movement) => sum + movement.quantity, 0),
+      incomeUsd: accountingEntries
+        .filter(
+          (entry) =>
+            (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth) &&
+            entry.type === "income" &&
+            entry.currency === "USD"
+        )
+        .reduce((sum, entry) => sum + getIncomeCollectedAmount(entry), 0),
+      pendingIncomeUsd: accountingEntries
+        .filter(
+          (entry) =>
+            (selectedYear === "all" || entry.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || entry.date.slice(5, 7) === selectedMonth) &&
+            entry.type === "income" &&
+            entry.currency === "USD"
+        )
+        .reduce((sum, entry) => sum + getIncomePendingAmount(entry), 0),
+      livestockPurchaseExpenseUsd: expenseSummary.livestockPurchase.usd,
+      livestockPurchaseExpenseUyu: expenseSummary.livestockPurchase.uyu,
+      livestockPurchaseExpenseUyuDollarized: expenseSummary.livestockPurchase.uyuDollarized,
+      totalLivestockPurchaseExpenseUsdEquivalent:
+        expenseSummary.livestockPurchase.usd + expenseSummary.livestockPurchase.uyuDollarized,
+      operationalExpenseUsd: expenseSummary.operational.usd,
+      operationalExpenseUyu: expenseSummary.operational.uyu,
+      operationalExpenseUyuDollarized: expenseSummary.operational.uyuDollarized,
+      totalOperationalExpenseUsdEquivalent: expenseSummary.operational.usd + expenseSummary.operational.uyuDollarized,
+      rainfallTotal: rainfallRecords
+        .filter(
+          (record) =>
+            (selectedYear === "all" || record.date.startsWith(selectedYear)) &&
+            (selectedMonth === "all" || record.date.slice(5, 7) === selectedMonth)
+        )
+        .reduce((sum, record) => sum + record.millimeters, 0)
+    };
+  }, [accountingEntries, animalMovements, establishments.length, exchangeRateByMonth, fields.length, rainfallRecords, selectedMonth, selectedYear]);
+
   const annualSummary = useMemo(() => {
-    const expenseUsd = accountingEntries
-      .filter(
-        (entry) =>
-          selectedFieldIds.includes(entry.fieldId) &&
-          entry.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
-          entry.type === "expense" &&
-          entry.currency === "USD"
-      )
-      .reduce((sum, entry) => sum + entry.netAmount, 0);
-    const expenseUyuDollarized = accountingEntries
-      .filter(
-        (entry) =>
-          selectedFieldIds.includes(entry.fieldId) &&
-          entry.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
-          entry.type === "expense" &&
-          entry.currency === "UYU"
-      )
-      .reduce((sum, entry) => {
-        const exchangeRate = exchangeRateByMonth[getYearMonth(entry.date)];
-        return exchangeRate ? sum + entry.netAmount / exchangeRate : sum;
-      }, 0);
+    const filteredAccountingEntries = accountingEntries.filter(
+      (entry) =>
+        selectedFieldIds.includes(entry.fieldId) &&
+        entry.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear)
+    );
+    const expenseSummary = summarizeExpenses(filteredAccountingEntries, exchangeRateByMonth);
 
     return {
       entries: animalMovements
@@ -1095,18 +1189,15 @@ export function AgroHomePage() {
             entry.currency === "USD"
         )
         .reduce((sum, entry) => sum + getIncomePendingAmount(entry), 0),
-      expenseUsd,
-      expenseUyu: accountingEntries
-        .filter(
-          (entry) =>
-            selectedFieldIds.includes(entry.fieldId) &&
-            entry.date.startsWith(selectedYear === "all" ? today.slice(0, 4) : selectedYear) &&
-            entry.type === "expense" &&
-            entry.currency === "UYU"
-        )
-        .reduce((sum, entry) => sum + entry.netAmount, 0),
-      expenseUyuDollarized,
-      totalExpenseUsdEquivalent: expenseUsd + expenseUyuDollarized
+      livestockPurchaseExpenseUsd: expenseSummary.livestockPurchase.usd,
+      livestockPurchaseExpenseUyu: expenseSummary.livestockPurchase.uyu,
+      livestockPurchaseExpenseUyuDollarized: expenseSummary.livestockPurchase.uyuDollarized,
+      totalLivestockPurchaseExpenseUsdEquivalent:
+        expenseSummary.livestockPurchase.usd + expenseSummary.livestockPurchase.uyuDollarized,
+      operationalExpenseUsd: expenseSummary.operational.usd,
+      operationalExpenseUyu: expenseSummary.operational.uyu,
+      operationalExpenseUyuDollarized: expenseSummary.operational.uyuDollarized,
+      totalOperationalExpenseUsdEquivalent: expenseSummary.operational.usd + expenseSummary.operational.uyuDollarized
     };
   }, [accountingEntries, animalMovements, exchangeRateByMonth, selectedFieldIds, selectedYear, today]);
 
@@ -1187,23 +1278,22 @@ export function AgroHomePage() {
     const pendingIncomeUsd = accountingLedgerRows
       .filter((entry) => entry.type === "income" && entry.currency === "USD")
       .reduce((sum, entry) => sum + getIncomePendingAmount(entry), 0);
-    const expenseUsdDirect = accountingLedgerRows
-      .filter((entry) => entry.type === "expense" && entry.currency === "USD")
-      .reduce((sum, entry) => sum + entry.netAmount, 0);
-    const expenseUyu = accountingLedgerRows
-      .filter((entry) => entry.type === "expense" && entry.currency === "UYU")
-      .reduce((sum, entry) => sum + entry.netAmount, 0);
-    const expenseUyuDollarized = accountingLedgerWithConversions.reduce((sum, entry) => sum + (entry.usdEquivalent ?? 0), 0);
+    const expenseSummary = summarizeExpenses(accountingLedgerRows, exchangeRateByMonth);
 
     return {
       incomeUsd,
       pendingIncomeUsd,
-      expenseUsdDirect,
-      expenseUyu,
-      expenseUyuDollarized,
-      totalExpenseUsdEquivalent: expenseUsdDirect + expenseUyuDollarized
+      livestockPurchaseExpenseUsdDirect: expenseSummary.livestockPurchase.usd,
+      livestockPurchaseExpenseUyu: expenseSummary.livestockPurchase.uyu,
+      livestockPurchaseExpenseUyuDollarized: expenseSummary.livestockPurchase.uyuDollarized,
+      totalLivestockPurchaseExpenseUsdEquivalent:
+        expenseSummary.livestockPurchase.usd + expenseSummary.livestockPurchase.uyuDollarized,
+      operationalExpenseUsdDirect: expenseSummary.operational.usd,
+      operationalExpenseUyu: expenseSummary.operational.uyu,
+      operationalExpenseUyuDollarized: expenseSummary.operational.uyuDollarized,
+      totalOperationalExpenseUsdEquivalent: expenseSummary.operational.usd + expenseSummary.operational.uyuDollarized
     };
-  }, [accountingLedgerRows, accountingLedgerWithConversions]);
+  }, [accountingLedgerRows, exchangeRateByMonth]);
 
   const categoryControlRows = useMemo(() => {
     return summaryByField.flatMap((item) =>
@@ -2340,6 +2430,89 @@ export function AgroHomePage() {
             <article className="panel wide">
               <div className="panel-header">
                 <div>
+                  <h2>Resumen global</h2>
+                  <p>Sumatoria de todos los establecimientos con los filtros de periodo activos.</p>
+                </div>
+              </div>
+              <div className="list-stack">
+                <div className="list-row">
+                  <span>Establecimientos</span>
+                  <strong>{globalPeriodSummary.establishmentCount}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Campos</span>
+                  <strong>{globalPeriodSummary.fieldCount}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Total vacunos</span>
+                  <strong>{globalStockBySpecies.vacunos}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Total ovinos</span>
+                  <strong>{globalStockBySpecies.ovinos}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Total equinos</span>
+                  <strong>{globalStockBySpecies.equinos}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Entradas animales</span>
+                  <strong>{globalPeriodSummary.entries}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Salidas animales</span>
+                  <strong>{globalPeriodSummary.exits}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Ingresos cobrados</span>
+                  <strong>{formatMoney(globalPeriodSummary.incomeUsd, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Valor pendiente de cobro</span>
+                  <strong>{formatMoney(globalPeriodSummary.pendingIncomeUsd, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Compra ganado USD</span>
+                  <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUsd, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Compra ganado UYU</span>
+                  <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUyu, "UYU")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Compra ganado UYU a USD</span>
+                  <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Compra ganado total USD eq.</span>
+                  <strong>{formatMoney(globalPeriodSummary.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos USD</span>
+                  <strong>{formatMoney(globalPeriodSummary.operationalExpenseUsd, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos UYU</span>
+                  <strong>{formatMoney(globalPeriodSummary.operationalExpenseUyu, "UYU")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos UYU a USD</span>
+                  <strong>{formatMoney(globalPeriodSummary.operationalExpenseUyuDollarized, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos total USD eq.</span>
+                  <strong>{formatMoney(globalPeriodSummary.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Lluvia acumulada</span>
+                  <strong>{globalPeriodSummary.rainfallTotal} mm</strong>
+                </div>
+              </div>
+            </article>
+
+            <article className="panel wide">
+              <div className="panel-header">
+                <div>
                   <h2>Resumen por establecimiento</h2>
                   <p>Lectura corta de animales, caja y lluvia con un dato al lado de cada item.</p>
                 </div>
@@ -2397,20 +2570,36 @@ export function AgroHomePage() {
                         <strong>{formatMoney(item.pendingIncomeUsd, "USD")}</strong>
                       </div>
                       <div className="list-row">
-                        <span>Egresos USD directos</span>
-                        <strong>{formatMoney(item.expenseUsd, "USD")}</strong>
+                        <span>Compra ganado USD</span>
+                        <strong>{formatMoney(item.livestockPurchaseExpenseUsd, "USD")}</strong>
                       </div>
                       <div className="list-row">
-                        <span>Egresos UYU</span>
-                        <strong>{formatMoney(item.expenseUyu, "UYU")}</strong>
+                        <span>Compra ganado UYU</span>
+                        <strong>{formatMoney(item.livestockPurchaseExpenseUyu, "UYU")}</strong>
                       </div>
                       <div className="list-row">
-                        <span>Egresos UYU pasados a USD</span>
-                        <strong>{formatMoney(item.expenseUyuDollarized, "USD")}</strong>
+                        <span>Compra ganado UYU a USD</span>
+                        <strong>{formatMoney(item.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
                       </div>
                       <div className="list-row">
-                        <span>Egreso total equivalente USD</span>
-                        <strong>{formatMoney(item.expenseUsd + item.expenseUyuDollarized, "USD")}</strong>
+                        <span>Compra ganado total USD eq.</span>
+                        <strong>{formatMoney(item.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
+                      </div>
+                      <div className="list-row">
+                        <span>Gastos operativos USD</span>
+                        <strong>{formatMoney(item.operationalExpenseUsd, "USD")}</strong>
+                      </div>
+                      <div className="list-row">
+                        <span>Gastos operativos UYU</span>
+                        <strong>{formatMoney(item.operationalExpenseUyu, "UYU")}</strong>
+                      </div>
+                      <div className="list-row">
+                        <span>Gastos operativos UYU a USD</span>
+                        <strong>{formatMoney(item.operationalExpenseUyuDollarized, "USD")}</strong>
+                      </div>
+                      <div className="list-row">
+                        <span>Gastos operativos total USD eq.</span>
+                        <strong>{formatMoney(item.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
                       </div>
                     </div>
                     <div className="inline-metrics">
@@ -2477,20 +2666,36 @@ export function AgroHomePage() {
                   <strong>{formatMoney(periodSummary.pendingIncomeUsd, "USD")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Egresos USD directos</span>
-                  <strong>{formatMoney(periodSummary.expenseUsd, "USD")}</strong>
+                  <span>Compra ganado USD</span>
+                  <strong>{formatMoney(periodSummary.livestockPurchaseExpenseUsd, "USD")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Egresos UYU</span>
-                  <strong>{formatMoney(periodSummary.expenseUyu, "UYU")}</strong>
+                  <span>Compra ganado UYU</span>
+                  <strong>{formatMoney(periodSummary.livestockPurchaseExpenseUyu, "UYU")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Egresos UYU pasados a USD</span>
-                  <strong>{formatMoney(periodSummary.expenseUyuDollarized, "USD")}</strong>
+                  <span>Compra ganado UYU a USD</span>
+                  <strong>{formatMoney(periodSummary.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Total egresos USD equivalentes</span>
-                  <strong>{formatMoney(periodSummary.totalExpenseUsdEquivalent, "USD")}</strong>
+                  <span>Compra ganado total USD eq.</span>
+                  <strong>{formatMoney(periodSummary.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos USD</span>
+                  <strong>{formatMoney(periodSummary.operationalExpenseUsd, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos UYU</span>
+                  <strong>{formatMoney(periodSummary.operationalExpenseUyu, "UYU")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos UYU a USD</span>
+                  <strong>{formatMoney(periodSummary.operationalExpenseUyuDollarized, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos total USD eq.</span>
+                  <strong>{formatMoney(periodSummary.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
                 </div>
               </div>
             </article>
@@ -2519,20 +2724,36 @@ export function AgroHomePage() {
                   <strong>{formatMoney(annualSummary.pendingIncomeUsd, "USD")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Egresos USD directos</span>
-                  <strong>{formatMoney(annualSummary.expenseUsd, "USD")}</strong>
+                  <span>Compra ganado USD</span>
+                  <strong>{formatMoney(annualSummary.livestockPurchaseExpenseUsd, "USD")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Egresos UYU</span>
-                  <strong>{formatMoney(annualSummary.expenseUyu, "UYU")}</strong>
+                  <span>Compra ganado UYU</span>
+                  <strong>{formatMoney(annualSummary.livestockPurchaseExpenseUyu, "UYU")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Egresos UYU pasados a USD</span>
-                  <strong>{formatMoney(annualSummary.expenseUyuDollarized, "USD")}</strong>
+                  <span>Compra ganado UYU a USD</span>
+                  <strong>{formatMoney(annualSummary.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
                 </div>
                 <div className="list-row">
-                  <span>Total egresos USD equivalentes</span>
-                  <strong>{formatMoney(annualSummary.totalExpenseUsdEquivalent, "USD")}</strong>
+                  <span>Compra ganado total USD eq.</span>
+                  <strong>{formatMoney(annualSummary.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos USD</span>
+                  <strong>{formatMoney(annualSummary.operationalExpenseUsd, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos UYU</span>
+                  <strong>{formatMoney(annualSummary.operationalExpenseUyu, "UYU")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos UYU a USD</span>
+                  <strong>{formatMoney(annualSummary.operationalExpenseUyuDollarized, "USD")}</strong>
+                </div>
+                <div className="list-row">
+                  <span>Gastos operativos total USD eq.</span>
+                  <strong>{formatMoney(annualSummary.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
                 </div>
               </div>
             </article>

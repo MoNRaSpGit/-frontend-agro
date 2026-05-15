@@ -8,9 +8,12 @@ import "./styles/global.css";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
-      // Installability should not block app boot if registration fails.
-    });
+    navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js`)
+      .then((registration) => registration.update())
+      .catch(() => {
+        // Installability should not block app boot if registration fails.
+      });
   });
 }
 

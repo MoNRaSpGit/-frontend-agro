@@ -52,10 +52,14 @@ interface AgroAccountingSectionProps {
   accountingCollectionSummary: {
     incomeUsd: number;
     pendingIncomeUsd: number;
-    expenseUsdDirect: number;
-    expenseUyu: number;
-    expenseUyuDollarized: number;
-    totalExpenseUsdEquivalent: number;
+    livestockPurchaseExpenseUsdDirect: number;
+    livestockPurchaseExpenseUyu: number;
+    livestockPurchaseExpenseUyuDollarized: number;
+    totalLivestockPurchaseExpenseUsdEquivalent: number;
+    operationalExpenseUsdDirect: number;
+    operationalExpenseUyu: number;
+    operationalExpenseUyuDollarized: number;
+    totalOperationalExpenseUsdEquivalent: number;
   };
   requestDeleteAccountingEntry: (entryId: string) => void;
   resetExchangeRateForm: () => void;
@@ -120,10 +124,6 @@ export function AgroAccountingSection({
   const selectedEstablishment = establishments.find((item) => item.id === accountingForm.establishmentId);
   const accountingTableWrapRef = useRef<HTMLDivElement | null>(null);
   const accountingTableRef = useRef<HTMLTableElement | null>(null);
-  const accountingTableScrollbarRef = useRef<HTMLDivElement | null>(null);
-  const accountingTableScrollbarInnerRef = useRef<HTMLDivElement | null>(null);
-  const syncingAccountingScrollRef = useRef<"table" | "bottom-bar" | null>(null);
-  const [showAccountingFloatingScrollbar, setShowAccountingFloatingScrollbar] = useState(false);
   const [showExchangeRateEditModal, setShowExchangeRateEditModal] = useState(false);
   const [pendingExchangeRateDelete, setPendingExchangeRateDelete] = useState<MonthlyExchangeRate | null>(null);
 
@@ -131,62 +131,15 @@ export function AgroAccountingSection({
     function syncAccountingScrollbarMetrics() {
       const tableWrap = accountingTableWrapRef.current;
       const table = accountingTableRef.current;
-      const scrollbar = accountingTableScrollbarRef.current;
-      const scrollbarInner = accountingTableScrollbarInnerRef.current;
 
-      if (!tableWrap || !table || !scrollbar || !scrollbarInner) {
+      if (!tableWrap || !table) {
         return;
       }
-
-      const hasOverflow = table.scrollWidth > tableWrap.clientWidth + 4;
-      setShowAccountingFloatingScrollbar(hasOverflow);
-      scrollbarInner.style.width = `${table.scrollWidth}px`;
-      scrollbar.scrollLeft = tableWrap.scrollLeft;
     }
 
     syncAccountingScrollbarMetrics();
     window.addEventListener("resize", syncAccountingScrollbarMetrics);
     return () => window.removeEventListener("resize", syncAccountingScrollbarMetrics);
-  }, [accountingLedgerRows]);
-
-  useEffect(() => {
-    const tableWrap = accountingTableWrapRef.current;
-    const scrollbar = accountingTableScrollbarRef.current;
-
-    if (!tableWrap || !scrollbar) {
-      return;
-    }
-
-    const nextTableWrap = tableWrap;
-    const nextScrollbar = scrollbar;
-
-    function handleTableScroll() {
-      if (syncingAccountingScrollRef.current === "bottom-bar") {
-        syncingAccountingScrollRef.current = null;
-        return;
-      }
-
-      syncingAccountingScrollRef.current = "table";
-      nextScrollbar.scrollLeft = nextTableWrap.scrollLeft;
-    }
-
-    function handleBottomBarScroll() {
-      if (syncingAccountingScrollRef.current === "table") {
-        syncingAccountingScrollRef.current = null;
-        return;
-      }
-
-      syncingAccountingScrollRef.current = "bottom-bar";
-      nextTableWrap.scrollLeft = nextScrollbar.scrollLeft;
-    }
-
-    nextTableWrap.addEventListener("scroll", handleTableScroll);
-    nextScrollbar.addEventListener("scroll", handleBottomBarScroll);
-
-    return () => {
-      nextTableWrap.removeEventListener("scroll", handleTableScroll);
-      nextScrollbar.removeEventListener("scroll", handleBottomBarScroll);
-    };
   }, [accountingLedgerRows]);
 
   function handleOpenExchangeRateEdit(rateId: string) {
@@ -421,8 +374,14 @@ export function AgroAccountingSection({
               />
             </label>
             <div className="projection-card span-2 compact-card">
-              <span>Egresos UYU pasados a USD</span>
-              <strong>{formatMoney(accountingCollectionSummary.expenseUyuDollarized, "USD")}</strong>
+              <span>Total UYU pasados a USD</span>
+              <strong>
+                {formatMoney(
+                  accountingCollectionSummary.livestockPurchaseExpenseUyuDollarized +
+                    accountingCollectionSummary.operationalExpenseUyuDollarized,
+                  "USD"
+                )}
+              </strong>
             </div>
             <div className="action-row span-2">
               <button type="submit" className="primary-button">
@@ -476,9 +435,12 @@ export function AgroAccountingSection({
           <span className="data-badge accent">Neto visible {formatMoney(projectedNet, accountingForm.currency)}</span>
           <span className="data-badge">Ingresos cobrados {formatMoney(accountingCollectionSummary.incomeUsd, "USD")}</span>
           <span className="data-badge warning">Pendiente de cobro {formatMoney(accountingCollectionSummary.pendingIncomeUsd, "USD")}</span>
-          <span className="data-badge">Egresos USD {formatMoney(accountingCollectionSummary.expenseUsdDirect, "USD")}</span>
-          <span className="data-badge">UYU a USD {formatMoney(accountingCollectionSummary.expenseUyuDollarized, "USD")}</span>
-          <span className="data-badge accent">Total egresos USD eq. {formatMoney(accountingCollectionSummary.totalExpenseUsdEquivalent, "USD")}</span>
+          <span className="data-badge">Compra ganado USD {formatMoney(accountingCollectionSummary.livestockPurchaseExpenseUsdDirect, "USD")}</span>
+          <span className="data-badge">Compra ganado UYU {formatMoney(accountingCollectionSummary.livestockPurchaseExpenseUyu, "UYU")}</span>
+          <span className="data-badge">Compra ganado USD eq. {formatMoney(accountingCollectionSummary.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</span>
+          <span className="data-badge">Gastos operativos USD {formatMoney(accountingCollectionSummary.operationalExpenseUsdDirect, "USD")}</span>
+          <span className="data-badge">Gastos operativos UYU {formatMoney(accountingCollectionSummary.operationalExpenseUyu, "UYU")}</span>
+          <span className="data-badge accent">Gastos operativos USD eq. {formatMoney(accountingCollectionSummary.totalOperationalExpenseUsdEquivalent, "USD")}</span>
         </div>
         <label className="table-search">
           <span>Buscar en contabilidad</span>
@@ -571,12 +533,6 @@ export function AgroAccountingSection({
               })}
             </tbody>
           </table>
-        </div>
-        <div
-          ref={accountingTableScrollbarRef}
-          className={showAccountingFloatingScrollbar ? "floating-table-scrollbar" : "floating-table-scrollbar hidden"}
-        >
-          <div ref={accountingTableScrollbarInnerRef} className="floating-table-scrollbar-inner" />
         </div>
         </article>
       </section>

@@ -14,8 +14,8 @@ interface AgroToolbarProps {
 
 interface AgroMetricsGridProps {
   accountingTotals: {
-    USD: { income: number; expense: number };
-    UYU: { income: number; expense: number };
+    USD: { income: number; livestockPurchaseExpense: number; operationalExpense: number };
+    UYU: { income: number; livestockPurchaseExpense: number; operationalExpense: number };
   };
   stockBySpecies: {
     vacunos: number;
@@ -90,11 +90,20 @@ export function AgroMetricsGrid({ accountingTotals, stockBySpecies }: AgroMetric
         <small>Los ingresos se manejan solo en dolares.</small>
       </article>
       <article className="metric-card accent">
-        <span>Gastos UYU / USD</span>
+        <span>Compra ganado UYU / USD</span>
         <strong>
-          {formatMoney(accountingTotals.UYU.expense, "UYU")} | {formatMoney(accountingTotals.USD.expense, "USD")}
+          {formatMoney(accountingTotals.UYU.livestockPurchaseExpense, "UYU")} |{" "}
+          {formatMoney(accountingTotals.USD.livestockPurchaseExpense, "USD")}
         </strong>
-        <small>Separados por moneda para revisar mejor la caja del establecimiento.</small>
+        <small>Separada de los gastos operativos para no mezclar rodeo con mantenimiento.</small>
+      </article>
+      <article className="metric-card">
+        <span>Gastos operativos UYU / USD</span>
+        <strong>
+          {formatMoney(accountingTotals.UYU.operationalExpense, "UYU")} |{" "}
+          {formatMoney(accountingTotals.USD.operationalExpense, "USD")}
+        </strong>
+        <small>Incluye insumos, sanidad, combustible, sueldos, mantenimiento, impuestos y otros.</small>
       </article>
     </section>
   );

@@ -263,3 +263,57 @@ En este corte se alineo la UI para que el selector superior marque el contexto o
 - `test:smoke`: OK
 - `test:functional`: OK
 - `build`: OK
+
+## Corte siguiente ya aplicado
+
+En este corte se cerraron ajustes finos pedidos por cliente en `Inicio`, `Resumen`, `Contabilidad` y estabilidad de version publicada:
+
+1. `Inicio` alineado al establecimiento visible
+
+- el bloque superior de `Inicio` ya no mezcla datos de todos los establecimientos
+- ahora las metricas y los ultimos movimientos siguen el establecimiento seleccionado en el selector superior
+- la lectura visible queda alineada con la fuente de verdad operativa del modulo
+
+2. `Resumen` con capa global y capa puntual
+
+- la pestana `Resumen` ahora muestra primero un `Resumen global`
+- ese bloque suma todos los establecimientos usando los filtros activos de `ano` y `mes`
+- debajo se mantiene el detalle del establecimiento seleccionado para no perder la lectura puntual
+
+3. `Compra de ganado` separada de `gastos operativos`
+
+- en `Inicio`, `Contabilidad` y `Resumen` ya no se mezclan las compras de animales con los gastos de funcionamiento
+- `compra_animales` se muestra aparte de:
+  - alimentacion
+  - sanidad
+  - combustible
+  - sueldos
+  - mantenimiento
+  - impuestos
+  - otros
+- eso deja una lectura mas clara para distinguir inversion en rodeo de costo operativo
+
+4. `Contabilidad` sin scroll horizontal flotante duplicado
+
+- se retiro la barra flotante extra de la tabla de `Contabilidad`
+- queda solo el scroll normal del contenedor
+
+5. `Service worker` ajustado para no servir frontend viejo por cache
+
+- se detecto comportamiento intermitente donde la app podia volver a assets viejos
+- el `service worker` paso a priorizar red para `HTML`, `JS`, `CSS` y `app-build.json`
+- el cache queda como respaldo y se renovo la version del cache
+- ademas el registro del `service worker` ahora fuerza `update()` al cargar
+
+## Validacion ejecutada en este corte
+
+- `lint`: OK
+- `typecheck`: OK
+- `test`: OK
+- `test:smoke`: OK
+- `test:functional`: OK
+- `build`: OK
+
+## Estado del corte
+
+- PF completo cerrado a nivel modulo

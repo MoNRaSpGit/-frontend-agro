@@ -1,4 +1,4 @@
-import { AccountingEntryType, AnimalMovementRecord, FieldUnit, MoneyCurrency } from "./agro.types";
+import { AccountingEntry, AccountingEntryType, AnimalMovementRecord, ExpenseConcept, FieldUnit, MoneyCurrency } from "./agro.types";
 
 export const incomeConceptLabels = {
   venta_vacunos: "Venta de vacunos",
@@ -17,6 +17,14 @@ export const expenseConceptLabels = {
   impuestos: "Impuestos",
   otros: "Otros"
 } as const;
+
+export function isLivestockPurchaseConcept(concept: ExpenseConcept | string) {
+  return concept === "compra_animales";
+}
+
+export function isLivestockPurchaseEntry(entry: AccountingEntry) {
+  return entry.type === "expense" && isLivestockPurchaseConcept(entry.concept);
+}
 
 export function getTodayDate() {
   const now = new Date();
