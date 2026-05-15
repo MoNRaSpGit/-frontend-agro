@@ -1,6 +1,23 @@
 /* global self, caches, fetch, URL */
 
-const CACHE_NAME = "saaspro-agro-v2";
+const CACHE_NAME = "saaspro-agro-v3";
+
+function isStaticAssetRequest(request) {
+  return ["script", "style", "worker"].includes(request.destination);
+}
+
+function isCacheableSupportAssetRequest(request) {
+  return ["image", "font", "manifest"].includes(request.destination);
+}
+
+async function updateCache(cache, request, response) {
+  if (!response || response.status !== 200 || response.type === "opaque") {
+    return response;
+  }
+
+  await cache.put(request, response.clone());
+  return response;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -26,13 +43,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (url.pathname.endsWith("/app-build.json")) {
+    event.respondWith(fetch(request, { cache: "no-store" }));
+    return;
+  }
+
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: "no-store" })
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          return response;
+          return caches.open(CACHE_NAME).then((cache) => updateCache(cache, request, response));
         })
         .catch(async () => {
           const cached = await caches.match(request);
@@ -42,21 +62,34 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
+  if (isStaticAssetRequest(request)) {
+    event.respondWith(
+      fetch(request, { cache: "no-store" })
+        .then((response) => caches.open(CACHE_NAME).then((cache) => updateCache(cache, request, response)))
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) {
+            return cached;
+          }
 
-      return fetch(request).then((response) => {
-        if (!response || response.status !== 200 || response.type === "opaque") {
-          return response;
+          throw new Error("Static asset unavailable");
+        })
+    );
+    return;
+  }
+
+  if (isCacheableSupportAssetRequest(request)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) {
+          return cached;
         }
 
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        return response;
-      });
-    })
-  );
+        return fetch(request).then((response) => caches.open(CACHE_NAME).then((cache) => updateCache(cache, request, response)));
+      })
+    );
+    return;
+  }
+
+  event.respondWith(fetch(request).catch(() => caches.match(request)));
 });
