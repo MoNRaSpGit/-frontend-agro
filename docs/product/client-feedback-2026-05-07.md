@@ -1,6 +1,6 @@
 # Agro - Feedback cliente 2026-05-07
 
-Fecha de actualizacion: 2026-05-08
+Fecha de actualizacion: 2026-05-16
 
 ## Fuente
 
@@ -8,7 +8,7 @@ Mensaje directo del cliente despues de revisar la demo de `frontend-agro`.
 
 ## Aclaracion importante
 
-Cuando el cliente habla de una "planilla de Excel", por ahora la lectura correcta para este demo es:
+Cuando el cliente habla de una "planilla de Excel", la lectura correcta para este piloto es:
 
 - una vista tipo planilla
 - con filas, columnas, filtros y lectura cronologica
@@ -20,48 +20,36 @@ No implica todavia exportacion real a `.xlsx` como requisito inmediato.
 
 ### Contabilidad por moneda
 
-- los ingresos van solamente en `dolares`
-- los egresos van en `pesos` y `dolares`
+- los ingresos van solamente en `USD`
+- los egresos van en `UYU` y `USD`
 - el cliente quiere mirar la contabilidad por campo
 - el sistema deberia permitir ver movimientos por rubro
 
-## Planilla contable esperada
+### Planilla contable esperada
 
-El cliente espera una planilla visual donde pueda revisar:
+El cliente espera revisar:
 
 - fecha
-- si fue ingreso o egreso
+- ingreso o egreso
 - monto
 - moneda
 - rubro
 - campo
 
-La lectura deseada es:
+### Planilla de animales esperada
 
-- ver en que fecha entro o salio determinado monto
-- identificar a que rubro corresponde
-- resumir por campo
-- resumir por periodo mensual y anual
-
-## Planilla de animales esperada
-
-El cliente espera una planilla visual de movimientos de animales con:
+El cliente espera revisar:
 
 - cantidad
 - categoria
 - fecha
 - precio
 - peso
-- flete
+- flete cuando corresponde
 - comision
 - IVA
 - monto total
 - campo
-
-### Aclaracion por tipo de movimiento
-
-- para ingresos de animales se esperan todos los items anteriores
-- para egresos, el cliente pidio "lo mismo menos el flete"
 
 ## Relacion stock-contabilidad
 
@@ -69,10 +57,10 @@ El cliente quiere relacionar cada movimiento de animales con su impacto economic
 
 Ejemplos:
 
-- si entran 10 animales por compra, debe quedar asociado el egreso economico
+- si entran animales por compra, debe quedar asociado el egreso economico
 - si salen animales por venta, debe quedar asociado el ingreso economico
 
-Excepciones explicitadas por el cliente:
+Excepciones explicitadas:
 
 - `nacimiento` no se relaciona a monto
 - `muerte` no se relaciona a monto
@@ -83,8 +71,6 @@ El cliente pidio una ventana `Resumen` con foco por campo, no por potrero.
 
 Debe mostrar:
 
-- totales de vacas
-- totales de terneros
 - totales por categoria
 - control de existencias por campo
 - animales vendidos por periodo
@@ -92,16 +78,9 @@ Debe mostrar:
 - resumen mensual
 - resumen anual
 
-La intencion operativa es que el cliente pueda comparar esos totales contra la realidad fisica y detectar:
-
-- animales faltantes
-- ventas no registradas
-- compras no registradas
-- muertes no registradas
-
 ## Registro pluviometrico
 
-Se pide agregar un registro pluviometrico por campo.
+Se pidio agregar registro pluviometrico por campo.
 
 Lectura inicial sugerida:
 
@@ -112,9 +91,9 @@ Lectura inicial sugerida:
 
 ## Lectura actual de este feedback
 
-Este feedback ya quedo absorbido en la UI actual de `frontend-agro` como direccion de producto:
+Este feedback ya quedo absorbido en la direccion del producto:
 
-- lectura por campo en vez de potrero como unidad visible principal
+- lectura por campo como unidad visible principal
 - planilla de animales mas detallada
 - planilla contable por campo y moneda
 - vista propia para lluvia

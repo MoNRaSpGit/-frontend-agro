@@ -1,12 +1,22 @@
 # frontend-agro
 
-Boseto demo del producto `agro` dentro de `SaasPro`.
+Frontend del producto `agro` dentro de `SaasPro`.
 
 ## Estado actual
 
-- demo usable sin backend
-- foco en `stock` y `contabilidad`
-- pestaña de `preguntas` para discovery con cliente
+- piloto activo de producto en validacion con cliente
+- foco en `stock`, `contabilidad`, `sanidad`, `lluvia` y `resumen`
+- persistencia operativa real contra backend por workspace publico
+
+## Regla importante de este corte
+
+Hoy `agro` ya no depende solo de demo local.
+
+La app:
+
+- lee datos desde backend
+- guarda datos en backend
+- puede arrancar vacia para que el cliente cargue informacion real
 
 ## Documentacion
 

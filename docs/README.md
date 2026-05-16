@@ -1,80 +1,81 @@
 # Agro Docs
 
-Fecha de actualizacion: 2026-05-11
+Fecha de actualizacion: 2026-05-16
 
-Esta carpeta guarda la documentacion funcional y operativa de `frontend-agro`.
+## Objetivo
 
-## Regla documental
+Esta carpeta documenta el producto `agro` del lado frontend.
 
-- la arquitectura general del SaaS vive en `backend/docs`
-- el comportamiento real del frontend `agro` se documenta aca
+Su funcion es dejar claro:
 
-## Estado actual del frontend
+- como se interpreta hoy el producto
+- cual es el estado visible actual de la UI
+- como se trabaja el flujo funcional del modulo
+- que feedback real ya llego del cliente
+- que cambios finos se fueron haciendo en el frontend
 
-`frontend-agro` hoy funciona como piloto activo de producto para validacion con cliente.
+## Alcance
 
-Hoy el alcance visible se divide en estas vistas:
+`frontend-agro/docs` documenta:
 
-- `Inicio`
-- `Carga inicial`
-- `Animales`
-- `Contabilidad`
-- `Sanidad`
-- `Lluvia`
-- `Resumen`
+- comportamiento real del frontend `agro`
+- estructura funcional visible
+- lenguaje operativo del modulo
+- persistencia actual del producto
+- feedback funcional del cliente
+- bitacora operativa del frontend
 
-## Intencion de este corte
+No documenta:
 
-Todavia se sigue validando lenguaje y flujo con cliente, pero el modulo ya dejo de depender solo de demo local.
+- arquitectura general del SaaS
+- reglas globales de auth, tenant, billing o core
+- metodo global de trabajo del SaaS
 
-La meta de este corte es:
+Eso vive en `backend/docs`.
 
-- que el cliente se vea en el sistema
-- validar si una sola app cubre stock y contabilidad
-- validar lectura por campo como unidad operativa principal
-- validar tambien registro de lluvia, sanidad y tablero de resumen
+## Orden recomendado de lectura
 
-## Base funcional actual
+1. [Estado actual del frontend](./product/current-state.md)
+2. [Contexto funcional del producto](./product/product-context.md)
+3. [Feedback cliente 2026-05-07](./product/client-feedback-2026-05-07.md)
+4. [Bitacora del modulo](./operations/bitacora.md)
 
-Hoy el modulo ya deja ver:
+## Estructura de esta carpeta
 
-- establecimientos y campos
-- carga inicial de stock, saldo y establecimientos
-- stock animal por especie y categoria
-- categorias sembradas desde la declaracion jurada MGAP/SNIG 2024
-- planilla de animales con altas, edicion y validaciones
-- planilla contable con lectura cronologica por campo y moneda
-- cuentas a cobrar con estados `Pendiente`, `Parcial` y `Cobrado`
-- tipo de cambio promedio mensual para dolarizar egresos en pesos
-- planilla sanitaria por establecimiento
-- carga de lluvia por campo con bitacora propia
-- resumen operativo por establecimiento
-- estado de cuenta comercial
-- cartel de actualizacion cuando hay una version nueva publicada
+### `product/`
 
-## Regla de persistencia actual
+Define el producto y su corte actual:
 
-La app ya persiste el workspace publico de `agro` en backend.
+- estado visible del frontend
+- contexto funcional
+- feedback real del cliente
 
-Hoy los datos operativos principales viven en el endpoint:
+### `operations/`
 
-- `GET /api/v1/agro/workspace/public`
-- `PUT /api/v1/agro/workspace/public`
+Guarda el seguimiento fino del modulo:
 
-Dentro de ese workspace quedan guardados:
+- que se cambio
+- que se valido
+- donde quedamos
 
-- establecimientos
-- campos
-- movimientos de animales
-- asientos contables
-- lluvias
-- sanidad
-- tipos de cambio mensuales
+## Regla de lectura
 
-La UI actual ya no depende de datos demo fijos y puede arrancar vacia para que el cliente cargue su informacion.
+Si hay contradiccion entre una nota vieja y esta carpeta:
 
-## Siguiente lectura
+- manda esta carpeta
 
-- [Contexto funcional del producto](./product-context.md)
-- [Feedback cliente 2026-05-07](./client-feedback-2026-05-07.md)
-- [Bitacora del modulo](./bitacora.md)
+Si hay contradiccion entre una regla global del SaaS y este modulo:
+
+- manda `backend/docs`
+
+## Regla importante de este corte
+
+Hoy `agro` ya no depende solo de demo local.
+
+La persistencia principal del modulo ya vive en backend mediante el workspace publico.
+
+La prioridad actual no es bajar persistencia, sino:
+
+- validar flujo real con cliente
+- afinar lenguaje y lectura operativa
+- endurecer solo lo que el uso confirme
