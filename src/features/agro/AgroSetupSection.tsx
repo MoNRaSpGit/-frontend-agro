@@ -3,33 +3,29 @@ import { AgroSpecies, Establishment } from "./agro.types";
 
 interface AgroSetupSectionProps {
   establishments: Establishment[];
-  setupCutoffDate: string;
   setupEstablishmentId: string;
   setupSpecies: AgroSpecies;
   newEstablishmentForm: {
     name: string;
+    location: string;
+    hectares: string;
   };
   initialStockForm: {
     categoryCode: string;
     quantity: string;
     notes: string;
   };
-  initialReceivableForm: {
-    totalAmount: string;
-    collectedAmount: string;
-    notes: string;
-  };
   setupSummary: {
     stockLoads: number;
-    receivableLoads: number;
   };
-  setSetupCutoffDate: (value: string) => void;
   setSetupEstablishmentId: (value: string) => void;
   setSetupSpecies: (value: AgroSpecies) => void;
   setNewEstablishmentForm: React.Dispatch<
-    React.SetStateAction<{
-      name: string;
-    }>
+      React.SetStateAction<{
+        name: string;
+        location: string;
+        hectares: string;
+      }>
   >;
   setInitialStockForm: React.Dispatch<
     React.SetStateAction<{
@@ -38,45 +34,27 @@ interface AgroSetupSectionProps {
       notes: string;
     }>
   >;
-  setInitialReceivableForm: React.Dispatch<
-    React.SetStateAction<{
-      totalAmount: string;
-      collectedAmount: string;
-      notes: string;
-    }>
-  >;
   resetInitialStockForm: () => void;
-  resetInitialReceivableForm: () => void;
   onAddEstablishment: () => void;
   onSubmitInitialLoad: () => void;
 }
 
 export function AgroSetupSection({
   establishments,
-  setupCutoffDate,
   setupEstablishmentId,
   setupSpecies,
   newEstablishmentForm,
   initialStockForm,
-  initialReceivableForm,
   setupSummary,
-  setSetupCutoffDate,
   setSetupEstablishmentId,
   setSetupSpecies,
   setNewEstablishmentForm,
   setInitialStockForm,
-  setInitialReceivableForm,
   resetInitialStockForm,
-  resetInitialReceivableForm,
   onAddEstablishment,
   onSubmitInitialLoad
 }: AgroSetupSectionProps) {
   const availableCategories = categoryCatalog[setupSpecies];
-  const conceptLabelBySpecies: Record<AgroSpecies, string> = {
-    vacunos: "Venta de vacunos",
-    ovinos: "Venta de ovinos",
-    equinos: "Venta de equinos"
-  };
 
   return (
     <section className="content-grid">
@@ -89,13 +67,8 @@ export function AgroSetupSection({
         </div>
         <div className="inline-metrics">
           <span className="data-badge accent">Stock inicial cargado {setupSummary.stockLoads}</span>
-          <span className="data-badge warning">Saldos a cobrar cargados {setupSummary.receivableLoads}</span>
         </div>
         <form className="form-grid top-gap">
-          <label>
-            <span>Fecha de corte</span>
-            <input type="date" value={setupCutoffDate} onChange={(event) => setSetupCutoffDate(event.target.value)} />
-          </label>
           <label>
             <span>Establecimiento</span>
             <select value={setupEstablishmentId} onChange={(event) => setSetupEstablishmentId(event.target.value)}>
@@ -158,65 +131,13 @@ export function AgroSetupSection({
               </label>
             </div>
           </section>
-
-          <section className="subpanel">
-            <div className="panel-header">
-              <div>
-                <h2>Saldo inicial a cobrar</h2>
-                <p>Cuenta base a cobrar para el mismo establecimiento y especie.</p>
-              </div>
-            </div>
-            <div className="form-grid">
-              <label className="span-2">
-                <span>Concepto</span>
-                <input type="text" value={conceptLabelBySpecies[setupSpecies]} readOnly />
-              </label>
-              <label>
-                <span>Total a cobrar</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={initialReceivableForm.totalAmount}
-                  onChange={(event) => setInitialReceivableForm((current) => ({ ...current, totalAmount: event.target.value }))}
-                />
-              </label>
-              <label>
-                <span>Ya cobrado</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={initialReceivableForm.collectedAmount}
-                  onChange={(event) =>
-                    setInitialReceivableForm((current) => ({ ...current, collectedAmount: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="span-2">
-                <span>Observaciones</span>
-                <textarea
-                  rows={3}
-                  value={initialReceivableForm.notes}
-                  onChange={(event) => setInitialReceivableForm((current) => ({ ...current, notes: event.target.value }))}
-                />
-              </label>
-            </div>
-          </section>
         </div>
 
         <div className="action-row top-gap">
           <button type="button" className="primary-button" onClick={onSubmitInitialLoad}>
             Guardar carga inicial
           </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => {
-              resetInitialStockForm();
-              resetInitialReceivableForm();
-            }}
-          >
+          <button type="button" className="ghost-button" onClick={resetInitialStockForm}>
             Limpiar
           </button>
         </div>
@@ -235,6 +156,24 @@ export function AgroSetupSection({
                 type="text"
                 value={newEstablishmentForm.name}
                 onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, name: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>Ubicacion</span>
+              <input
+                type="text"
+                value={newEstablishmentForm.location}
+                onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, location: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>Hectareas</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={newEstablishmentForm.hectares}
+                onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, hectares: event.target.value }))}
               />
             </label>
             <div className="action-row span-2">

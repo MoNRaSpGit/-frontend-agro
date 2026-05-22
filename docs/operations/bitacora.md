@@ -18,6 +18,19 @@ Aca corresponde anotar:
 
 `agro` quedo en un corte activo publicado para esperar devolucion del cliente.
 
+## 2026-05-20 - Login tradicional para cliente actual y acceso demo local
+
+Se cambia la puerta de entrada del frontend para pedir `Cuenta` y `Contrasena` al cliente actual.
+
+Queda asi:
+
+- login tradicional contra backend
+- ingreso real pensado para `lamilagrosa`
+- boton secundario para `demo local`
+- una vez adentro, la app conserva el aspecto operativo normal sin carteles extra de modo
+
+En este corte el cliente autenticado sigue viendo el workspace publico actual de `agro`, que es donde hoy viven los datos reales visibles del modulo.
+
 ## Ultimo bloque importante ya aplicado
 
 En este ultimo tramo quedaron cerrados tres puntos operativos:

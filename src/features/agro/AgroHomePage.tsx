@@ -9,7 +9,7 @@ import { AgroOverviewSection } from "./AgroOverviewSection";
 import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
-import { fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
+import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
   describeAnimalMovementDetail,
@@ -50,9 +50,24 @@ import {
   SanitaryRecord
 } from "./agro.types";
 
-function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMovementRecord {
-  const establishmentId = movement.establishmentId || getLegacyEstablishmentIdFromFieldId(movement.fieldId);
-  const fieldId = initialFields.find((field) => field.establishmentId === establishmentId)?.id ?? movement.fieldId;
+function normalizeFieldUnits(nextFields: FieldUnit[], nextEstablishments: Establishment[]) {
+  return nextFields.map((field) => ({
+    ...field,
+    hectares:
+      typeof field.hectares === "number"
+        ? field.hectares
+        : nextEstablishments.find((item) => item.id === field.establishmentId)?.hectares ?? 0
+  }));
+}
+
+function getFieldIdForEstablishmentFromSource(fieldsSource: FieldUnit[], establishmentId: string) {
+  return fieldsSource.find((field) => field.establishmentId === establishmentId)?.id ?? "";
+}
+
+function normalizeAnimalMovementRecord(movement: AnimalMovementRecord, fieldsSource: FieldUnit[]): AnimalMovementRecord {
+  const establishmentId =
+    movement.establishmentId || fieldsSource.find((field) => field.id === movement.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(movement.fieldId);
+  const fieldId = getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || movement.fieldId;
 
   return {
     ...movement,
@@ -61,9 +76,10 @@ function normalizeAnimalMovementRecord(movement: AnimalMovementRecord): AnimalMo
   };
 }
 
-function normalizeAccountingEntry(entry: AccountingEntry): AccountingEntry {
-  const establishmentId = entry.establishmentId || getLegacyEstablishmentIdFromFieldId(entry.fieldId);
-  const fieldId = initialFields.find((field) => field.establishmentId === establishmentId)?.id ?? entry.fieldId;
+function normalizeAccountingEntry(entry: AccountingEntry, fieldsSource: FieldUnit[]): AccountingEntry {
+  const establishmentId =
+    entry.establishmentId || fieldsSource.find((field) => field.id === entry.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(entry.fieldId);
+  const fieldId = getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || entry.fieldId;
   const expectedAmount = entry.type === "income" ? entry.expectedAmount ?? entry.netAmount : undefined;
   const collectedAmount = entry.type === "income" ? entry.collectedAmount ?? expectedAmount : undefined;
 
@@ -76,9 +92,10 @@ function normalizeAccountingEntry(entry: AccountingEntry): AccountingEntry {
   };
 }
 
-function normalizeRainfallRecord(record: RainfallRecord): RainfallRecord {
-  const establishmentId = getLegacyEstablishmentIdFromFieldId(record.fieldId);
-  const fieldId = initialFields.find((field) => field.establishmentId === establishmentId)?.id ?? record.fieldId;
+function normalizeRainfallRecord(record: RainfallRecord, fieldsSource: FieldUnit[]): RainfallRecord {
+  const establishmentId =
+    fieldsSource.find((field) => field.id === record.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(record.fieldId);
+  const fieldId = getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || record.fieldId;
 
   return {
     ...record,
@@ -86,14 +103,16 @@ function normalizeRainfallRecord(record: RainfallRecord): RainfallRecord {
   };
 }
 
-function normalizeSanitaryRecord(record: SanitaryRecord): SanitaryRecord {
-  const establishmentId = record.establishmentId || getLegacyEstablishmentIdFromFieldId(record.fieldId);
-  const fieldId = initialFields.find((field) => field.establishmentId === establishmentId)?.id ?? record.fieldId;
+function normalizeSanitaryRecord(record: SanitaryRecord, fieldsSource: FieldUnit[]): SanitaryRecord {
+  const establishmentId =
+    record.establishmentId || fieldsSource.find((field) => field.id === record.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(record.fieldId);
+  const fieldId = getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || record.fieldId;
 
   return {
     ...record,
     establishmentId,
-    fieldId
+    fieldId,
+    species: record.species ?? "vacunos"
   };
 }
 
@@ -197,7 +216,11 @@ function summarizeExpenses(entries: AccountingEntry[], exchangeRateByMonth: Reco
   );
 }
 
-export function AgroHomePage() {
+interface AgroHomePageProps {
+  persistenceMode: AgroPersistenceMode;
+}
+
+export function AgroHomePage({ persistenceMode }: AgroHomePageProps) {
   const today = getTodayDate();
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
   const accountingFormPanelRef = useRef<HTMLElement | null>(null);
@@ -284,6 +307,7 @@ export function AgroHomePage() {
     date: today,
     establishmentId: "",
     fieldId: "",
+    species: "vacunos" as AgroSpecies,
     quantity: "",
     treatment: "",
     notes: ""
@@ -293,20 +317,17 @@ export function AgroHomePage() {
     yearMonth: getYearMonth(today),
     averageRate: ""
   });
-  const [setupCutoffDate, setSetupCutoffDate] = useState(today);
+  const [setupCutoffDate] = useState(today);
   const [setupEstablishmentId, setSetupEstablishmentId] = useState("");
   const [setupSpecies, setSetupSpecies] = useState<AgroSpecies>("vacunos");
   const [newEstablishmentForm, setNewEstablishmentForm] = useState({
-    name: ""
+    name: "",
+    location: "",
+    hectares: ""
   });
   const [initialStockForm, setInitialStockForm] = useState({
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     quantity: "",
-    notes: ""
-  });
-  const [initialReceivableForm, setInitialReceivableForm] = useState({
-    totalAmount: "",
-    collectedAmount: "",
     notes: ""
   });
 
@@ -438,6 +459,7 @@ export function AgroHomePage() {
       date: today,
       establishmentId: establishments[0]?.id ?? "",
       fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
+      species: "vacunos" as AgroSpecies,
       quantity: "",
       treatment: "",
       notes: ""
@@ -461,17 +483,11 @@ export function AgroHomePage() {
     });
   }
 
-  function resetInitialReceivableForm() {
-    setInitialReceivableForm({
-      totalAmount: "",
-      collectedAmount: "",
-      notes: ""
-    });
-  }
-
   function resetNewEstablishmentForm() {
     setNewEstablishmentForm({
-      name: ""
+      name: "",
+      location: "",
+      hectares: ""
     });
   }
 
@@ -548,6 +564,12 @@ export function AgroHomePage() {
       fieldId: selectedFieldId
     }));
   }, [establishments, fields, selectedEstablishmentId]);
+
+  const selectedFieldIds = useMemo(
+    () => fields.filter((field) => field.establishmentId === selectedEstablishmentId).map((field) => field.id),
+    [fields, selectedEstablishmentId]
+  );
+  const selectedFieldIdSet = useMemo(() => new Set(selectedFieldIds), [selectedFieldIds]);
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
@@ -634,7 +656,7 @@ export function AgroHomePage() {
 
   const accountingTotals = useMemo(() => {
     return accountingEntries
-      .filter((entry) => entry.establishmentId === selectedEstablishmentId)
+      .filter((entry) => selectedFieldIdSet.has(entry.fieldId))
       .reduce(
         (summary, entry) => {
           if (entry.type === "income") {
@@ -655,7 +677,7 @@ export function AgroHomePage() {
           UYU: { income: 0, livestockPurchaseExpense: 0, operationalExpense: 0 }
         }
       );
-  }, [accountingEntries, selectedEstablishmentId]);
+  }, [accountingEntries, selectedFieldIdSet]);
 
   const exchangeRateByMonth = useMemo(() => {
     return monthlyExchangeRates.reduce<Record<string, number>>((accumulator, item) => {
@@ -666,22 +688,22 @@ export function AgroHomePage() {
 
   const latestAnimalMovements = useMemo(() => {
     return [...animalMovements]
-      .filter((movement) => movement.establishmentId === selectedEstablishmentId)
+      .filter((movement) => selectedFieldIdSet.has(movement.fieldId))
       .sort((left, right) => right.date.localeCompare(left.date))
       .slice(0, 6);
-  }, [animalMovements, selectedEstablishmentId]);
+  }, [animalMovements, selectedFieldIdSet]);
 
   const latestAccountingEntries = useMemo(() => {
     return [...accountingEntries]
-      .filter((entry) => entry.establishmentId === selectedEstablishmentId)
+      .filter((entry) => selectedFieldIdSet.has(entry.fieldId))
       .sort((left, right) => right.date.localeCompare(left.date))
       .slice(0, 6);
-  }, [accountingEntries, selectedEstablishmentId]);
+  }, [accountingEntries, selectedFieldIdSet]);
 
   const animalLedgerRows = useMemo(() => {
     return [...animalMovements]
       .filter((movement) => {
-        if (movement.establishmentId !== selectedEstablishmentId) {
+        if (!selectedFieldIdSet.has(movement.fieldId)) {
           return false;
         }
 
@@ -706,7 +728,7 @@ export function AgroHomePage() {
         return searchBase.includes(animalSearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [animalMovements, animalSearchTerm, fields, selectedEstablishmentId]);
+  }, [animalMovements, animalSearchTerm, fields, selectedFieldIdSet]);
 
   useEffect(() => {
     function syncAnimalScrollbarMetrics() {
@@ -773,7 +795,7 @@ export function AgroHomePage() {
   const accountingLedgerRows = useMemo(() => {
     return [...accountingEntries]
       .filter((entry) => {
-        if (entry.establishmentId !== selectedEstablishmentId) {
+        if (!selectedFieldIdSet.has(entry.fieldId)) {
           return false;
         }
 
@@ -793,7 +815,7 @@ export function AgroHomePage() {
         return searchBase.includes(accountingSearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, accountingSearchTerm, fields, selectedEstablishmentId]);
+  }, [accountingEntries, accountingSearchTerm, fields, selectedFieldIdSet]);
 
   const accountingLedgerWithConversions = useMemo(() => {
     return accountingLedgerRows.map((entry) => {
@@ -849,11 +871,6 @@ export function AgroHomePage() {
       return entry.collectionStatus === "Cobrado";
     });
   }, [accountingLedgerWithConversions, accountingStatusFilter]);
-
-  const selectedFieldIds = useMemo(
-    () => fields.filter((field) => field.establishmentId === selectedEstablishmentId).map((field) => field.id),
-    [fields, selectedEstablishmentId]
-  );
 
   const summaryByField = useMemo(() => {
     return visibleFields.map((field) => {
@@ -1258,7 +1275,7 @@ export function AgroHomePage() {
         }
 
         const field = fields.find((item) => item.id === record.fieldId);
-        const searchBase = [record.date, field?.name ?? "", record.treatment, record.notes, `${record.quantity}`]
+        const searchBase = [record.date, field?.name ?? "", speciesLabels[record.species], record.treatment, record.notes, `${record.quantity}`]
           .join(" ")
           .toLowerCase();
 
@@ -1310,7 +1327,7 @@ export function AgroHomePage() {
     return accountingEntries
       .filter((entry) => entry.type === "income")
       .filter((entry) => {
-        if (entry.establishmentId !== selectedEstablishmentId) {
+        if (!selectedFieldIdSet.has(entry.fieldId)) {
           return false;
         }
 
@@ -1345,7 +1362,7 @@ export function AgroHomePage() {
         };
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, animalMovements, fields, selectedEstablishmentId, selectedMonth, selectedYear]);
+  }, [accountingEntries, animalMovements, fields, selectedFieldIdSet, selectedMonth, selectedYear]);
 
   const accountStatementSummary = useMemo(() => {
     return accountStatementRows.reduce(
@@ -1392,17 +1409,16 @@ export function AgroHomePage() {
     return {
       stockLoads: animalMovements.filter(
         (movement) => movement.kind === "adjustment" && movement.notes.startsWith("Carga inicial:")
-      ).length,
-      receivableLoads: accountingEntries.filter((entry) => entry.notes.startsWith("Saldo inicial:")).length
+      ).length
     };
-  }, [accountingEntries, animalMovements]);
+  }, [animalMovements]);
 
   useEffect(() => {
     let isCancelled = false;
 
     async function loadWorkspace() {
       try {
-        const snapshot = await fetchAgroWorkspace();
+        const snapshot = await fetchAgroWorkspace(persistenceMode);
         if (isCancelled) {
           return;
         }
@@ -1410,14 +1426,17 @@ export function AgroHomePage() {
         const nextEstablishments = Array.isArray(snapshot.data.establishments)
           ? snapshot.data.establishments
           : initialEstablishments;
-        const nextFields = Array.isArray(snapshot.data.fields) ? snapshot.data.fields : initialFields;
+        const nextFields = normalizeFieldUnits(
+          Array.isArray(snapshot.data.fields) ? snapshot.data.fields : initialFields,
+          nextEstablishments
+        );
 
         setEstablishments(nextEstablishments);
         setFields(nextFields);
-        setAnimalMovements(snapshot.data.animalMovements.map(normalizeAnimalMovementRecord));
-        setAccountingEntries(snapshot.data.accountingEntries.map(normalizeAccountingEntry));
-        setRainfallRecords(snapshot.data.rainfallRecords.map(normalizeRainfallRecord));
-        setSanitaryRecords(snapshot.data.sanitaryRecords.map(normalizeSanitaryRecord));
+        setAnimalMovements(snapshot.data.animalMovements.map((movement) => normalizeAnimalMovementRecord(movement, nextFields)));
+        setAccountingEntries(snapshot.data.accountingEntries.map((entry) => normalizeAccountingEntry(entry, nextFields)));
+        setRainfallRecords(snapshot.data.rainfallRecords.map((record) => normalizeRainfallRecord(record, nextFields)));
+        setSanitaryRecords(snapshot.data.sanitaryRecords.map((record) => normalizeSanitaryRecord(record, nextFields)));
         setMonthlyExchangeRates(snapshot.data.monthlyExchangeRates);
         setWorkspaceLoadError(null);
       } catch (error) {
@@ -1447,7 +1466,7 @@ export function AgroHomePage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [persistenceMode]);
 
   useEffect(() => {
     if (!workspaceLoaded || workspaceLoadError) {
@@ -1455,7 +1474,7 @@ export function AgroHomePage() {
     }
 
     const timeoutId = window.setTimeout(() => {
-      void saveAgroWorkspace({
+      void saveAgroWorkspace(persistenceMode, {
         establishments,
         fields,
         animalMovements,
@@ -1479,7 +1498,8 @@ export function AgroHomePage() {
     rainfallRecords,
     sanitaryRecords,
     workspaceLoaded,
-    workspaceLoadError
+    workspaceLoadError,
+    persistenceMode
   ]);
 
   const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
@@ -1517,8 +1537,14 @@ export function AgroHomePage() {
 
   function handleAddEstablishment() {
     const name = newEstablishmentForm.name.trim();
+    const hectares = Number(newEstablishmentForm.hectares);
     if (!name) {
       showError("Falta el nombre del establecimiento.");
+      return;
+    }
+
+    if (!Number.isFinite(hectares) || hectares <= 0) {
+      showError("Faltan las hectareas del campo.");
       return;
     }
 
@@ -1539,14 +1565,15 @@ export function AgroHomePage() {
     const nextEstablishment: Establishment = {
       id: establishmentId,
       name,
-      location: "",
-      hectares: 0
+      location: newEstablishmentForm.location.trim(),
+      hectares
     };
 
     const nextField: FieldUnit = {
       id: fieldId,
       establishmentId,
       name,
+      hectares,
       notes: "Operacion consolidada del establecimiento."
     };
 
@@ -1873,6 +1900,7 @@ export function AgroHomePage() {
       date: sanitaryForm.date,
       establishmentId: sanitaryForm.establishmentId,
       fieldId: getFieldIdForEstablishmentFrom(fields, sanitaryForm.establishmentId),
+      species: sanitaryForm.species,
       quantity,
       treatment: sanitaryForm.treatment.trim(),
       notes: sanitaryForm.notes.trim()
@@ -1915,85 +1943,21 @@ export function AgroHomePage() {
     return true;
   }
 
-  function saveInitialReceivableLoad() {
-    const totalAmount = Number(initialReceivableForm.totalAmount);
-    const collectedAmount =
-      initialReceivableForm.collectedAmount.trim() === "" ? 0 : Number(initialReceivableForm.collectedAmount);
-
-    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-      showError("El total a cobrar debe ser mayor a 0.");
-      return false;
-    }
-
-    if (!Number.isFinite(collectedAmount) || collectedAmount < 0) {
-      showError("El importe ya cobrado debe ser valido.");
-      return false;
-    }
-
-    if (collectedAmount > totalAmount) {
-      showError("Lo ya cobrado no puede ser mayor al total.");
-      return false;
-    }
-
-    const entry: AccountingEntry = {
-      id: `acc-${Date.now()}`,
-      date: setupCutoffDate,
-      establishmentId: setupEstablishmentId,
-      fieldId: getFieldIdForEstablishmentFrom(fields, setupEstablishmentId),
-      type: "income",
-      concept: getIncomeConceptForSpecies(setupSpecies),
-      currency: "USD",
-      grossAmount: totalAmount,
-      commissionAmount: 0,
-      taxAmount: 0,
-      netAmount: totalAmount,
-      expectedAmount: totalAmount,
-      collectedAmount,
-      notes: `Saldo inicial: ${initialReceivableForm.notes.trim() || "cuenta vieja cargada manualmente"}`
-    };
-
-    setAccountingEntries((current) => [entry, ...current]);
-    setSelectedEstablishmentId(setupEstablishmentId);
-    resetInitialReceivableForm();
-    return true;
-  }
-
   function handleInitialLoadSubmit() {
-    const hasStockData =
-      initialStockForm.quantity.trim() !== "" || initialStockForm.notes.trim() !== "";
-    const hasReceivableData =
-      initialReceivableForm.totalAmount.trim() !== "" ||
-      initialReceivableForm.collectedAmount.trim() !== "" ||
-      initialReceivableForm.notes.trim() !== "";
+    const hasStockData = initialStockForm.quantity.trim() !== "" || initialStockForm.notes.trim() !== "";
 
-    if (!hasStockData && !hasReceivableData) {
+    if (!hasStockData) {
       showError("No hay datos cargados para guardar en la carga inicial.");
       return;
     }
 
-    let savedStock = false;
-    let savedReceivable = false;
-
-    if (hasStockData) {
-      savedStock = saveInitialStockLoad();
-      if (!savedStock) {
-        return;
-      }
+    const savedStock = saveInitialStockLoad();
+    if (!savedStock) {
+      return;
     }
 
-    if (hasReceivableData) {
-      savedReceivable = saveInitialReceivableLoad();
-      if (!savedReceivable) {
-        return;
-      }
-    }
-
-    if (savedStock && savedReceivable) {
-      showSuccess("Carga inicial guardada.");
-    } else if (savedStock) {
+    if (savedStock) {
       showSuccess("Stock inicial cargado.");
-    } else if (savedReceivable) {
-      showSuccess("Saldo inicial a cobrar cargado.");
     }
   }
 
@@ -2132,6 +2096,7 @@ export function AgroHomePage() {
       date: record.date,
       establishmentId: record.establishmentId,
       fieldId: record.fieldId,
+      species: record.species,
       quantity: `${record.quantity}`,
       treatment: record.treatment,
       notes: record.notes
@@ -2307,21 +2272,16 @@ export function AgroHomePage() {
         {activeView === "setup" ? (
           <AgroSetupSection
             establishments={establishments}
-            setupCutoffDate={setupCutoffDate}
             setupEstablishmentId={setupEstablishmentId}
             setupSpecies={setupSpecies}
             newEstablishmentForm={newEstablishmentForm}
             initialStockForm={initialStockForm}
-            initialReceivableForm={initialReceivableForm}
             setupSummary={setupSummary}
-            setSetupCutoffDate={setSetupCutoffDate}
             setSetupEstablishmentId={setSetupEstablishmentId}
             setSetupSpecies={setSetupSpecies}
             setNewEstablishmentForm={setNewEstablishmentForm}
             setInitialStockForm={setInitialStockForm}
-            setInitialReceivableForm={setInitialReceivableForm}
             resetInitialStockForm={resetInitialStockForm}
-            resetInitialReceivableForm={resetInitialReceivableForm}
             onAddEstablishment={handleAddEstablishment}
             onSubmitInitialLoad={handleInitialLoadSubmit}
           />

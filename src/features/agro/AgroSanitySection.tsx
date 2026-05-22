@@ -1,5 +1,7 @@
 import { formatShortDate } from "./agro.home.shared";
+import { speciesLabels } from "./agro.demo.data";
 import { Establishment, FieldUnit } from "./agro.types";
+import type { AgroSpecies } from "./agro.types";
 
 interface AgroSanitySectionProps {
   establishments: Establishment[];
@@ -9,6 +11,7 @@ interface AgroSanitySectionProps {
     date: string;
     establishmentId: string;
     fieldId: string;
+    species: AgroSpecies;
     quantity: string;
     treatment: string;
     notes: string;
@@ -18,6 +21,7 @@ interface AgroSanitySectionProps {
     date: string;
     establishmentId: string;
     fieldId: string;
+    species: AgroSpecies;
     quantity: number;
     treatment: string;
     notes: string;
@@ -30,6 +34,7 @@ interface AgroSanitySectionProps {
       date: string;
       establishmentId: string;
       fieldId: string;
+      species: AgroSpecies;
       quantity: string;
       treatment: string;
       notes: string;
@@ -77,6 +82,19 @@ export function AgroSanitySection({
           <label className="span-2">
             <span>Campo activo</span>
             <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
+          </label>
+          <label>
+            <span>Especie</span>
+            <select
+              value={sanitaryForm.species}
+              onChange={(event) => setSanitaryForm((current) => ({ ...current, species: event.target.value as AgroSpecies }))}
+            >
+              {Object.entries(speciesLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             <span>Cantidad de animales</span>
@@ -139,6 +157,7 @@ export function AgroSanitySection({
               <tr>
                 <th>Fecha</th>
                 <th>Establecimiento</th>
+                <th>Especie</th>
                 <th>Cantidad</th>
                 <th>Tratamiento</th>
                 <th>Observaciones</th>
@@ -152,6 +171,7 @@ export function AgroSanitySection({
                   <tr key={record.id}>
                     <td>{formatShortDate(record.date)}</td>
                     <td>{field?.name ?? "-"}</td>
+                    <td>{speciesLabels[record.species]}</td>
                     <td>{record.quantity}</td>
                     <td>{record.treatment}</td>
                     <td>{record.notes || "-"}</td>

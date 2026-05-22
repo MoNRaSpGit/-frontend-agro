@@ -1,4 +1,5 @@
 import { buildApiUrl } from "../../shared/config/api";
+import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
 import {
   AccountingEntry,
   AnimalMovementRecord,
@@ -8,6 +9,11 @@ import {
   RainfallRecord,
   SanitaryRecord
 } from "./agro.types";
+import { establishments as demoEstablishments, fields as demoFields } from "./agro.demo.data";
+
+export type AgroPersistenceMode = "backend" | "demo-local";
+
+const AGRO_DEMO_WORKSPACE_STORAGE_KEY = "frontend-agro.demo-workspace.v1";
 
 export type AgroWorkspaceSnapshot = {
   workspaceKey: "public";
@@ -24,7 +30,28 @@ export type AgroWorkspaceSnapshot = {
   updatedAt: string | null;
 };
 
-export async function fetchAgroWorkspace() {
+function createDefaultDemoSnapshot(): AgroWorkspaceSnapshot {
+  return {
+    workspaceKey: "public",
+    version: "v1",
+    data: {
+      establishments: demoEstablishments,
+      fields: demoFields,
+      animalMovements: [],
+      accountingEntries: [],
+      rainfallRecords: [],
+      sanitaryRecords: [],
+      monthlyExchangeRates: []
+    },
+    updatedAt: null
+  };
+}
+
+export async function fetchAgroWorkspace(mode: AgroPersistenceMode) {
+  if (mode === "demo-local") {
+    return readJsonStorage<AgroWorkspaceSnapshot>(AGRO_DEMO_WORKSPACE_STORAGE_KEY, createDefaultDemoSnapshot());
+  }
+
   const response = await fetch(buildApiUrl("/agro/workspace/public"), {
     headers: {
       "Content-Type": "application/json"
@@ -38,7 +65,19 @@ export async function fetchAgroWorkspace() {
   return (await response.json()) as AgroWorkspaceSnapshot;
 }
 
-export async function saveAgroWorkspace(snapshot: AgroWorkspaceSnapshot["data"]) {
+export async function saveAgroWorkspace(mode: AgroPersistenceMode, snapshot: AgroWorkspaceSnapshot["data"]) {
+  if (mode === "demo-local") {
+    const nextSnapshot: AgroWorkspaceSnapshot = {
+      workspaceKey: "public",
+      version: "v1",
+      data: snapshot,
+      updatedAt: new Date().toISOString()
+    };
+
+    writeJsonStorage(AGRO_DEMO_WORKSPACE_STORAGE_KEY, nextSnapshot);
+    return nextSnapshot;
+  }
+
   const response = await fetch(buildApiUrl("/agro/workspace/public"), {
     method: "PUT",
     headers: {

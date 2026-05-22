@@ -40,6 +40,7 @@ export interface FieldUnit {
   id: string;
   establishmentId: string;
   name: string;
+  hectares: number;
   notes: string;
 }
 
@@ -115,6 +116,7 @@ export interface SanitaryRecord {
   date: string;
   establishmentId: string;
   fieldId: string;
+  species: AgroSpecies;
   quantity: number;
   treatment: string;
   notes: string;

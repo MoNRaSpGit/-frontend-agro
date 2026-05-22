@@ -49,8 +49,8 @@ export const establishments: Establishment[] = [
 ];
 
 export const fields: FieldUnit[] = [
-  { id: "field-est-1", establishmentId: "est-1", name: "Santa Clara", notes: "Operacion consolidada del establecimiento." },
-  { id: "field-est-2", establishmentId: "est-2", name: "El Ombu", notes: "Operacion consolidada del establecimiento." }
+  { id: "field-est-1", establishmentId: "est-1", name: "Santa Clara", hectares: 1240, notes: "Operacion consolidada del establecimiento." },
+  { id: "field-est-2", establishmentId: "est-2", name: "El Ombu", hectares: 860, notes: "Operacion consolidada del establecimiento." }
 ];
 
 const legacyFieldEstablishmentMap: Record<string, string> = {
