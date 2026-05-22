@@ -87,6 +87,9 @@ La carga inicial hoy permite:
 - crear campo con `Nombre` y `Hectareas`
 - cargar stock inicial de animales por especie y categoria
 - arrancar desde workspace vacio real si el cliente no tiene nada sembrado
+- exigir `Hectareas` al crear campo
+- marcar el input en rojo si falta ese dato
+- mostrar aviso visible cuando intentan guardar sin hectareas
 
 Ya no forma parte de esta pantalla:
 
@@ -101,6 +104,7 @@ Ya no forma parte de esta pantalla:
 - `Inicio`, `Lluvia`, `Sanidad` y `Resumen` como vistas visibles y utilizables
 - estado comercial real de cobros dentro de contabilidad
 - hectareas visibles dentro de los resumenes por campo
+- hectareas obligatorias en el alta de campo
 
 ## Siguiente paso recomendado
 

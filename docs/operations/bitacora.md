@@ -43,6 +43,16 @@ Queda asi:
 - si la clave es valida, el frontend entra con un usuario demo real
 - ese usuario demo guarda contra un workspace autenticado por tenant, separado del cliente real
 
+## 2026-05-22 - Hectareas obligatorias al crear campo
+
+Se endurece la carga inicial para que no queden campos sin superficie declarada.
+
+Queda asi:
+
+- `Hectareas` pasa a ser obligatoria al crear campo
+- si falta ese dato, sale un aviso visible
+- el input queda marcado en rojo hasta corregirlo
+
 ## Ultimo bloque importante ya aplicado
 
 En este ultimo tramo quedaron cerrados tres puntos operativos:
@@ -90,6 +100,7 @@ Tambien quedaron resueltos pedidos funcionales fuertes:
 - resumen por campo mostrando hectareas reales
 - `Carga inicial` sin saldo inicial, sin fecha de corte y sin localidad
 - demo separado del cliente real con acceso propio
+- validacion visual de hectareas obligatorias al crear campo
 
 ## Pedido cliente ya absorbido
 

@@ -85,6 +85,8 @@ La carga inicial permite:
 - sembrar stock base por establecimiento y especie
 - crear nuevos campos
 - guardar hectareas por campo
+- exigir que las hectareas esten cargadas antes de crear el campo
+- marcar visualmente el error cuando falta ese dato
 
 No se usa en este corte para:
 
