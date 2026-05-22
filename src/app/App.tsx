@@ -6,6 +6,8 @@ import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../shared/
 
 const AGRO_ACCESS_MODE_STORAGE_KEY = "frontend-agro.access-mode.v1";
 const AGRO_AUTH_SESSION_STORAGE_KEY = "frontend-agro.auth-session.v1";
+const AGRO_DIRECT_ACCOUNT = "Rosendo";
+const AGRO_DIRECT_PASSWORD = "lamilagrosa";
 
 type AgroAccessMode = "demo-local" | "backend";
 
@@ -29,14 +31,12 @@ export function App() {
     setAccessMode(mode);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function loginWithCredentials(identifier: string, secret: string) {
     setLoginPending(true);
     setLoginError(null);
 
     try {
-      const session = await loginWithAccount(account, password);
+      const session = await loginWithAccount(identifier, secret);
       writeJsonStorage(AGRO_AUTH_SESSION_STORAGE_KEY, session);
       writeJsonStorage(AGRO_ACCESS_MODE_STORAGE_KEY, "backend");
       setAccessMode("backend");
@@ -48,13 +48,33 @@ export function App() {
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await loginWithCredentials(account, password);
+  }
+
+  async function handleDirectLogin() {
+    setAccount(AGRO_DIRECT_ACCOUNT);
+    setPassword(AGRO_DIRECT_PASSWORD);
+    await loginWithCredentials(AGRO_DIRECT_ACCOUNT, AGRO_DIRECT_PASSWORD);
+  }
+
   if (!accessMode) {
     return (
       <main className="access-shell">
         <section className="access-card">
           <span className="eyebrow">Agro</span>
           <h1>Ingreso cliente</h1>
-          <p>Entrá con tu cuenta y contrasena para abrir el workspace actual del establecimiento.</p>
+          <p>Entrar directo con el cliente actual o usar el acceso manual si necesitás probar otra cuenta.</p>
+
+          <div className="access-login-actions">
+            <button type="button" className="access-submit-button" disabled={loginPending} onClick={handleDirectLogin}>
+              {loginPending ? "Ingresando..." : "Entrar Rosendo"}
+            </button>
+            <button type="button" className="access-demo-button" onClick={() => handleSelectMode("demo-local")}>
+              Entrar demo local
+            </button>
+          </div>
 
           <form className="access-login-form" onSubmit={handleSubmit}>
             <label className="access-field">
@@ -63,7 +83,7 @@ export function App() {
                 type="text"
                 value={account}
                 onChange={(event) => setAccount(event.target.value)}
-                placeholder="lamilagrosa"
+                placeholder="Rosendo"
                 autoComplete="username"
                 required
               />
@@ -75,7 +95,7 @@ export function App() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="1994"
+                placeholder="lamilagrosa"
                 autoComplete="current-password"
                 required
               />
@@ -83,23 +103,14 @@ export function App() {
 
             {loginError ? <p className="access-error">{loginError}</p> : null}
 
-            <div className="access-login-actions">
-              <button type="submit" className="access-submit-button" disabled={loginPending}>
-                {loginPending ? "Ingresando..." : "Entrar cliente actual"}
-              </button>
-              <button type="button" className="access-demo-button" onClick={() => handleSelectMode("demo-local")}>
-                Entrar demo local
-              </button>
-            </div>
+            <button type="submit" className="access-demo-button" disabled={loginPending}>
+              Usar otra cuenta
+            </button>
           </form>
         </section>
       </main>
     );
   }
 
-  return (
-    <>
-      <AgroWorkspace persistenceMode={accessMode as AgroPersistenceMode} />
-    </>
-  );
+  return <AgroWorkspace persistenceMode={accessMode as AgroPersistenceMode} />;
 }
