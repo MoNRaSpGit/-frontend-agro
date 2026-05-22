@@ -31,6 +31,15 @@ export function App() {
     setAccessMode(mode);
   }
 
+  function handleSignOut() {
+    removeStorageItem(AGRO_AUTH_SESSION_STORAGE_KEY);
+    removeStorageItem(AGRO_ACCESS_MODE_STORAGE_KEY);
+    setAccessMode(null);
+    setAccount("");
+    setPassword("");
+    setLoginError(null);
+  }
+
   async function loginWithCredentials(identifier: string, secret: string) {
     setLoginPending(true);
     setLoginError(null);
@@ -112,5 +121,5 @@ export function App() {
     );
   }
 
-  return <AgroWorkspace persistenceMode={accessMode as AgroPersistenceMode} />;
+  return <AgroWorkspace persistenceMode={accessMode as AgroPersistenceMode} onSignOut={handleSignOut} />;
 }

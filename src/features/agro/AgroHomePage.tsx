@@ -218,9 +218,10 @@ function summarizeExpenses(entries: AccountingEntry[], exchangeRateByMonth: Reco
 
 interface AgroHomePageProps {
   persistenceMode: AgroPersistenceMode;
+  onSignOut: () => void;
 }
 
-export function AgroHomePage({ persistenceMode }: AgroHomePageProps) {
+export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) {
   const today = getTodayDate();
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
   const accountingFormPanelRef = useRef<HTMLElement | null>(null);
@@ -2247,6 +2248,7 @@ export function AgroHomePage({ persistenceMode }: AgroHomePageProps) {
         activeKey={activeView}
         onSelect={(key) => setActiveView(key as AgroView)}
         onTitleClick={() => setActiveView(null)}
+        onSignOut={onSignOut}
       >
         <AgroToolbar
           availableYears={availableYears}

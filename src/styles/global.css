@@ -342,6 +342,13 @@ button {
   color: #284022;
 }
 
+.product-shell-dropdown-item.signout {
+  margin-top: 6px;
+  border-top: 1px solid rgba(56, 72, 49, 0.14);
+  border-radius: 0 0 14px 14px;
+  color: #7f291d;
+}
+
 .eyebrow {
   display: inline-flex;
   padding: 5px 10px;

@@ -16,6 +16,7 @@ interface ProductShellProps {
   activeKey: string | null;
   onSelect: (key: string) => void;
   onTitleClick?: () => void;
+  onSignOut?: () => void;
   children: ReactNode;
 }
 
@@ -27,6 +28,7 @@ export function ProductShell({
   activeKey,
   onSelect,
   onTitleClick,
+  onSignOut,
   children
 }: ProductShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -132,6 +134,18 @@ export function ProductShell({
                   {activeKey === item.key ? <Check size={16} strokeWidth={2.4} /> : null}
                 </button>
               ))}
+              {onSignOut ? (
+                <button
+                  type="button"
+                  className="product-shell-dropdown-item signout"
+                  onClick={() => {
+                    onSignOut();
+                    setMenuOpen(false);
+                  }}
+                >
+                  <span>Cerrar sesion</span>
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>
