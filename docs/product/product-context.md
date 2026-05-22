@@ -1,6 +1,6 @@
 # Agro - Contexto funcional del producto
 
-Fecha de actualizacion: 2026-05-16
+Fecha de actualizacion: 2026-05-22
 
 ## Definicion actual del producto
 
@@ -76,15 +76,21 @@ Su funcion en este corte es:
 - mostrar indicadores y alertas
 - ayudar a contrastar lo cargado contra la realidad operativa
 - mostrar tambien estado de cuenta comercial
+- reflejar tambien las hectareas reales de cada campo
 
 ## Bloque 6 - Carga inicial
 
 La carga inicial permite:
 
 - sembrar stock base por establecimiento y especie
+- crear nuevos campos
+- guardar hectareas por campo
+
+No se usa en este corte para:
+
 - sembrar saldo contable base
-- crear nuevos establecimientos
-- cargar una fecha de referencia para arrancar ordenado
+- cargar fecha de corte
+- pedir localidad del campo
 
 ## Relacion entre stock y contabilidad
 
@@ -99,6 +105,7 @@ En este corte:
 - la operacion visible del frontend persiste en backend usando el workspace publico
 - el objetivo principal sigue siendo validar flujos, lenguaje y lectura operativa con cliente
 - el backend ya guarda establecimientos, campos, animales, contabilidad, lluvia, sanidad y tipos de cambio mensuales
+- el acceso visible del cliente se simplifica a un solo boton de ingreso directo
 
 ## Fuente de categorias
 

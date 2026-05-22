@@ -1,6 +1,6 @@
 # Agro Docs
 
-Fecha de actualizacion: 2026-05-16
+Fecha de actualizacion: 2026-05-22
 
 ## Objetivo
 
@@ -70,11 +70,11 @@ Si hay contradiccion entre una regla global del SaaS y este modulo:
 
 ## Regla importante de este corte
 
-Hoy `agro` ya no depende solo de demo local.
+Hoy `agro` entra con acceso directo del cliente real y con una puerta demo separada para pruebas controladas.
 
-La persistencia principal del modulo ya vive en backend mediante el workspace publico.
+La persistencia principal del modulo vive en backend mediante el workspace publico.
 
-La prioridad actual no es bajar persistencia, sino:
+La prioridad actual no es bajar mas infraestructura, sino:
 
 - validar flujo real con cliente
 - afinar lenguaje y lectura operativa
