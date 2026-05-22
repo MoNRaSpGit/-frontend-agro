@@ -14,11 +14,16 @@ interface AgroSetupSectionProps {
     quantity: string;
     notes: string;
   };
+  newEstablishmentErrors: {
+    name?: string;
+    hectares?: string;
+  };
   setupSummary: {
     stockLoads: number;
   };
   setSetupEstablishmentId: (value: string) => void;
   setSetupSpecies: (value: AgroSpecies) => void;
+  clearNewEstablishmentError: (fieldName: "name" | "hectares") => void;
   setNewEstablishmentForm: React.Dispatch<
       React.SetStateAction<{
         name: string;
@@ -43,9 +48,11 @@ export function AgroSetupSection({
   setupSpecies,
   newEstablishmentForm,
   initialStockForm,
+  newEstablishmentErrors,
   setupSummary,
   setSetupEstablishmentId,
   setSetupSpecies,
+  clearNewEstablishmentError,
   setNewEstablishmentForm,
   setInitialStockForm,
   resetInitialStockForm,
@@ -148,22 +155,28 @@ export function AgroSetupSection({
             </div>
           </div>
           <div className="form-grid">
-            <label>
+            <label className={newEstablishmentErrors.name ? "field-error" : undefined}>
               <span>Nombre</span>
               <input
                 type="text"
                 value={newEstablishmentForm.name}
-                onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, name: event.target.value }))}
+                onChange={(event) => {
+                  clearNewEstablishmentError("name");
+                  setNewEstablishmentForm((current) => ({ ...current, name: event.target.value }));
+                }}
               />
             </label>
-            <label>
+            <label className={newEstablishmentErrors.hectares ? "field-error" : undefined}>
               <span>Hectareas</span>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={newEstablishmentForm.hectares}
-                onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, hectares: event.target.value }))}
+                onChange={(event) => {
+                  clearNewEstablishmentError("hectares");
+                  setNewEstablishmentForm((current) => ({ ...current, hectares: event.target.value }));
+                }}
               />
             </label>
             <div className="action-row span-2">

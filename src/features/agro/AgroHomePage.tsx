@@ -325,6 +325,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     name: "",
     hectares: ""
   });
+  const [newEstablishmentErrors, setNewEstablishmentErrors] = useState<Record<string, string>>({});
   const [initialStockForm, setInitialStockForm] = useState({
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     quantity: "",
@@ -487,6 +488,19 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setNewEstablishmentForm({
       name: "",
       hectares: ""
+    });
+    setNewEstablishmentErrors({});
+  }
+
+  function clearNewEstablishmentError(fieldName: "name" | "hectares") {
+    setNewEstablishmentErrors((current) => {
+      if (!current[fieldName]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[fieldName];
+      return next;
     });
   }
 
@@ -1537,17 +1551,24 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function handleAddEstablishment() {
     const name = newEstablishmentForm.name.trim();
     const hectares = Number(newEstablishmentForm.hectares);
+    const nextErrors: Record<string, string> = {};
+
     if (!name) {
-      showError("Falta el nombre del establecimiento.");
-      return;
+      nextErrors.name = "Falta el nombre del establecimiento.";
     }
 
     if (!Number.isFinite(hectares) || hectares <= 0) {
-      showError("Faltan las hectareas del campo.");
+      nextErrors.hectares = "Faltan las hectareas del campo.";
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setNewEstablishmentErrors(nextErrors);
+      showError(nextErrors.hectares ?? nextErrors.name ?? "Faltan datos del campo.");
       return;
     }
 
     if (establishments.some((item) => item.name.trim().toLowerCase() === name.toLowerCase())) {
+      setNewEstablishmentErrors({});
       showError("Ese establecimiento ya existe.");
       return;
     }
@@ -1585,6 +1606,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setRainfallForm((current) => ({ ...current, establishmentId, fieldId }));
     setSanitaryForm((current) => ({ ...current, establishmentId, fieldId }));
     resetNewEstablishmentForm();
+    setNewEstablishmentErrors({});
     showSuccess("Establecimiento agregado.");
   }
 
@@ -2276,9 +2298,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             setupSpecies={setupSpecies}
             newEstablishmentForm={newEstablishmentForm}
             initialStockForm={initialStockForm}
+            newEstablishmentErrors={newEstablishmentErrors}
             setupSummary={setupSummary}
             setSetupEstablishmentId={setSetupEstablishmentId}
             setSetupSpecies={setSetupSpecies}
+            clearNewEstablishmentError={clearNewEstablishmentError}
             setNewEstablishmentForm={setNewEstablishmentForm}
             setInitialStockForm={setInitialStockForm}
             resetInitialStockForm={resetInitialStockForm}
