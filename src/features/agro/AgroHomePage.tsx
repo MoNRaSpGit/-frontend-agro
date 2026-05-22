@@ -323,7 +323,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const [setupSpecies, setSetupSpecies] = useState<AgroSpecies>("vacunos");
   const [newEstablishmentForm, setNewEstablishmentForm] = useState({
     name: "",
-    location: "",
     hectares: ""
   });
   const [initialStockForm, setInitialStockForm] = useState({
@@ -487,7 +486,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function resetNewEstablishmentForm() {
     setNewEstablishmentForm({
       name: "",
-      location: "",
       hectares: ""
     });
   }
@@ -1566,7 +1564,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     const nextEstablishment: Establishment = {
       id: establishmentId,
       name,
-      location: newEstablishmentForm.location.trim(),
+      location: "",
       hectares
     };
 
@@ -2484,9 +2482,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                   <article key={item.field.id} className="report-row-card">
                     <div className="report-row-head">
                       <strong>{item.field.name}</strong>
-                      <span>{item.field.notes}</span>
+                      <span>{item.field.hectares} ha</span>
                     </div>
                     <div className="list-stack">
+                      <div className="list-row">
+                        <span>Hectareas</span>
+                        <strong>{item.field.hectares} ha</strong>
+                      </div>
                       <div className="list-row">
                         <span>Vacunos</span>
                         <strong>{item.speciesTotals.vacunos}</strong>

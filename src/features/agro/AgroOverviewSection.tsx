@@ -21,6 +21,12 @@ export function AgroOverviewSection({
   latestAccountingEntries,
   latestAnimalMovements
 }: AgroOverviewSectionProps) {
+  const establishmentSummaryParts = [
+    establishmentSummary?.name ?? "-",
+    establishmentSummary?.location?.trim() ? establishmentSummary.location : null,
+    `${establishmentSummary?.hectares ?? 0} ha`
+  ].filter(Boolean);
+
   function getMovementLabel(movement: AnimalMovementRecord) {
     if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
       return "Traslado";
@@ -41,10 +47,7 @@ export function AgroOverviewSection({
         <div className="panel-header">
           <div>
             <h2>Direccion del producto</h2>
-            <p>
-              {establishmentSummary?.name ?? "-"} | {establishmentSummary?.location ?? "-"} |{" "}
-              {establishmentSummary?.hectares ?? 0} ha
-            </p>
+            <p>{establishmentSummaryParts.join(" | ")}</p>
           </div>
         </div>
         <div className="list-stack">

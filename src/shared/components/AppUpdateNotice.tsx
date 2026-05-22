@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { fetchPublishedFrontendBuildMeta, FRONTEND_BUILD_INFO } from "../config/build";
+import { clearAgroSessionStorage } from "../auth/agroSession";
 
 const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 
@@ -51,6 +52,7 @@ export function AppUpdateNotice() {
   function handleUpdate() {
     setIsUpdating(true);
     window.setTimeout(() => {
+      clearAgroSessionStorage();
       window.location.reload();
     }, 500);
   }

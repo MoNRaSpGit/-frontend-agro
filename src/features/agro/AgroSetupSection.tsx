@@ -7,7 +7,6 @@ interface AgroSetupSectionProps {
   setupSpecies: AgroSpecies;
   newEstablishmentForm: {
     name: string;
-    location: string;
     hectares: string;
   };
   initialStockForm: {
@@ -23,7 +22,6 @@ interface AgroSetupSectionProps {
   setNewEstablishmentForm: React.Dispatch<
       React.SetStateAction<{
         name: string;
-        location: string;
         hectares: string;
       }>
   >;
@@ -156,14 +154,6 @@ export function AgroSetupSection({
                 type="text"
                 value={newEstablishmentForm.name}
                 onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, name: event.target.value }))}
-              />
-            </label>
-            <label>
-              <span>Ubicacion</span>
-              <input
-                type="text"
-                value={newEstablishmentForm.location}
-                onChange={(event) => setNewEstablishmentForm((current) => ({ ...current, location: event.target.value }))}
               />
             </label>
             <label>

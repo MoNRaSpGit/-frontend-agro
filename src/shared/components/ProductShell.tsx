@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { Check, Menu, UserRound } from "lucide-react";
+import { Check, LogOut, Menu, UserRound } from "lucide-react";
 
 export interface ProductShellNavItem {
   key: string;
@@ -83,6 +83,18 @@ export function ProductShell({
             </button>
           ))}
         </div>
+
+        {onSignOut ? (
+          <button type="button" className="product-shell-session-button" onClick={onSignOut} aria-label="Cerrar sesion">
+            <span className="product-shell-avatar">
+              <UserRound size={18} strokeWidth={2.1} />
+            </span>
+            <span className="product-shell-session-label">Cerrar sesion</span>
+            <span className="product-shell-session-icon">
+              <LogOut size={16} strokeWidth={2.2} />
+            </span>
+          </button>
+        ) : null}
 
         <div className="product-shell-menu-wrap" ref={menuRef}>
           <button
