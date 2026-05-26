@@ -39,6 +39,16 @@ Queda asi:
 - al tocar `Demo`, el frontend entra directo usando la cuenta demo real
 - `Rosendo` y `Demo` quedan alineados como accesos directos desde la misma pantalla
 
+## 2026-05-26 - Formato visible con 2 decimales
+
+Se alinea la lectura visual de los numeros cargados para que no se pierdan los decimales al revisar la informacion.
+
+Queda asi:
+
+- montos, hectareas, lluvia, peso y tipo de cambio se muestran con `2` decimales
+- la presentacion visible usa formato `es-UY`
+- un valor como `1250000,75` ahora se lee como `1.250.000,75`
+
 ## 2026-05-22 - Acceso directo del cliente, cierre visible y re-login por actualizacion
 
 Se simplifica la puerta de entrada del frontend para este corte del cliente real.

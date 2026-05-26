@@ -16,6 +16,7 @@ import {
   formatCategoryLabel,
   expenseConceptLabels,
   formatMoney,
+  formatNumber,
   parseDecimalInput,
   formatShortDate,
   getNetAmount,
@@ -2512,12 +2513,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                   <article key={item.field.id} className="report-row-card">
                     <div className="report-row-head">
                       <strong>{item.field.name}</strong>
-                      <span>{item.field.hectares} ha</span>
+                      <span>{formatNumber(item.field.hectares)} ha</span>
                     </div>
                     <div className="list-stack">
                       <div className="list-row">
                         <span>Hectareas</span>
-                        <strong>{item.field.hectares} ha</strong>
+                        <strong>{formatNumber(item.field.hectares)} ha</strong>
                       </div>
                       <div className="list-row">
                         <span>Vacunos</span>
@@ -2553,7 +2554,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                       </div>
                       <div className="list-row">
                         <span>Lluvia acumulada</span>
-                        <strong>{item.rainfallTotal} mm</strong>
+                        <strong>{formatNumber(item.rainfallTotal)} mm</strong>
                       </div>
                       <div className="list-row">
                         <span>Ingresos cobrados</span>

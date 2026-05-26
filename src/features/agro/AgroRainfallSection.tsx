@@ -1,4 +1,4 @@
-import { formatShortDate } from "./agro.home.shared";
+import { formatNumber, formatShortDate } from "./agro.home.shared";
 import { Establishment, FieldUnit } from "./agro.types";
 
 interface AgroRainfallSectionProps {
@@ -138,7 +138,7 @@ export function AgroRainfallSection({
                   <tr key={record.id}>
                     <td>{formatShortDate(record.date)}</td>
                     <td>{field?.name ?? "-"}</td>
-                    <td>{record.millimeters} mm</td>
+                    <td>{formatNumber(record.millimeters)} mm</td>
                     <td>{record.notes || "-"}</td>
                     <td>
                       <div className="table-actions">

@@ -52,7 +52,8 @@ export function formatMoney(value: number, currency: MoneyCurrency) {
   return new Intl.NumberFormat("es-UY", {
     style: "currency",
     currency,
-    maximumFractionDigits: 0
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(value);
 }
 
@@ -84,12 +85,15 @@ export function parseDecimalInput(value: string) {
   return Number(normalized);
 }
 
-export function formatNumber(value?: number) {
+export function formatNumber(value?: number, fractionDigits = 2) {
   if (value === undefined) {
     return "-";
   }
 
-  return new Intl.NumberFormat("es-UY", { maximumFractionDigits: 0 }).format(value);
+  return new Intl.NumberFormat("es-UY", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
+  }).format(value);
 }
 
 export function formatShortDate(value: string) {

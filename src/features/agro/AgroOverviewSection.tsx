@@ -1,6 +1,6 @@
 import { deriveMovementDirection } from "./agro.domain";
 import { movementKindLabels, speciesLabels } from "./agro.demo.data";
-import { formatMoney } from "./agro.home.shared";
+import { formatMoney, formatNumber } from "./agro.home.shared";
 import { AccountingEntry, AnimalMovementRecord } from "./agro.types";
 import { expenseConceptLabels, incomeConceptLabels } from "./agro.home.shared";
 
@@ -24,7 +24,7 @@ export function AgroOverviewSection({
   const establishmentSummaryParts = [
     establishmentSummary?.name ?? "-",
     establishmentSummary?.location?.trim() ? establishmentSummary.location : null,
-    `${establishmentSummary?.hectares ?? 0} ha`
+    `${formatNumber(establishmentSummary?.hectares ?? 0)} ha`
   ].filter(Boolean);
 
   function getMovementLabel(movement: AnimalMovementRecord) {

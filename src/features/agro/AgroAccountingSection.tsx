@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { expenseConceptLabels, formatMoney, formatShortDate, formatYearMonth, getNetAmount, parseDecimalInput } from "./agro.home.shared";
+import { expenseConceptLabels, formatMoney, formatNumber, formatShortDate, formatYearMonth, getNetAmount, parseDecimalInput } from "./agro.home.shared";
 import { currencyLabels } from "./agro.demo.data";
 import {
   AccountingEntry,
@@ -397,7 +397,7 @@ export function AgroAccountingSection({
                 {monthlyExchangeRates.map((item) => (
                   <tr key={item.id}>
                     <td>{formatYearMonth(item.yearMonth)}</td>
-                    <td>{item.averageRate.toFixed(2)}</td>
+                    <td>{formatNumber(item.averageRate)}</td>
                     <td>
                       <div className="table-actions">
                         <button type="button" className="ghost-button" onClick={() => handleOpenExchangeRateEdit(item.id)}>
