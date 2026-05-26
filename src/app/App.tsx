@@ -7,7 +7,7 @@ import { writeJsonStorage } from "../shared/lib/persistence";
 const AGRO_DIRECT_ACCOUNT = "Rosendo";
 const AGRO_DIRECT_PASSWORD = "lamilagrosa";
 const AGRO_DEMO_ACCOUNT = "agrodemo";
-const AGRO_DEMO_GATE_PASSWORD = "123";
+const AGRO_DEMO_PASSWORD = "123";
 
 type AgroAccessMode = "demo-local" | "backend";
 
@@ -15,15 +15,11 @@ export function App() {
   const [accessMode, setAccessMode] = useState<AgroAccessMode | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginPending, setLoginPending] = useState(false);
-  const [showDemoPassword, setShowDemoPassword] = useState(false);
-  const [demoPassword, setDemoPassword] = useState("");
 
   function handleSignOut() {
     clearAgroSessionStorage();
     setAccessMode(null);
     setLoginError(null);
-    setShowDemoPassword(false);
-    setDemoPassword("");
   }
 
   async function loginWithCredentials(identifier: string, secret: string) {
@@ -47,24 +43,7 @@ export function App() {
   }
 
   async function handleDemoLogin() {
-    if (demoPassword.trim() !== AGRO_DEMO_GATE_PASSWORD) {
-      setLoginError("Contrasena demo incorrecta.");
-      return;
-    }
-
-    await loginWithCredentials(AGRO_DEMO_ACCOUNT, demoPassword);
-  }
-
-  function handleOpenDemoModal() {
-    setLoginError(null);
-    setDemoPassword("");
-    setShowDemoPassword(true);
-  }
-
-  function handleCloseDemoModal() {
-    setLoginError(null);
-    setDemoPassword("");
-    setShowDemoPassword(false);
+    await loginWithCredentials(AGRO_DEMO_ACCOUNT, AGRO_DEMO_PASSWORD);
   }
 
   if (!accessMode) {
@@ -73,7 +52,7 @@ export function App() {
         <section className="access-card">
           <span className="eyebrow">Agro</span>
           <h1>Ingreso cliente</h1>
-          <p>Entrar directo con Rosendo o usar el acceso demo con clave separada.</p>
+          <p>Entrar directo con Rosendo o abrir la cuenta demo sin pasos extra.</p>
 
           <div className="access-login-actions">
             <button type="button" className="access-submit-button" disabled={loginPending} onClick={handleDirectLogin}>
@@ -83,55 +62,14 @@ export function App() {
               type="button"
               className="access-demo-button"
               disabled={loginPending}
-              onClick={handleOpenDemoModal}
+              onClick={() => {
+                void handleDemoLogin();
+              }}
             >
               Demo
             </button>
           </div>
-
-          {showDemoPassword ? (
-            <div className="confirm-modal-backdrop" role="presentation" onClick={handleCloseDemoModal}>
-              <form
-                className="confirm-modal"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleDemoLogin();
-                }}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="confirm-modal-copy">
-                  <strong>Ingrese contrasena</strong>
-                </div>
-
-                <label className="access-field">
-                  <input
-                    type="password"
-                    value={demoPassword}
-                    onChange={(event) => {
-                      setDemoPassword(event.target.value);
-                      setLoginError(null);
-                    }}
-                    autoComplete="current-password"
-                    required
-                    autoFocus
-                  />
-                </label>
-
-                {loginError ? <p className="access-error">{loginError}</p> : null}
-
-                <div className="action-row">
-                  <button type="submit" className="primary-button" disabled={loginPending || !demoPassword.trim()}>
-                    {loginPending ? "Ingresando..." : "Entrar"}
-                  </button>
-                  <button type="button" className="ghost-button" disabled={loginPending} onClick={handleCloseDemoModal}>
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </div>
-          ) : null}
-
-          {!showDemoPassword && loginError ? <p className="access-error">{loginError}</p> : null}
+          {loginError ? <p className="access-error">{loginError}</p> : null}
         </section>
       </main>
     );

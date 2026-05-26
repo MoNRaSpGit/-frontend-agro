@@ -29,6 +29,16 @@ Queda asi:
 - el cambio aplica en `Carga inicial`, `Animales`, `Contabilidad`, `Lluvia` y `Tipo de cambio`
 - la validacion y los calculos visibles usan el mismo parseo para evitar diferencias entre lo escrito y lo guardado
 
+## 2026-05-26 - Demo con ingreso directo
+
+Se simplifica tambien la puerta demo para que el acceso de pruebas no agregue un paso manual innecesario.
+
+Queda asi:
+
+- el boton `Demo` ya no abre modal ni pide clave intermedia
+- al tocar `Demo`, el frontend entra directo usando la cuenta demo real
+- `Rosendo` y `Demo` quedan alineados como accesos directos desde la misma pantalla
+
 ## 2026-05-22 - Acceso directo del cliente, cierre visible y re-login por actualizacion
 
 Se simplifica la puerta de entrada del frontend para este corte del cliente real.

@@ -76,8 +76,7 @@ Hoy el ingreso visible del cliente funciona asi:
 - boton verde `Rosendo`
 - login directo contra backend con la cuenta real `Rosendo`
 - boton `Demo`
-- el acceso `Demo` abre un modal y solo pide una contrasena corta
-- si la clave es correcta, entra con un usuario demo real separado del cliente
+- login directo contra backend con un usuario demo real separado del cliente
 - boton visible de `Cerrar sesion` dentro de la app
 - si aparece una nueva version y el cliente acepta `Actualizar`, la app vuelve al login y obliga reingreso
 
