@@ -16,6 +16,7 @@ import {
   formatCategoryLabel,
   expenseConceptLabels,
   formatMoney,
+  parseDecimalInput,
   formatShortDate,
   getNetAmount,
   getTodayDate,
@@ -1550,7 +1551,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   function handleAddEstablishment() {
     const name = newEstablishmentForm.name.trim();
-    const hectares = Number(newEstablishmentForm.hectares);
+    const hectares = parseDecimalInput(newEstablishmentForm.hectares);
     const nextErrors: Record<string, string> = {};
 
     if (!name) {
@@ -1613,13 +1614,18 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function handleAnimalSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const quantity = Number(animalForm.quantity);
-    const weightKg = Number(animalForm.weightKg);
-    const unitPrice = Number(animalForm.unitPrice);
-    const freightAmount = Number(animalForm.freightAmount);
-    const commissionAmount = Number(animalForm.commissionAmount);
-    const taxAmount = Number(animalForm.taxAmount);
-    const collectedAmount = animalForm.kind === "sale" ? Number(animalForm.collectedAmount || "0") : undefined;
+    const quantity = parseDecimalInput(animalForm.quantity);
+    const weightKg = parseDecimalInput(animalForm.weightKg);
+    const unitPrice = parseDecimalInput(animalForm.unitPrice);
+    const freightAmount = parseDecimalInput(animalForm.freightAmount);
+    const commissionAmount = parseDecimalInput(animalForm.commissionAmount);
+    const taxAmount = parseDecimalInput(animalForm.taxAmount);
+    const collectedAmount =
+      animalForm.kind === "sale"
+        ? animalForm.collectedAmount.trim() === ""
+          ? 0
+          : parseDecimalInput(animalForm.collectedAmount)
+        : undefined;
     const commercialMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
     const isTransferMovement = animalForm.kind === "transfer";
     const nextErrors: Record<string, string> = {};
@@ -1800,15 +1806,15 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function handleAccountingSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const grossAmount = Number(accountingForm.grossAmount);
-    const commissionAmount = Number(accountingForm.commissionAmount);
-    const taxAmount = Number(accountingForm.taxAmount);
+    const grossAmount = parseDecimalInput(accountingForm.grossAmount);
+    const commissionAmount = parseDecimalInput(accountingForm.commissionAmount);
+    const taxAmount = parseDecimalInput(accountingForm.taxAmount);
     const netAmount = getNetAmount(accountingForm.type, grossAmount, commissionAmount, taxAmount);
     const collectedAmount =
       accountingForm.type === "income"
         ? accountingForm.collectedAmount.trim() === ""
           ? 0
-          : Number(accountingForm.collectedAmount)
+          : parseDecimalInput(accountingForm.collectedAmount)
         : undefined;
 
     if (!Number.isFinite(grossAmount) || grossAmount <= 0) {
@@ -1879,7 +1885,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function handleRainfallSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const millimeters = Number(rainfallForm.millimeters);
+    const millimeters = parseDecimalInput(rainfallForm.millimeters);
     if (!Number.isFinite(millimeters) || millimeters < 0) {
       showError("La lluvia debe ser un numero valido.");
       return;
@@ -1905,7 +1911,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function handleSanitarySubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const quantity = Number(sanitaryForm.quantity);
+    const quantity = parseDecimalInput(sanitaryForm.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
       showError("La cantidad de animales debe ser mayor a 0.");
       return;
@@ -1938,7 +1944,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }
 
   function saveInitialStockLoad() {
-    const quantity = Number(initialStockForm.quantity);
+    const quantity = parseDecimalInput(initialStockForm.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
       showError("La cantidad inicial debe ser mayor a 0.");
       return false;
@@ -1985,7 +1991,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function handleExchangeRateSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const averageRate = Number(exchangeRateForm.averageRate);
+    const averageRate = parseDecimalInput(exchangeRateForm.averageRate);
     if (!exchangeRateForm.yearMonth) {
       showError("Falta elegir el mes del tipo de cambio.");
       return;
@@ -2245,17 +2251,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   const projectedNet = getNetAmount(
     accountingForm.type,
-    Number(accountingForm.grossAmount) || 0,
-    Number(accountingForm.commissionAmount) || 0,
-    Number(accountingForm.taxAmount) || 0
+    parseDecimalInput(accountingForm.grossAmount) || 0,
+    parseDecimalInput(accountingForm.commissionAmount) || 0,
+    parseDecimalInput(accountingForm.taxAmount) || 0
   );
 
   const projectedAnimalTotal = calculateAnimalTotal(
-    Number(animalForm.quantity) || 0,
-    Number(animalForm.unitPrice) || 0,
-    Number(animalForm.commissionAmount) || 0,
-    Number(animalForm.taxAmount) || 0,
-    animalForm.kind === "purchase" ? Number(animalForm.freightAmount) || 0 : 0
+    parseDecimalInput(animalForm.quantity) || 0,
+    parseDecimalInput(animalForm.unitPrice) || 0,
+    parseDecimalInput(animalForm.commissionAmount) || 0,
+    parseDecimalInput(animalForm.taxAmount) || 0,
+    animalForm.kind === "purchase" ? parseDecimalInput(animalForm.freightAmount) || 0 : 0
   );
 
   return (

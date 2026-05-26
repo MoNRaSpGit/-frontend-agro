@@ -99,9 +99,8 @@ export function AgroSanitySection({
           <label>
             <span>Cantidad de animales</span>
             <input
-              type="number"
-              min="1"
-              step="1"
+              type="text"
+              inputMode="numeric"
               value={sanitaryForm.quantity}
               onChange={(event) => setSanitaryForm((current) => ({ ...current, quantity: event.target.value }))}
             />

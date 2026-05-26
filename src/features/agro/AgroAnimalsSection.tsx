@@ -1,5 +1,5 @@
 import { animalMovementFormKinds, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
-import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate } from "./agro.home.shared";
+import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate, parseDecimalInput } from "./agro.home.shared";
 import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, MoneyCurrency } from "./agro.types";
 
 interface AgroAnimalsSectionProps {
@@ -242,7 +242,8 @@ export function AgroAnimalsSection({
             <span>Cantidad</span>
             <input
               ref={registerAnimalFieldRef("quantity")}
-              type="number"
+              type="text"
+              inputMode="numeric"
               min="1"
               value={animalForm.quantity}
               onChange={(event) => {
@@ -272,8 +273,8 @@ export function AgroAnimalsSection({
                 <span>Peso</span>
                 <input
                   ref={registerAnimalFieldRef("weightKg")}
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   value={animalForm.weightKg}
                   onChange={(event) => {
                     clearAnimalFieldError("weightKg");
@@ -285,9 +286,8 @@ export function AgroAnimalsSection({
                 <span>Precio</span>
                 <input
                   ref={registerAnimalFieldRef("unitPrice")}
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={animalForm.unitPrice}
                   onChange={(event) => {
                     clearAnimalFieldError("unitPrice");
@@ -300,9 +300,8 @@ export function AgroAnimalsSection({
                   <span>Flete</span>
                   <input
                     ref={registerAnimalFieldRef("freightAmount")}
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={animalForm.freightAmount}
                     onChange={(event) => {
                       clearAnimalFieldError("freightAmount");
@@ -315,9 +314,8 @@ export function AgroAnimalsSection({
                 <span>Comision</span>
                 <input
                   ref={registerAnimalFieldRef("commissionAmount")}
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={animalForm.commissionAmount}
                   onChange={(event) => {
                     clearAnimalFieldError("commissionAmount");
@@ -329,9 +327,8 @@ export function AgroAnimalsSection({
                 <span>IVA</span>
                 <input
                   ref={registerAnimalFieldRef("taxAmount")}
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={animalForm.taxAmount}
                   onChange={(event) => {
                     clearAnimalFieldError("taxAmount");
@@ -343,9 +340,8 @@ export function AgroAnimalsSection({
                 <label className={animalFormErrors.collectedAmount ? "field-error" : undefined}>
                   <span>Cobrado</span>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={animalForm.collectedAmount}
                     onChange={(event) => setAnimalForm((current) => ({ ...current, collectedAmount: event.target.value }))}
                   />
@@ -398,7 +394,7 @@ export function AgroAnimalsSection({
               <strong>{formatMoney(projectedAnimalTotal, animalForm.currency)}</strong>
               {animalForm.kind === "sale" ? (
                 <small>
-                  Pendiente {formatMoney(Math.max(0, projectedAnimalTotal - (Number(animalForm.collectedAmount) || 0)), animalForm.currency)}
+                  Pendiente {formatMoney(Math.max(0, projectedAnimalTotal - (parseDecimalInput(animalForm.collectedAmount) || 0)), animalForm.currency)}
                 </small>
               ) : null}
             </div>

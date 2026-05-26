@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { expenseConceptLabels, formatMoney, formatShortDate, formatYearMonth, getNetAmount } from "./agro.home.shared";
+import { expenseConceptLabels, formatMoney, formatShortDate, formatYearMonth, getNetAmount, parseDecimalInput } from "./agro.home.shared";
 import { currencyLabels } from "./agro.demo.data";
 import {
   AccountingEntry,
@@ -155,7 +155,7 @@ export function AgroAccountingSection({
   function handleExchangeRateModalSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const averageRate = Number(exchangeRateForm.averageRate);
+    const averageRate = parseDecimalInput(exchangeRateForm.averageRate);
     if (!exchangeRateForm.yearMonth) {
       return;
     }
@@ -268,9 +268,8 @@ export function AgroAccountingSection({
           <label>
             <span>Importe bruto</span>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={accountingForm.grossAmount}
               onChange={(event) => setAccountingForm((current) => ({ ...current, grossAmount: event.target.value }))}
             />
@@ -278,9 +277,8 @@ export function AgroAccountingSection({
           <label>
             <span>Comision</span>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={accountingForm.commissionAmount}
               onChange={(event) => setAccountingForm((current) => ({ ...current, commissionAmount: event.target.value }))}
             />
@@ -288,9 +286,8 @@ export function AgroAccountingSection({
           <label>
             <span>IVA</span>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={accountingForm.taxAmount}
               onChange={(event) => setAccountingForm((current) => ({ ...current, taxAmount: event.target.value }))}
             />
@@ -299,9 +296,8 @@ export function AgroAccountingSection({
             <label>
               <span>Cobrado</span>
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={accountingForm.collectedAmount}
                 onChange={(event) => setAccountingForm((current) => ({ ...current, collectedAmount: event.target.value }))}
               />
@@ -321,16 +317,16 @@ export function AgroAccountingSection({
               {formatMoney(
                 getNetAmount(
                   accountingForm.type,
-                  Number(accountingForm.grossAmount) || 0,
-                  Number(accountingForm.commissionAmount) || 0,
-                  Number(accountingForm.taxAmount) || 0
+                  parseDecimalInput(accountingForm.grossAmount) || 0,
+                  parseDecimalInput(accountingForm.commissionAmount) || 0,
+                  parseDecimalInput(accountingForm.taxAmount) || 0
                 ),
                 accountingForm.currency
               )}
             </strong>
             {accountingForm.type === "income" ? (
               <small>
-                Pendiente {formatMoney(Math.max(0, (Number(accountingForm.grossAmount) || 0) - (Number(accountingForm.commissionAmount) || 0) - (Number(accountingForm.taxAmount) || 0) - (Number(accountingForm.collectedAmount) || 0)), "USD")}
+                Pendiente {formatMoney(Math.max(0, (parseDecimalInput(accountingForm.grossAmount) || 0) - (parseDecimalInput(accountingForm.commissionAmount) || 0) - (parseDecimalInput(accountingForm.taxAmount) || 0) - (parseDecimalInput(accountingForm.collectedAmount) || 0)), "USD")}
               </small>
             ) : null}
           </div>
@@ -366,9 +362,8 @@ export function AgroAccountingSection({
             <label>
               <span>TC promedio</span>
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={exchangeRateForm.averageRate}
                 onChange={(event) => setExchangeRateForm((current) => ({ ...current, averageRate: event.target.value }))}
               />
@@ -556,9 +551,8 @@ export function AgroAccountingSection({
               <label>
                 <span>TC promedio</span>
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={exchangeRateForm.averageRate}
                   onChange={(event) => setExchangeRateForm((current) => ({ ...current, averageRate: event.target.value }))}
                 />

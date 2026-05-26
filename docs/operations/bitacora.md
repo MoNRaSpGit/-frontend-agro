@@ -1,6 +1,6 @@
 # Agro - Bitacora
 
-Fecha de actualizacion: 2026-05-22
+Fecha de actualizacion: 2026-05-26
 
 ## Regla de este archivo
 
@@ -17,6 +17,17 @@ Aca corresponde anotar:
 ## Corte actual
 
 `agro` quedo en un corte activo publicado para esperar devolucion del cliente.
+
+## 2026-05-26 - Inputs numericos aceptan coma decimal
+
+Se ajusta la carga manual del frontend para no pelearse con la forma real en que el cliente escribe numeros.
+
+Queda asi:
+
+- los campos decimales ahora aceptan valores con coma `,`
+- tambien se normalizan valores con miles y decimal como `1.234,56`
+- el cambio aplica en `Carga inicial`, `Animales`, `Contabilidad`, `Lluvia` y `Tipo de cambio`
+- la validacion y los calculos visibles usan el mismo parseo para evitar diferencias entre lo escrito y lo guardado
 
 ## 2026-05-22 - Acceso directo del cliente, cierre visible y re-login por actualizacion
 

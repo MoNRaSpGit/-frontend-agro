@@ -56,6 +56,34 @@ export function formatMoney(value: number, currency: MoneyCurrency) {
   }).format(value);
 }
 
+export function parseDecimalInput(value: string) {
+  const compactValue = value.trim().replace(/\s+/g, "");
+
+  if (!compactValue) {
+    return Number.NaN;
+  }
+
+  const lastComma = compactValue.lastIndexOf(",");
+  const lastDot = compactValue.lastIndexOf(".");
+  let normalized = compactValue;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      normalized = compactValue.replace(/\./g, "").replace(",", ".");
+    } else {
+      normalized = compactValue.replace(/,/g, "");
+    }
+  } else if (lastComma >= 0) {
+    normalized = compactValue.replace(",", ".");
+  }
+
+  if (!normalized) {
+    return Number.NaN;
+  }
+
+  return Number(normalized);
+}
+
 export function formatNumber(value?: number) {
   if (value === undefined) {
     return "-";

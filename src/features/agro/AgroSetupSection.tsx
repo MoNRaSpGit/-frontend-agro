@@ -119,9 +119,8 @@ export function AgroSetupSection({
               <label>
                 <span>Cantidad</span>
                 <input
-                  type="number"
-                  min="1"
-                  step="1"
+                  type="text"
+                  inputMode="numeric"
                   value={initialStockForm.quantity}
                   onChange={(event) => setInitialStockForm((current) => ({ ...current, quantity: event.target.value }))}
                 />
@@ -169,9 +168,8 @@ export function AgroSetupSection({
             <label className={newEstablishmentErrors.hectares ? "field-error" : undefined}>
               <span>Hectareas</span>
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={newEstablishmentForm.hectares}
                 onChange={(event) => {
                   clearNewEstablishmentError("hectares");

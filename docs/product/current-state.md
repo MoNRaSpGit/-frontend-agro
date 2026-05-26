@@ -1,6 +1,6 @@
 # Agro - Estado actual del frontend
 
-Fecha de actualizacion: 2026-05-22
+Fecha de actualizacion: 2026-05-26
 
 ## Estado general
 
@@ -39,6 +39,7 @@ Hoy el modulo ya deja ver:
 - tipo de cambio promedio mensual para dolarizar egresos en pesos
 - planilla sanitaria por establecimiento
 - carga de lluvia por campo con bitacora propia
+- carga numerica compatible con coma decimal en formularios operativos
 - resumen operativo por establecimiento
 - estado de cuenta comercial
 - cartel de actualizacion cuando hay una version nueva publicada

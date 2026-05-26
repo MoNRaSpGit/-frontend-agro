@@ -77,9 +77,8 @@ export function AgroRainfallSection({
           <label>
             <span>Milimetros</span>
             <input
-              type="number"
-              min="0"
-              step="0.1"
+              type="text"
+              inputMode="decimal"
               value={rainfallForm.millimeters}
               onChange={(event) => setRainfallForm((current) => ({ ...current, millimeters: event.target.value }))}
             />
