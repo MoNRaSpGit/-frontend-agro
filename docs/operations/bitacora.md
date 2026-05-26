@@ -49,6 +49,16 @@ Queda asi:
 - la presentacion visible usa formato `es-UY`
 - un valor como `1250000,75` ahora se lee como `1.250.000,75`
 
+## 2026-05-26 - El campo visible ya no vuelve a La Milagrosa al guardar
+
+Se corrige un desvio del frontend que rompia el trabajo por campo cuando el usuario guardaba cambios fuera de `La Milagrosa`.
+
+Queda asi:
+
+- al guardar en `Animales`, `Contabilidad`, `Lluvia` o `Sanidad`, la pantalla mantiene el campo activo actual
+- los resets de formulario ya no vuelven por defecto al primer establecimiento del array
+- esto evita que el trabajo salte solo a `La Milagrosa` despues de cada guardado
+
 ## 2026-05-22 - Acceso directo del cliente, cierre visible y re-login por actualizacion
 
 Se simplifica la puerta de entrada del frontend para este corte del cliente real.

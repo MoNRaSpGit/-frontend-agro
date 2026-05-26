@@ -41,6 +41,7 @@ Hoy el modulo ya deja ver:
 - carga de lluvia por campo con bitacora propia
 - carga numerica compatible con coma decimal en formularios operativos
 - lectura visible con formato `es-UY` y `2` decimales en valores numericos relevantes
+- persistencia del campo visible despues de guardar cambios en formularios operativos
 - resumen operativo por establecimiento
 - estado de cuenta comercial
 - cartel de actualizacion cuando hay una version nueva publicada

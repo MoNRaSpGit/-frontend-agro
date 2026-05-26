@@ -334,12 +334,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     notes: ""
   });
 
+  const activeEstablishmentId = selectedEstablishmentId || establishments[0]?.id || "";
+  const activeFieldId = getFieldIdForEstablishmentFrom(fields, activeEstablishmentId);
+  const activeTransferDestinationId =
+    establishments.find((item) => item.id !== activeEstablishmentId)?.id ?? activeEstablishmentId;
+
   function resetAnimalForm() {
     setAnimalForm({
       date: today,
-      establishmentId: establishments[0]?.id ?? "",
-      fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
-      transferDestinationEstablishmentId: establishments[1]?.id ?? establishments[0]?.id ?? "",
+      establishmentId: activeEstablishmentId,
+      fieldId: activeFieldId,
+      transferDestinationEstablishmentId: activeTransferDestinationId,
       species: "vacunos" as AgroSpecies,
       categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
       kind: "purchase" as AnimalMovementKind,
@@ -432,8 +437,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function resetAccountingForm() {
     setAccountingForm({
       date: today,
-      establishmentId: establishments[0]?.id ?? "",
-      fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
+      establishmentId: activeEstablishmentId,
+      fieldId: activeFieldId,
       type: "income" as AccountingEntryType,
       concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
       currency: "USD" as MoneyCurrency,
@@ -449,8 +454,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function resetRainfallForm() {
     setRainfallForm({
       date: today,
-      establishmentId: establishments[0]?.id ?? "",
-      fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
+      establishmentId: activeEstablishmentId,
+      fieldId: activeFieldId,
       millimeters: "",
       notes: ""
     });
@@ -460,8 +465,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function resetSanitaryForm() {
     setSanitaryForm({
       date: today,
-      establishmentId: establishments[0]?.id ?? "",
-      fieldId: getFieldIdForEstablishmentFrom(fields, establishments[0]?.id ?? ""),
+      establishmentId: activeEstablishmentId,
+      fieldId: activeFieldId,
       species: "vacunos" as AgroSpecies,
       quantity: "",
       treatment: "",
