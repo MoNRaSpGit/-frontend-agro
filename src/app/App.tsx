@@ -7,7 +7,8 @@ import { writeJsonStorage } from "../shared/lib/persistence";
 const AGRO_DIRECT_ACCOUNT = "Rosendo";
 const AGRO_DIRECT_PASSWORD = "lamilagrosa";
 const AGRO_DEMO_ACCOUNT = "agrodemo";
-const AGRO_DEMO_PASSWORD = "123";
+const AGRO_DEMO_EMAIL = "agrodemo@saaspro.local";
+const AGRO_DEMO_PASSWORD = "demo12345";
 
 type AgroAccessMode = "demo-local" | "backend";
 
@@ -38,12 +39,47 @@ export function App() {
     }
   }
 
+  async function loginWithCredentialFallback(
+    attempts: Array<{
+      identifier: string;
+      password: string;
+    }>
+  ) {
+    setLoginPending(true);
+    setLoginError(null);
+
+    try {
+      let lastError: unknown = null;
+
+      for (const attempt of attempts) {
+        try {
+          const session = await loginWithAccount(attempt.identifier, attempt.password);
+          writeJsonStorage(AGRO_AUTH_SESSION_STORAGE_KEY, session);
+          writeJsonStorage(AGRO_ACCESS_MODE_STORAGE_KEY, "backend");
+          setAccessMode("backend");
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError ?? new Error("No se pudo iniciar sesion.");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "No se pudo iniciar sesion.");
+    } finally {
+      setLoginPending(false);
+    }
+  }
+
   async function handleDirectLogin() {
     await loginWithCredentials(AGRO_DIRECT_ACCOUNT, AGRO_DIRECT_PASSWORD);
   }
 
   async function handleDemoLogin() {
-    await loginWithCredentials(AGRO_DEMO_ACCOUNT, AGRO_DEMO_PASSWORD);
+    await loginWithCredentialFallback([
+      { identifier: AGRO_DEMO_ACCOUNT, password: AGRO_DEMO_PASSWORD },
+      { identifier: AGRO_DEMO_EMAIL, password: AGRO_DEMO_PASSWORD }
+    ]);
   }
 
   if (!accessMode) {
