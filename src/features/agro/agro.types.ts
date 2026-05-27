@@ -22,6 +22,7 @@ export type IncomeConcept = "venta_vacunos" | "venta_ovinos" | "venta_lana" | "v
 export type ExpenseConcept =
   | "compra_animales"
   | "alimentacion"
+  | "arrendamiento"
   | "sanidad"
   | "combustible"
   | "sueldos"

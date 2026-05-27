@@ -18,6 +18,14 @@ Aca corresponde anotar:
 
 `agro` quedo en un corte activo publicado para esperar devolucion del cliente.
 
+## 2026-05-27 - Nuevo rubro contable Arrendamiento
+
+Se agrega en `Contabilidad > Egresos` el rubro:
+
+- `Arrendamiento`
+
+Queda disponible como concepto operativo nuevo dentro de la carga contable del frontend.
+
 ## 2026-05-26 - Inputs numericos aceptan coma decimal
 
 Se ajusta la carga manual del frontend para no pelearse con la forma real en que el cliente escribe numeros.

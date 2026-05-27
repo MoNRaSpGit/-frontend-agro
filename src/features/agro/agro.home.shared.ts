@@ -10,6 +10,7 @@ export const incomeConceptLabels = {
 export const expenseConceptLabels = {
   compra_animales: "Compra de animales",
   alimentacion: "Alimentacion",
+  arrendamiento: "Arrendamiento",
   sanidad: "Sanidad",
   combustible: "Combustible",
   sueldos: "Sueldos",

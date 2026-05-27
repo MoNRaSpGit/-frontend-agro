@@ -35,6 +35,7 @@ Hoy el modulo ya deja ver:
 - categorias sembradas desde la declaracion jurada MGAP/SNIG 2024
 - planilla de animales con altas, edicion y validaciones
 - planilla contable con lectura cronologica por campo y moneda
+- rubro `Arrendamiento` disponible dentro de egresos contables
 - cuentas a cobrar con estados `Pendiente`, `Parcial` y `Cobrado`
 - tipo de cambio promedio mensual para dolarizar egresos en pesos
 - planilla sanitaria por establecimiento
