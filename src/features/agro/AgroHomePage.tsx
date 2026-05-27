@@ -339,16 +339,22 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const activeTransferDestinationId =
     establishments.find((item) => item.id !== activeEstablishmentId)?.id ?? activeEstablishmentId;
 
-  function resetAnimalForm() {
-    setAnimalForm({
-      date: today,
-      establishmentId: activeEstablishmentId,
-      fieldId: activeFieldId,
-      transferDestinationEstablishmentId: activeTransferDestinationId,
-      species: "vacunos" as AgroSpecies,
-      categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
-      kind: "purchase" as AnimalMovementKind,
-      quantity: "10",
+  function resetAnimalForm(preserveContext = false) {
+    setAnimalForm((current) => ({
+      date: preserveContext ? current.date : today,
+      establishmentId: preserveContext ? current.establishmentId : activeEstablishmentId,
+      fieldId: preserveContext ? current.fieldId : activeFieldId,
+      transferDestinationEstablishmentId: preserveContext
+        ? current.kind === "transfer"
+          ? current.transferDestinationEstablishmentId || activeTransferDestinationId
+          : ""
+        : activeTransferDestinationId,
+      species: preserveContext ? current.species : ("vacunos" as AgroSpecies),
+      categoryCode: preserveContext
+        ? current.categoryCode
+        : categoryCatalog.vacunos[0]?.code ?? "",
+      kind: preserveContext ? current.kind : ("purchase" as AnimalMovementKind),
+      quantity: preserveContext ? "" : "10",
       earTag: "",
       weightKg: "",
       unitPrice: "",
@@ -356,9 +362,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       commissionAmount: "",
       taxAmount: "",
       collectedAmount: "",
-      currency: "USD" as MoneyCurrency,
+      currency: preserveContext ? current.currency : ("USD" as MoneyCurrency),
       notes: ""
-    });
+    }));
     setAnimalFormErrors({});
     setEditingAnimalMovementId(null);
   }
@@ -434,61 +440,61 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     });
   }
 
-  function resetAccountingForm() {
-    setAccountingForm({
-      date: today,
-      establishmentId: activeEstablishmentId,
-      fieldId: activeFieldId,
-      type: "income" as AccountingEntryType,
-      concept: "venta_vacunos" as IncomeConcept | ExpenseConcept,
-      currency: "USD" as MoneyCurrency,
+  function resetAccountingForm(preserveContext = false) {
+    setAccountingForm((current) => ({
+      date: preserveContext ? current.date : today,
+      establishmentId: preserveContext ? current.establishmentId : activeEstablishmentId,
+      fieldId: preserveContext ? current.fieldId : activeFieldId,
+      type: preserveContext ? current.type : ("income" as AccountingEntryType),
+      concept: preserveContext ? current.concept : ("venta_vacunos" as IncomeConcept | ExpenseConcept),
+      currency: preserveContext ? current.currency : ("USD" as MoneyCurrency),
       grossAmount: "",
       commissionAmount: "",
       taxAmount: "",
       collectedAmount: "",
       notes: ""
-    });
+    }));
     setEditingAccountingEntryId(null);
   }
 
-  function resetRainfallForm() {
-    setRainfallForm({
-      date: today,
-      establishmentId: activeEstablishmentId,
-      fieldId: activeFieldId,
+  function resetRainfallForm(preserveContext = false) {
+    setRainfallForm((current) => ({
+      date: preserveContext ? current.date : today,
+      establishmentId: preserveContext ? current.establishmentId : activeEstablishmentId,
+      fieldId: preserveContext ? current.fieldId : activeFieldId,
       millimeters: "",
       notes: ""
-    });
+    }));
     setEditingRainfallRecordId(null);
   }
 
-  function resetSanitaryForm() {
-    setSanitaryForm({
-      date: today,
-      establishmentId: activeEstablishmentId,
-      fieldId: activeFieldId,
-      species: "vacunos" as AgroSpecies,
+  function resetSanitaryForm(preserveContext = false) {
+    setSanitaryForm((current) => ({
+      date: preserveContext ? current.date : today,
+      establishmentId: preserveContext ? current.establishmentId : activeEstablishmentId,
+      fieldId: preserveContext ? current.fieldId : activeFieldId,
+      species: preserveContext ? current.species : ("vacunos" as AgroSpecies),
       quantity: "",
       treatment: "",
       notes: ""
-    });
+    }));
     setEditingSanitaryRecordId(null);
   }
 
-  function resetExchangeRateForm() {
-    setExchangeRateForm({
-      yearMonth: getYearMonth(today),
+  function resetExchangeRateForm(preserveContext = false) {
+    setExchangeRateForm((current) => ({
+      yearMonth: preserveContext ? current.yearMonth : getYearMonth(today),
       averageRate: ""
-    });
+    }));
     setEditingExchangeRateId(null);
   }
 
-  function resetInitialStockForm() {
-    setInitialStockForm({
-      categoryCode: categoryCatalog[setupSpecies][0]?.code ?? "",
+  function resetInitialStockForm(preserveContext = false) {
+    setInitialStockForm((current) => ({
+      categoryCode: preserveContext ? current.categoryCode : categoryCatalog[setupSpecies][0]?.code ?? "",
       quantity: "",
       notes: ""
-    });
+    }));
   }
 
   function resetNewEstablishmentForm() {
@@ -1805,7 +1811,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     }
 
     setSelectedEstablishmentId(animalForm.establishmentId);
-    resetAnimalForm();
+    resetAnimalForm(true);
     showSuccess(editingAnimalMovementId ? "Movimiento de animales actualizado." : "Movimiento de animales guardado.");
   }
 
@@ -1884,7 +1890,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       );
     }
     setSelectedEstablishmentId(accountingForm.establishmentId);
-    resetAccountingForm();
+    resetAccountingForm(true);
     showSuccess(editingAccountingEntryId ? "Movimiento contable actualizado." : "Movimiento contable guardado.");
     return true;
   }
@@ -1911,7 +1917,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         ? current.map((item) => (item.id === editingRainfallRecordId ? rainfallEntry : item))
         : [rainfallEntry, ...current]
     );
-    resetRainfallForm();
+    resetRainfallForm(true);
     showSuccess(editingRainfallRecordId ? "Registro de lluvia actualizado." : "Registro de lluvia guardado.");
   }
 
@@ -1946,7 +1952,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         : [sanitaryEntry, ...current]
     );
     setSelectedEstablishmentId(sanitaryForm.establishmentId);
-    resetSanitaryForm();
+    resetSanitaryForm(true);
     showSuccess(editingSanitaryRecordId ? "Tratamiento sanitario actualizado." : "Tratamiento sanitario guardado.");
   }
 
@@ -1973,7 +1979,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     setAnimalMovements((current) => [entry, ...current]);
     setSelectedEstablishmentId(setupEstablishmentId);
-    resetInitialStockForm();
+    resetInitialStockForm(true);
     return true;
   }
 
@@ -2020,7 +2026,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       return [nextRate, ...filtered];
     });
 
-    resetExchangeRateForm();
+    resetExchangeRateForm(true);
     showSuccess(editingExchangeRateId ? "Tipo de cambio actualizado." : "Tipo de cambio guardado.");
   }
 

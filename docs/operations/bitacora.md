@@ -36,6 +36,16 @@ Queda asi:
 - tambien pueden dejar `IVA` vacio
 - si ambos campos quedan vacios, el sistema los interpreta como `0`
 
+## 2026-05-27 - Los formularios ya no pierden el contexto al guardar
+
+Se mejora la experiencia de carga repetitiva para no obligar al cliente a rearmar el formulario en cada guardado.
+
+Queda asi:
+
+- despues de guardar, el formulario mantiene el contexto util actual
+- se conserva por ejemplo `tipo`, `rubro`, `campo`, `especie`, `moneda` o `mes`
+- se limpian solo los valores cargados como importes, cantidades y notas
+
 ## 2026-05-26 - Inputs numericos aceptan coma decimal
 
 Se ajusta la carga manual del frontend para no pelearse con la forma real en que el cliente escribe numeros.

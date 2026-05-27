@@ -37,6 +37,7 @@ Hoy el modulo ya deja ver:
 - planilla contable con lectura cronologica por campo y moneda
 - rubro `Arrendamiento` disponible dentro de egresos contables
 - `Comision` e `IVA` opcionales en egresos manuales
+- los formularios mantienen contexto util despues de guardar
 - cuentas a cobrar con estados `Pendiente`, `Parcial` y `Cobrado`
 - tipo de cambio promedio mensual para dolarizar egresos en pesos
 - planilla sanitaria por establecimiento
