@@ -1813,8 +1813,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     event.preventDefault();
 
     const grossAmount = parseDecimalInput(accountingForm.grossAmount);
-    const commissionAmount = parseDecimalInput(accountingForm.commissionAmount);
-    const taxAmount = parseDecimalInput(accountingForm.taxAmount);
+    const commissionAmount =
+      accountingForm.commissionAmount.trim() === "" ? 0 : parseDecimalInput(accountingForm.commissionAmount);
+    const taxAmount = accountingForm.taxAmount.trim() === "" ? 0 : parseDecimalInput(accountingForm.taxAmount);
     const netAmount = getNetAmount(accountingForm.type, grossAmount, commissionAmount, taxAmount);
     const collectedAmount =
       accountingForm.type === "income"

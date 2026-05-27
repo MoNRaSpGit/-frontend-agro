@@ -26,6 +26,16 @@ Se agrega en `Contabilidad > Egresos` el rubro:
 
 Queda disponible como concepto operativo nuevo dentro de la carga contable del frontend.
 
+## 2026-05-27 - Comision e IVA ya no exigen 00 en egresos
+
+Se ajusta la carga contable para no pedir datos innecesarios en la operacion real.
+
+Queda asi:
+
+- en `Contabilidad`, los egresos pueden dejar `Comision` vacio
+- tambien pueden dejar `IVA` vacio
+- si ambos campos quedan vacios, el sistema los interpreta como `0`
+
 ## 2026-05-26 - Inputs numericos aceptan coma decimal
 
 Se ajusta la carga manual del frontend para no pelearse con la forma real en que el cliente escribe numeros.
