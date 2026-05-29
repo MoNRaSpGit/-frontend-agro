@@ -18,6 +18,18 @@ Aca corresponde anotar:
 
 `agro` quedo en un corte activo publicado para esperar devolucion del cliente.
 
+## 2026-05-29 - Nuevos rubros contables en egresos
+
+Se amplian los rubros disponibles en `Contabilidad > Egresos` para acompañar mejor la carga real del cliente.
+
+Quedan disponibles como conceptos operativos nuevos:
+
+- `Honorarios profesionales`
+- `Semillas`
+- `Fertilizantes`
+
+El alta aplica a egresos en `USD` y tambien a egresos en `UYU`, porque el rubro se elige aparte de la moneda.
+
 ## 2026-05-27 - Nuevo rubro contable Arrendamiento
 
 Se agrega en `Contabilidad > Egresos` el rubro:
