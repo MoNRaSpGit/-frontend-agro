@@ -1,6 +1,6 @@
 # Agro - Estado actual del frontend
 
-Fecha de actualizacion: 2026-05-26
+Fecha de actualizacion: 2026-06-05
 
 ## Estado general
 
@@ -50,6 +50,7 @@ Hoy el modulo ya deja ver:
 - cartel de actualizacion cuando hay una version nueva publicada
 - acceso directo con un solo boton `Ingresar`
 - cierre de sesion visible dentro de la app
+- cambio manual de contrasena para la cuenta real `rosendo`
 
 ## Regla de persistencia actual
 
@@ -78,8 +79,9 @@ El endpoint `workspace/public` queda como compatibilidad operativa del backend, 
 
 Hoy el ingreso visible del cliente funciona asi:
 
-- boton verde `Rosendo`
-- login directo contra backend con la cuenta real `Rosendo`
+- formulario de ingreso con `usuario` y `contrasena`
+- cuenta real `rosendo`
+- accion visible temporal para `Definir nueva contrasena para Rosendo`
 - boton `Demo`
 - login directo contra backend con un usuario demo real separado del cliente
 - boton visible de `Cerrar sesion` dentro de la app

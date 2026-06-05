@@ -55,8 +55,45 @@ export async function loginWithAccount(identifier: string, password: string) {
   });
 
   if (!response.ok) {
-    throw new Error("Cuenta o contrasena incorrecta.");
+    throw new Error(await readAuthError(response, "Cuenta o contrasena incorrecta."));
   }
 
   return (await response.json()) as AuthSession;
+}
+
+export async function changeAccountPassword(accessToken: string, currentPassword: string, newPassword: string) {
+  const response = await fetch(buildApiUrl("/auth/change-password"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({
+      currentPassword,
+      newPassword
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(await readAuthError(response, "No se pudo actualizar la contrasena."));
+  }
+
+  return (await response.json()) as { success: boolean };
+}
+
+async function readAuthError(response: Response, fallbackMessage: string) {
+  try {
+    const payload = (await response.json()) as { message?: string | string[] };
+    if (Array.isArray(payload.message)) {
+      return payload.message.join(". ");
+    }
+
+    if (typeof payload.message === "string" && payload.message.trim().length > 0) {
+      return payload.message;
+    }
+  } catch {
+    return fallbackMessage;
+  }
+
+  return fallbackMessage;
 }

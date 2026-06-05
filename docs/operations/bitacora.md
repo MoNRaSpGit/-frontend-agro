@@ -1,6 +1,6 @@
 # Agro - Bitacora
 
-Fecha de actualizacion: 2026-05-26
+Fecha de actualizacion: 2026-06-05
 
 ## Regla de este archivo
 
@@ -17,6 +17,25 @@ Aca corresponde anotar:
 ## Corte actual
 
 `agro` quedo en un corte activo publicado para esperar devolucion del cliente.
+
+## 2026-06-05 - Rosendo pasa de acceso automatico a clave propia
+
+Se deja de depender del ingreso automatico con credencial fija para la cuenta real del cliente.
+
+Queda asi:
+
+- el acceso principal ya no entra directo con un boton `Rosendo`
+- la pantalla pide `usuario` y `contrasena`
+- se mantiene `rosendo` como cuenta operativa real
+- aparece la accion `Definir nueva contrasena para Rosendo`
+- ese flujo valida la clave actual y guarda una nueva sobre la misma cuenta
+- el acceso `Demo` sigue separado
+
+Objetivo:
+
+- permitir que el cliente defina su propia contrasena
+- mantener la misma cuenta y los mismos datos
+- dejar listo un boton temporal para la migracion de clave y luego retirarlo cuando el cliente confirme
 
 ## 2026-05-29 - Nuevos rubros contables en egresos
 

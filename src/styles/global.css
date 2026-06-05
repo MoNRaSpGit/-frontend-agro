@@ -106,6 +106,15 @@ button {
   gap: 14px;
 }
 
+.access-password-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 252, 245, 0.76);
+  border: 1px solid rgba(56, 72, 49, 0.14);
+}
+
 .access-field {
   display: grid;
   gap: 8px;
@@ -137,11 +146,30 @@ button {
   font-weight: 600;
 }
 
+.access-success {
+  margin: 0;
+  color: #2f6d28;
+  font-weight: 600;
+}
+
+.access-helper {
+  margin: 0;
+  color: #43513c;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
 .access-login-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
+}
+
+.access-secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .access-submit-button,
@@ -167,6 +195,19 @@ button {
   border: 1px solid rgba(56, 72, 49, 0.24);
   background: rgba(255, 252, 245, 0.92);
   color: #1b2719;
+}
+
+.access-text-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #2d4b24;
+  font-weight: 700;
+  text-align: left;
+}
+
+.access-text-button:disabled {
+  opacity: 0.6;
 }
 
 
