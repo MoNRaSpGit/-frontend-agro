@@ -47,9 +47,8 @@ export function AgroToolbar({
         </select>
       </label>
       <label className="period-picker">
-        <span>Ano</span>
+        <span>Ano visible</span>
         <select value={selectedYear} onChange={(event) => onYearChange(event.target.value)}>
-          <option value="all">Todos</option>
           {availableYears.map((year) => (
             <option key={year} value={year}>
               {year}
@@ -58,13 +57,15 @@ export function AgroToolbar({
         </select>
       </label>
       <label className="period-picker">
-        <span>Mes</span>
+        <span>Mes visible</span>
         <select value={selectedMonth} onChange={(event) => onMonthChange(event.target.value)}>
-          {periodMonthOptions.map((month) => (
+          {periodMonthOptions
+            .filter((month) => month.value !== "all")
+            .map((month) => (
             <option key={month.value} value={month.value}>
               {month.label}
             </option>
-          ))}
+            ))}
         </select>
       </label>
     </section>

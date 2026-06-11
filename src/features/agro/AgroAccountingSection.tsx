@@ -15,6 +15,7 @@ import {
 interface AgroAccountingSectionProps {
   establishments: Establishment[];
   fields: FieldUnit[];
+  visibleMonthLabel: string;
   accountingStatusFilter: "all" | "pending" | "partial" | "collected";
   accountingFormPanelRef: React.RefObject<HTMLElement | null>;
   accountingForm: {
@@ -97,6 +98,7 @@ interface AgroAccountingSectionProps {
 export function AgroAccountingSection({
   establishments,
   fields,
+  visibleMonthLabel,
   accountingStatusFilter,
   accountingFormPanelRef,
   accountingForm,
@@ -423,7 +425,7 @@ export function AgroAccountingSection({
         <div className="panel-header">
           <div>
             <h2>Planilla contable</h2>
-            <p>Lectura cronologica para revisar ingresos, egresos, rubros y moneda.</p>
+            <p>Lectura cronologica de {visibleMonthLabel} para revisar ingresos, egresos, rubros y moneda.</p>
           </div>
         </div>
         <div className="inline-metrics">
