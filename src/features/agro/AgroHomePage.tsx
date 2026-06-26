@@ -1400,6 +1400,32 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     };
   }, [animalMovements]);
 
+  const initialLoadRows = useMemo(() => {
+    return animalMovements
+      .filter(
+        (movement) =>
+          selectedFieldIdSet.has(movement.fieldId) &&
+          movement.kind === "adjustment" &&
+          movement.notes.startsWith("Carga inicial:") &&
+          isDateOnOrBefore(movement.date, visibleMonthRange.endDate)
+      )
+      .map((movement) => {
+        const establishment = establishments.find((item) => item.id === movement.establishmentId);
+        const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+
+        return {
+          id: movement.id,
+          date: movement.date,
+          establishmentName: establishment?.name ?? "-",
+          speciesLabel: speciesLabels[movement.species],
+          categoryLabel: category ? formatCategoryLabel(category.label) : movement.categoryCode,
+          quantity: movement.quantity,
+          notes: movement.notes.replace(/^Carga inicial:\s*/, "").trim() || "-"
+        };
+      })
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [animalMovements, establishments, selectedFieldIdSet, visibleMonthRange.endDate]);
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -2507,6 +2533,50 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                   <span>Gastos operativos total USD eq.</span>
                   <strong>{formatMoney(accumulatedSummary.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
                 </div>
+              </div>
+            </article>
+
+            <article className="panel wide">
+              <div className="panel-header">
+                <div>
+                  <h2>Planilla de carga inicial</h2>
+                  <p>Base sembrada del establecimiento visible hasta {visibleMonthRange.label}.</p>
+                </div>
+              </div>
+              <div className="inline-metrics">
+                <span className="data-badge accent">Registros de carga inicial {initialLoadRows.length}</span>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Establecimiento</th>
+                      <th>Especie</th>
+                      <th>Categoria</th>
+                      <th>Cantidad</th>
+                      <th>Observaciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {initialLoadRows.length > 0 ? (
+                      initialLoadRows.map((row) => (
+                        <tr key={row.id}>
+                          <td>{formatShortDate(row.date)}</td>
+                          <td>{row.establishmentName}</td>
+                          <td>{row.speciesLabel}</td>
+                          <td>{row.categoryLabel}</td>
+                          <td>{row.quantity}</td>
+                          <td>{row.notes}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6}>Todavia no hay carga inicial guardada para el establecimiento visible.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </article>
 
