@@ -7,7 +7,7 @@ import {
   clearAgroSessionStorage
 } from "../shared/auth/agroSession";
 import { changeAccountPassword, loginWithAccount } from "../shared/auth/auth.client";
-import { writeJsonStorage } from "../shared/lib/persistence";
+import { removeStorageItem, writeJsonStorage } from "../shared/lib/persistence";
 
 const AGRO_DIRECT_ACCOUNT = "rosendo";
 const AGRO_DIRECT_PASSWORD = "lamilagrosa";
@@ -94,10 +94,11 @@ export function App() {
   }
 
   async function handleDemoLogin() {
-    await loginWithCredentialFallback([
-      { identifier: AGRO_DEMO_ACCOUNT, password: AGRO_DEMO_PASSWORD },
-      { identifier: AGRO_DEMO_EMAIL, password: AGRO_DEMO_PASSWORD }
-    ]);
+    clearAgroSessionStorage();
+    removeStorageItem(AGRO_AUTH_SESSION_STORAGE_KEY);
+    writeJsonStorage(AGRO_ACCESS_MODE_STORAGE_KEY, "demo-local");
+    setLoginError(null);
+    setAccessMode("demo-local");
   }
 
   async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {

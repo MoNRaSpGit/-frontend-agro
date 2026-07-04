@@ -60,6 +60,7 @@ export function AgroSanitySection({
   onSubmit
 }: AgroSanitySectionProps) {
   const selectedEstablishment = establishments.find((item) => item.id === sanitaryForm.establishmentId);
+  const selectedFields = fields.filter((item) => item.establishmentId === sanitaryForm.establishmentId);
 
   return (
     <section className="content-grid">
@@ -67,7 +68,7 @@ export function AgroSanitySection({
         <div className="panel-header">
           <div>
             <h2>Cargar tratamiento sanitario</h2>
-            <p>Registro simple por establecimiento con cantidad, tratamiento y fecha.</p>
+            <p>Registro simple por campo y potrero con cantidad, tratamiento y fecha.</p>
           </div>
         </div>
         <form className="form-grid" onSubmit={onSubmit}>
@@ -82,6 +83,19 @@ export function AgroSanitySection({
           <label className="span-2">
             <span>Campo activo</span>
             <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
+          </label>
+          <label className="span-2">
+            <span>Potrero</span>
+            <select
+              value={sanitaryForm.fieldId}
+              onChange={(event) => setSanitaryForm((current) => ({ ...current, fieldId: event.target.value }))}
+            >
+              {selectedFields.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             <span>Especie</span>
@@ -138,14 +152,14 @@ export function AgroSanitySection({
         <div className="panel-header">
           <div>
             <h2>Planilla sanitaria</h2>
-            <p>Lectura cronologica de tratamientos por establecimiento.</p>
+            <p>Lectura cronologica de tratamientos por campo y potrero.</p>
           </div>
         </div>
         <label className="table-search">
           <span>Buscar en sanidad</span>
           <input
             type="search"
-            placeholder="Establecimiento, fecha, tratamiento u observacion..."
+            placeholder="Campo, potrero, fecha, tratamiento u observacion..."
             value={sanitarySearchTerm}
             onChange={(event) => setSanitarySearchTerm(event.target.value)}
           />
@@ -155,7 +169,8 @@ export function AgroSanitySection({
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Establecimiento</th>
+                <th>Campo</th>
+                <th>Potrero</th>
                 <th>Especie</th>
                 <th>Cantidad</th>
                 <th>Tratamiento</th>
@@ -166,9 +181,11 @@ export function AgroSanitySection({
             <tbody>
               {sanitaryRows.map((record) => {
                 const field = fields.find((item) => item.id === record.fieldId);
+                const establishment = establishments.find((item) => item.id === record.establishmentId);
                 return (
                   <tr key={record.id}>
                     <td>{formatShortDate(record.date)}</td>
+                    <td>{establishment?.name ?? "-"}</td>
                     <td>{field?.name ?? "-"}</td>
                     <td>{speciesLabels[record.species]}</td>
                     <td>{record.quantity}</td>

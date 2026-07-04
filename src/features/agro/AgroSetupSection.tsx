@@ -3,9 +3,20 @@ import { AgroSpecies, Establishment } from "./agro.types";
 
 interface AgroSetupSectionProps {
   establishments: Establishment[];
+  setupFields: Array<{
+    id: string;
+    name: string;
+  }>;
   setupEstablishmentId: string;
+  setupFieldId: string;
   setupSpecies: AgroSpecies;
   newEstablishmentForm: {
+    name: string;
+    hectares: string;
+    firstFieldName: string;
+    firstFieldHectares: string;
+  };
+  newFieldForm: {
     name: string;
     hectares: string;
   };
@@ -17,18 +28,34 @@ interface AgroSetupSectionProps {
   newEstablishmentErrors: {
     name?: string;
     hectares?: string;
+    firstFieldName?: string;
+    firstFieldHectares?: string;
+  };
+  newFieldErrors: {
+    name?: string;
+    hectares?: string;
   };
   setupSummary: {
     stockLoads: number;
   };
   setSetupEstablishmentId: (value: string) => void;
+  setSetupFieldId: (value: string) => void;
   setSetupSpecies: (value: AgroSpecies) => void;
-  clearNewEstablishmentError: (fieldName: "name" | "hectares") => void;
+  clearNewEstablishmentError: (fieldName: "name" | "hectares" | "firstFieldName" | "firstFieldHectares") => void;
+  clearNewFieldError: (fieldName: "name" | "hectares") => void;
   setNewEstablishmentForm: React.Dispatch<
       React.SetStateAction<{
         name: string;
         hectares: string;
+        firstFieldName: string;
+        firstFieldHectares: string;
       }>
+  >;
+  setNewFieldForm: React.Dispatch<
+    React.SetStateAction<{
+      name: string;
+      hectares: string;
+    }>
   >;
   setInitialStockForm: React.Dispatch<
     React.SetStateAction<{
@@ -39,24 +66,33 @@ interface AgroSetupSectionProps {
   >;
   resetInitialStockForm: () => void;
   onAddEstablishment: () => void;
+  onAddField: () => void;
   onSubmitInitialLoad: () => void;
 }
 
 export function AgroSetupSection({
   establishments,
+  setupFields,
   setupEstablishmentId,
+  setupFieldId,
   setupSpecies,
   newEstablishmentForm,
+  newFieldForm,
   initialStockForm,
   newEstablishmentErrors,
+  newFieldErrors,
   setupSummary,
   setSetupEstablishmentId,
+  setSetupFieldId,
   setSetupSpecies,
   clearNewEstablishmentError,
+  clearNewFieldError,
   setNewEstablishmentForm,
+  setNewFieldForm,
   setInitialStockForm,
   resetInitialStockForm,
   onAddEstablishment,
+  onAddField,
   onSubmitInitialLoad
 }: AgroSetupSectionProps) {
   const availableCategories = categoryCatalog[setupSpecies];
@@ -78,6 +114,16 @@ export function AgroSetupSection({
             <span>Establecimiento</span>
             <select value={setupEstablishmentId} onChange={(event) => setSetupEstablishmentId(event.target.value)}>
               {establishments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Potrero</span>
+            <select value={setupFieldId} onChange={(event) => setSetupFieldId(event.target.value)}>
+              {setupFields.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
                 </option>
@@ -177,9 +223,81 @@ export function AgroSetupSection({
                 }}
               />
             </label>
+            <label className={newEstablishmentErrors.firstFieldName ? "field-error" : undefined}>
+              <span>Primer potrero</span>
+              <input
+                type="text"
+                value={newEstablishmentForm.firstFieldName}
+                onChange={(event) => {
+                  clearNewEstablishmentError("firstFieldName");
+                  setNewEstablishmentForm((current) => ({ ...current, firstFieldName: event.target.value }));
+                }}
+              />
+            </label>
+            <label className={newEstablishmentErrors.firstFieldHectares ? "field-error" : undefined}>
+              <span>Hectareas del potrero</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={newEstablishmentForm.firstFieldHectares}
+                onChange={(event) => {
+                  clearNewEstablishmentError("firstFieldHectares");
+                  setNewEstablishmentForm((current) => ({ ...current, firstFieldHectares: event.target.value }));
+                }}
+              />
+            </label>
             <div className="action-row span-2">
               <button type="button" className="primary-button" onClick={onAddEstablishment}>
                 Crear campo
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="subpanel top-gap">
+          <div className="panel-header">
+            <div>
+              <h2>Agregar potrero</h2>
+              <p>Sumale potreros nuevos al establecimiento que ya elegiste arriba.</p>
+            </div>
+          </div>
+          <div className="form-grid">
+            <label>
+              <span>Campo</span>
+              <select value={setupEstablishmentId} onChange={(event) => setSetupEstablishmentId(event.target.value)}>
+                {establishments.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={newFieldErrors.name ? "field-error" : undefined}>
+              <span>Nombre del potrero</span>
+              <input
+                type="text"
+                value={newFieldForm.name}
+                onChange={(event) => {
+                  clearNewFieldError("name");
+                  setNewFieldForm((current) => ({ ...current, name: event.target.value }));
+                }}
+              />
+            </label>
+            <label className={newFieldErrors.hectares ? "field-error" : undefined}>
+              <span>Hectareas del potrero</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={newFieldForm.hectares}
+                onChange={(event) => {
+                  clearNewFieldError("hectares");
+                  setNewFieldForm((current) => ({ ...current, hectares: event.target.value }));
+                }}
+              />
+            </label>
+            <div className="action-row span-2">
+              <button type="button" className="primary-button" onClick={onAddField}>
+                Agregar potrero
               </button>
             </div>
           </div>

@@ -1,15 +1,17 @@
 import { animalMovementFormKinds, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
 import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate, parseDecimalInput } from "./agro.home.shared";
-import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, MoneyCurrency } from "./agro.types";
+import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, FieldUnit, MoneyCurrency } from "./agro.types";
 
 interface AgroAnimalsSectionProps {
   establishments: Establishment[];
+  fields: FieldUnit[];
   animalFieldRefs: React.MutableRefObject<Record<string, HTMLInputElement | HTMLSelectElement | null>>;
   animalForm: {
     date: string;
     establishmentId: string;
     fieldId: string;
     transferDestinationEstablishmentId: string;
+    transferDestinationFieldId: string;
     species: AgroSpecies;
     categoryCode: string;
     kind: AnimalMovementKind;
@@ -58,6 +60,7 @@ interface AgroAnimalsSectionProps {
       establishmentId: string;
       fieldId: string;
       transferDestinationEstablishmentId: string;
+      transferDestinationFieldId: string;
       species: AgroSpecies;
       categoryCode: string;
       kind: AnimalMovementKind;
@@ -80,6 +83,7 @@ interface AgroAnimalsSectionProps {
 
 export function AgroAnimalsSection({
   establishments,
+  fields,
   animalForm,
   animalFormErrors,
   animalFormPanelRef,
@@ -109,6 +113,8 @@ export function AgroAnimalsSection({
   onEditMovement
 }: AgroAnimalsSectionProps) {
   const selectedEstablishment = establishments.find((item) => item.id === animalForm.establishmentId);
+  const selectedFields = fields.filter((item) => item.establishmentId === animalForm.establishmentId);
+  const transferDestinationFields = fields.filter((item) => item.establishmentId === animalForm.transferDestinationEstablishmentId);
 
   function getMovementLabel(movement: AnimalMovementRecord) {
     if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
@@ -123,15 +129,16 @@ export function AgroAnimalsSection({
       const pairedMovement = movement.pairedTransferMovementId
         ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
         : undefined;
-      const pairedEstablishmentName = pairedMovement
-        ? establishments.find((item) => item.id === pairedMovement.establishmentId)?.name
+      const pairedEstablishment = pairedMovement
+        ? establishments.find((item) => item.id === pairedMovement.establishmentId)
         : undefined;
+      const pairedField = pairedMovement ? fields.find((item) => item.id === pairedMovement.fieldId) : undefined;
 
-      if (!pairedEstablishmentName) {
+      if (!pairedEstablishment) {
         return "-";
       }
 
-      return pairedEstablishmentName;
+      return pairedField ? `${pairedEstablishment.name} / ${pairedField.name}` : pairedEstablishment.name;
     }
 
     return "-";
@@ -163,6 +170,23 @@ export function AgroAnimalsSection({
             <span>Campo origen</span>
             <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
           </label>
+          <label className={animalFormErrors.fieldId ? "field-error" : undefined}>
+            <span>Potrero origen</span>
+            <select
+              ref={registerAnimalFieldRef("fieldId")}
+              value={animalForm.fieldId}
+              onChange={(event) => {
+                clearAnimalFieldError("fieldId");
+                setAnimalForm((current) => ({ ...current, fieldId: event.target.value }));
+              }}
+            >
+              {selectedFields.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className={animalFormErrors.kind ? "field-error" : undefined}>
             <span>Movimiento</span>
             <select
@@ -185,13 +209,35 @@ export function AgroAnimalsSection({
                 value={animalForm.transferDestinationEstablishmentId}
                 onChange={(event) => {
                   clearAnimalFieldError("transferDestinationEstablishmentId");
+                  const nextEstablishmentId = event.target.value;
                   setAnimalForm((current) => ({
                     ...current,
-                    transferDestinationEstablishmentId: event.target.value
+                    transferDestinationEstablishmentId: nextEstablishmentId,
+                    transferDestinationFieldId:
+                      fields.find((item) => item.establishmentId === nextEstablishmentId)?.id ?? ""
                   }));
                 }}
               >
                 {establishments.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {animalForm.kind === "transfer" ? (
+            <label className={animalFormErrors.transferDestinationFieldId ? "field-error" : undefined}>
+              <span>Potrero destino</span>
+              <select
+                ref={registerAnimalFieldRef("transferDestinationFieldId")}
+                value={animalForm.transferDestinationFieldId}
+                onChange={(event) => {
+                  clearAnimalFieldError("transferDestinationFieldId");
+                  setAnimalForm((current) => ({ ...current, transferDestinationFieldId: event.target.value }));
+                }}
+              >
+                {transferDestinationFields.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
@@ -430,7 +476,7 @@ export function AgroAnimalsSection({
           <span>Buscar en animales</span>
           <input
             type="search"
-            placeholder="Establecimiento, categoria, especie, fecha o nota..."
+            placeholder="Campo, potrero, categoria, especie, fecha o nota..."
             value={animalSearchTerm}
             onChange={(event) => setAnimalSearchTerm(event.target.value)}
           />
@@ -440,9 +486,10 @@ export function AgroAnimalsSection({
             <thead>
               <tr>
                 <th className="cell-date">Fecha</th>
-                <th className="cell-field">Establecimiento</th>
+                <th className="cell-field">Campo</th>
+                <th className="cell-field">Potrero</th>
                 <th className="cell-kind">Movimiento</th>
-                <th className="cell-detail">Campo destino</th>
+                <th className="cell-detail">Destino</th>
                 <th className="cell-description">Descripcion</th>
                 <th className="cell-number">Cantidad</th>
                 <th className="cell-category">Categoria</th>
@@ -460,12 +507,14 @@ export function AgroAnimalsSection({
             <tbody>
               {animalLedgerRows.map((movement) => {
                 const establishment = establishments.find((item) => item.id === movement.establishmentId);
+                const field = fields.find((item) => item.id === movement.fieldId);
                 const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
                 const movementDestinationLabel = getMovementDestinationLabel(movement);
                 return (
                   <tr key={movement.id}>
                     <td className="cell-date">{formatShortDate(movement.date)}</td>
                     <td className="cell-field">{establishment?.name ?? "-"}</td>
+                    <td className="cell-field">{field?.name ?? "-"}</td>
                     <td className="cell-kind">{getMovementLabel(movement)}</td>
                     <td className="cell-detail">{movementDestinationLabel}</td>
                     <td className="cell-description">{movement.notes.trim() || "-"}</td>

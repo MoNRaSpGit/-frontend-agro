@@ -1,13 +1,18 @@
-import { formatMoney, periodMonthOptions } from "./agro.home.shared";
-import { Establishment } from "./agro.types";
+import { ChevronDown } from "lucide-react";
+import { categoryCatalog, speciesLabels } from "./agro.demo.data";
+import { formatCategoryLabel, formatMoney, periodMonthOptions } from "./agro.home.shared";
+import { AgroSpecies, Establishment, FieldUnit } from "./agro.types";
 
 interface AgroToolbarProps {
   availableYears: string[];
   establishments: Establishment[];
+  visibleFields: FieldUnit[];
   selectedEstablishmentId: string;
+  selectedVisibleFieldId: string;
   selectedMonth: string;
   selectedYear: string;
   onEstablishmentChange: (value: string) => void;
+  onVisibleFieldChange: (value: string) => void;
   onMonthChange: (value: string) => void;
   onYearChange: (value: string) => void;
 }
@@ -17,20 +22,35 @@ interface AgroMetricsGridProps {
     USD: { income: number; livestockPurchaseExpense: number; operationalExpense: number };
     UYU: { income: number; livestockPurchaseExpense: number; operationalExpense: number };
   };
-  stockBySpecies: {
-    vacunos: number;
-    ovinos: number;
-    equinos: number;
-  };
+  stockBySpecies: Record<AgroSpecies, number>;
+  stockBreakdownBySpecies: Record<
+    AgroSpecies,
+    Array<{
+      categoryCode: string;
+      quantity: number;
+    }>
+  >;
+}
+
+interface StockMetricCardProps {
+  species: AgroSpecies;
+  total: number;
+  breakdown: Array<{
+    categoryCode: string;
+    quantity: number;
+  }>;
 }
 
 export function AgroToolbar({
   availableYears,
   establishments,
+  visibleFields,
   selectedEstablishmentId,
+  selectedVisibleFieldId,
   selectedMonth,
   selectedYear,
   onEstablishmentChange,
+  onVisibleFieldChange,
   onMonthChange,
   onYearChange
 }: AgroToolbarProps) {
@@ -40,6 +60,17 @@ export function AgroToolbar({
         <span>Campo visible</span>
         <select value={selectedEstablishmentId} onChange={(event) => onEstablishmentChange(event.target.value)}>
           {establishments.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="period-picker">
+        <span>Potrero visible</span>
+        <select value={selectedVisibleFieldId} onChange={(event) => onVisibleFieldChange(event.target.value)}>
+          <option value="">Todos</option>
+          {visibleFields.map((item) => (
             <option key={item.id} value={item.id}>
               {item.name}
             </option>
@@ -72,19 +103,44 @@ export function AgroToolbar({
   );
 }
 
-export function AgroMetricsGrid({ accountingTotals, stockBySpecies }: AgroMetricsGridProps) {
+function StockMetricCard({ species, total, breakdown }: StockMetricCardProps) {
+  return (
+    <details className="metric-card metric-card-stock">
+      <summary className="metric-card-summary">
+        <span>Total {speciesLabels[species].toLowerCase()}</span>
+        <strong>{total}</strong>
+        <small>Click para ver el detalle por categoria actual.</small>
+        <ChevronDown className="metric-card-chevron" size={18} aria-hidden="true" />
+      </summary>
+      <div className="metric-card-breakdown">
+        {breakdown.length === 0 ? (
+          <small>Sin categorias con stock cargado.</small>
+        ) : (
+          <ul className="metric-card-breakdown-list">
+            {breakdown.map((item) => {
+              const category = categoryCatalog[species].find((entry) => entry.code === item.categoryCode);
+              const categoryLabel = category ? formatCategoryLabel(category.label) : item.categoryCode;
+
+              return (
+                <li key={`${species}-${item.categoryCode}`}>
+                  <span>{categoryLabel}</span>
+                  <strong>{item.quantity}</strong>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </details>
+  );
+}
+
+export function AgroMetricsGrid({ accountingTotals, stockBySpecies, stockBreakdownBySpecies }: AgroMetricsGridProps) {
   return (
     <section className="summary-grid">
-      <article className="metric-card">
-        <span>Total vacunos</span>
-        <strong>{stockBySpecies.vacunos}</strong>
-        <small>Existencias actuales por categoria y por establecimiento.</small>
-      </article>
-      <article className="metric-card">
-        <span>Total ovinos</span>
-        <strong>{stockBySpecies.ovinos}</strong>
-        <small>Incluye compras, ventas, traslados, nacimientos, muertes y faltantes.</small>
-      </article>
+      <StockMetricCard species="vacunos" total={stockBySpecies.vacunos} breakdown={stockBreakdownBySpecies.vacunos} />
+      <StockMetricCard species="ovinos" total={stockBySpecies.ovinos} breakdown={stockBreakdownBySpecies.ovinos} />
+      <StockMetricCard species="equinos" total={stockBySpecies.equinos} breakdown={stockBreakdownBySpecies.equinos} />
       <article className="metric-card">
         <span>Ingresos USD</span>
         <strong>{formatMoney(accountingTotals.USD.income, "USD")}</strong>
