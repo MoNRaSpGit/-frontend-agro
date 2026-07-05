@@ -775,6 +775,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   const selectedFieldIds = useMemo(() => visibleFields.map((field) => field.id), [visibleFields]);
   const selectedFieldIdSet = useMemo(() => new Set(selectedFieldIds), [selectedFieldIds]);
+  const establishmentFieldIds = useMemo(() => establishmentFields.map((field) => field.id), [establishmentFields]);
+  const establishmentFieldIdSet = useMemo(() => new Set(establishmentFieldIds), [establishmentFieldIds]);
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
@@ -903,7 +905,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     return accountingEntries
       .filter(
         (entry) =>
-          selectedFieldIdSet.has(entry.fieldId) &&
+          establishmentFieldIdSet.has(entry.fieldId) &&
           isDateWithinRange(entry.date, visibleMonthRange.startDate, visibleMonthRange.endDate)
       )
       .reduce(
@@ -926,7 +928,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           UYU: { income: 0, livestockPurchaseExpense: 0, operationalExpense: 0 }
         }
       );
-  }, [accountingEntries, selectedFieldIdSet, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+  }, [accountingEntries, establishmentFieldIdSet, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   const exchangeRateByMonth = useMemo(() => {
     return monthlyExchangeRates.reduce<Record<string, number>>((accumulator, item) => {
@@ -944,10 +946,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   const latestAccountingEntries = useMemo(() => {
     return [...accountingEntries]
-      .filter((entry) => selectedFieldIdSet.has(entry.fieldId))
+      .filter((entry) => establishmentFieldIdSet.has(entry.fieldId))
       .sort((left, right) => right.date.localeCompare(left.date))
       .slice(0, 6);
-  }, [accountingEntries, selectedFieldIdSet]);
+  }, [accountingEntries, establishmentFieldIdSet]);
 
   const animalLedgerRows = useMemo(() => {
     return [...animalMovements]
@@ -1050,7 +1052,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const accountingLedgerRows = useMemo(() => {
     return [...accountingEntries]
       .filter((entry) => {
-        if (!selectedFieldIdSet.has(entry.fieldId)) {
+        if (!establishmentFieldIdSet.has(entry.fieldId)) {
           return false;
         }
 
@@ -1062,20 +1064,19 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           return true;
         }
 
-        const field = fields.find((item) => item.id === entry.fieldId);
         const establishment = establishments.find((item) => item.id === entry.establishmentId);
         const conceptLabel =
           entry.type === "income"
             ? incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels]
             : expenseConceptLabels[entry.concept as keyof typeof expenseConceptLabels];
-        const searchBase = [entry.date, establishment?.name ?? "", field?.name ?? "", conceptLabel, entry.currency, entry.notes]
+        const searchBase = [entry.date, establishment?.name ?? "", conceptLabel, entry.currency, entry.notes]
           .join(" ")
           .toLowerCase();
 
         return searchBase.includes(accountingSearchTerm.trim().toLowerCase());
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, accountingSearchTerm, establishments, fields, selectedFieldIdSet, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+  }, [accountingEntries, accountingSearchTerm, establishmentFieldIdSet, establishments, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   const accountingLedgerWithConversions = useMemo(() => {
     return accountingLedgerRows.map((entry) => {
@@ -1352,7 +1353,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     return [...rainfallRecords]
       .filter(
         (record) => {
-          if (!selectedFieldIds.includes(record.fieldId)) {
+          if (!establishmentFieldIds.includes(record.fieldId)) {
             return false;
           }
 
@@ -1366,7 +1367,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
           const field = fields.find((item) => item.id === record.fieldId);
           const establishment = field ? establishments.find((item) => item.id === field.establishmentId) : undefined;
-          const searchBase = [record.date, establishment?.name ?? "", field?.name ?? "", record.notes, `${record.millimeters}`]
+          const searchBase = [record.date, establishment?.name ?? "", record.notes, `${record.millimeters}`]
             .join(" ")
             .toLowerCase();
 
@@ -1374,7 +1375,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         }
       )
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [establishments, fields, rainfallRecords, rainfallSearchTerm, selectedFieldIds, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+  }, [establishmentFieldIds, establishments, rainfallRecords, rainfallSearchTerm, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   const sanitaryRows = useMemo(() => {
     return [...sanitaryRecords]
@@ -1445,7 +1446,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     return accountingEntries
       .filter((entry) => entry.type === "income")
       .filter((entry) => {
-        if (!selectedFieldIdSet.has(entry.fieldId)) {
+        if (!establishmentFieldIdSet.has(entry.fieldId)) {
           return false;
         }
 
@@ -1460,7 +1461,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         return {
           id: entry.id,
           date: entry.date,
-          fieldName: field?.name ?? "-",
+          fieldName: establishments.find((item) => item.id === entry.establishmentId)?.name ?? "-",
           conceptLabel: incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels],
           totalAmount: getIncomeExpectedAmount(entry),
           collectedAmount: getIncomeCollectedAmount(entry),
@@ -1472,7 +1473,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         };
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, animalMovements, fields, selectedFieldIdSet, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+  }, [accountingEntries, animalMovements, establishmentFieldIdSet, establishments, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   const accountStatementSummary = useMemo(() => {
     return accountStatementRows.reduce(
@@ -2091,7 +2092,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       id: editingAccountingEntryId ?? `acc-${Date.now()}`,
       date: accountingForm.date,
       establishmentId: accountingForm.establishmentId,
-      fieldId: accountingForm.fieldId,
+      fieldId: getFieldIdForEstablishmentFrom(fields, accountingForm.establishmentId),
       type: accountingForm.type,
       concept: accountingForm.concept,
       currency: accountingForm.currency,
@@ -2134,7 +2135,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     const rainfallEntry: RainfallRecord = {
       id: editingRainfallRecordId ?? `rain-${Date.now()}`,
       date: rainfallForm.date,
-      fieldId: rainfallForm.fieldId,
+      fieldId: getFieldIdForEstablishmentFrom(fields, rainfallForm.establishmentId),
       millimeters,
       notes: rainfallForm.notes.trim()
     };
@@ -3093,7 +3094,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                   <thead>
                     <tr>
                       <th>Fecha</th>
-                      <th>Potrero</th>
+                      <th>Campo</th>
                       <th>Concepto</th>
                       <th>Total</th>
                       <th>Cobrado</th>

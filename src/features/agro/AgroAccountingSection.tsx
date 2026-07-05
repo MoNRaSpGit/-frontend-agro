@@ -124,7 +124,6 @@ export function AgroAccountingSection({
   onSubmitExchangeRate
 }: AgroAccountingSectionProps) {
   const selectedEstablishment = establishments.find((item) => item.id === accountingForm.establishmentId);
-  const selectedFields = fields.filter((item) => item.establishmentId === accountingForm.establishmentId);
   const accountingTableWrapRef = useRef<HTMLDivElement | null>(null);
   const accountingTableRef = useRef<HTMLTableElement | null>(null);
   const [showExchangeRateEditModal, setShowExchangeRateEditModal] = useState(false);
@@ -202,19 +201,6 @@ export function AgroAccountingSection({
           <label>
             <span>Campo activo</span>
             <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
-          </label>
-          <label>
-            <span>Potrero</span>
-            <select
-              value={accountingForm.fieldId}
-              onChange={(event) => setAccountingForm((current) => ({ ...current, fieldId: event.target.value }))}
-            >
-              {selectedFields.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
           </label>
           <label>
             <span>Tipo</span>
@@ -457,7 +443,7 @@ export function AgroAccountingSection({
           <span>Buscar en contabilidad</span>
           <input
             type="search"
-            placeholder="Campo, potrero, fecha, rubro, moneda o nota..."
+            placeholder="Campo, fecha, rubro, moneda o nota..."
             value={accountingSearchTerm}
             onChange={(event) => setAccountingSearchTerm(event.target.value)}
           />
@@ -482,7 +468,6 @@ export function AgroAccountingSection({
               <tr>
                 <th>Fecha</th>
                 <th>Campo</th>
-                <th>Potrero</th>
                 <th>Tipo</th>
                 <th>Rubro</th>
                 <th>Moneda</th>
@@ -500,13 +485,11 @@ export function AgroAccountingSection({
             </thead>
             <tbody>
               {accountingLedgerWithConversions.map((entry) => {
-                const field = fields.find((item) => item.id === entry.fieldId);
                 const establishment = establishments.find((item) => item.id === entry.establishmentId);
                 return (
                   <tr key={entry.id}>
                     <td>{formatShortDate(entry.date)}</td>
                     <td>{establishment?.name ?? "-"}</td>
-                    <td>{field?.name ?? "-"}</td>
                     <td>{entry.type === "income" ? "Ingreso" : "Egreso"}</td>
                     <td>
                       {entry.type === "income"

@@ -51,7 +51,6 @@ export function AgroRainfallSection({
   onSubmit
 }: AgroRainfallSectionProps) {
   const selectedEstablishment = establishments.find((item) => item.id === rainfallForm.establishmentId);
-  const selectedFields = fields.filter((item) => item.establishmentId === rainfallForm.establishmentId);
 
   return (
     <section className="content-grid">
@@ -59,7 +58,7 @@ export function AgroRainfallSection({
         <div className="panel-header">
           <div>
             <h2>Cargar lluvia por establecimiento</h2>
-            <p>Carga manual para llevar el registro de lluvias por campo y potrero.</p>
+            <p>Carga manual para llevar el registro de lluvias del campo visible.</p>
           </div>
         </div>
         <form className="form-grid" onSubmit={onSubmit}>
@@ -74,19 +73,6 @@ export function AgroRainfallSection({
           <label className="span-2">
             <span>Campo activo</span>
             <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
-          </label>
-          <label className="span-2">
-            <span>Potrero</span>
-            <select
-              value={rainfallForm.fieldId}
-              onChange={(event) => setRainfallForm((current) => ({ ...current, fieldId: event.target.value }))}
-            >
-              {selectedFields.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
           </label>
           <label>
             <span>Milimetros</span>
@@ -129,7 +115,7 @@ export function AgroRainfallSection({
           <span>Buscar en lluvias</span>
           <input
             type="search"
-            placeholder="Campo, potrero, fecha, observacion o mm..."
+            placeholder="Campo, fecha, observacion o mm..."
             value={rainfallSearchTerm}
             onChange={(event) => setRainfallSearchTerm(event.target.value)}
           />
@@ -140,7 +126,6 @@ export function AgroRainfallSection({
               <tr>
                 <th>Fecha</th>
                 <th>Campo</th>
-                <th>Potrero</th>
                 <th>Milimetros</th>
                 <th>Observaciones</th>
                 <th>Acciones</th>
@@ -154,7 +139,6 @@ export function AgroRainfallSection({
                   <tr key={record.id}>
                     <td>{formatShortDate(record.date)}</td>
                     <td>{establishment?.name ?? "-"}</td>
-                    <td>{field?.name ?? "-"}</td>
                     <td>{formatNumber(record.millimeters)} mm</td>
                     <td>{record.notes || "-"}</td>
                     <td>
