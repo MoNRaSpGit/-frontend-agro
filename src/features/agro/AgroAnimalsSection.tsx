@@ -197,22 +197,7 @@ export function AgroAnimalsSection({
             <span>Campo origen</span>
             <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
           </label>
-          {isInternalTransfer ? (
-            <label className={animalFormErrors.quantity ? "field-error" : undefined}>
-              <span>Cantidad</span>
-              <input
-                ref={registerAnimalFieldRef("quantity")}
-                type="text"
-                inputMode="numeric"
-                min="1"
-                value={animalForm.quantity}
-                onChange={(event) => {
-                  clearAnimalFieldError("quantity");
-                  setAnimalForm((current) => ({ ...current, quantity: event.target.value }));
-                }}
-              />
-            </label>
-          ) : isTransferMovement ? (
+          {isTransferMovement ? (
             <label className={animalFormErrors.transferDestinationEstablishmentId ? "field-error" : undefined}>
               <span>Campo destino</span>
               <select
@@ -309,7 +294,7 @@ export function AgroAnimalsSection({
               </select>
             </label>
           )}
-          {isTransferMovement ? (
+          {isTransferMovement && !isInternalTransfer ? (
             <label className={animalFormErrors.transferDestinationFieldId ? "field-error" : undefined}>
               <span>Potrero destino</span>
               <select
@@ -382,22 +367,20 @@ export function AgroAnimalsSection({
               ))}
             </select>
           </label>
-          {!isInternalTransfer ? (
-            <label className={animalFormErrors.quantity ? "field-error" : undefined}>
-              <span>Cantidad</span>
-              <input
-                ref={registerAnimalFieldRef("quantity")}
-                type="text"
-                inputMode="numeric"
-                min="1"
-                value={animalForm.quantity}
-                onChange={(event) => {
-                  clearAnimalFieldError("quantity");
-                  setAnimalForm((current) => ({ ...current, quantity: event.target.value }));
-                }}
-              />
-            </label>
-          ) : null}
+          <label className={animalFormErrors.quantity ? "field-error" : undefined}>
+            <span>Cantidad</span>
+            <input
+              ref={registerAnimalFieldRef("quantity")}
+              type="text"
+              inputMode="numeric"
+              min="1"
+              value={animalForm.quantity}
+              onChange={(event) => {
+                clearAnimalFieldError("quantity");
+                setAnimalForm((current) => ({ ...current, quantity: event.target.value }));
+              }}
+            />
+          </label>
           {isCattleDeathWithEarTag ? (
             <label className={animalFormErrors.earTag ? "field-error" : undefined}>
               <span>Numero de caravana</span>
