@@ -51,6 +51,9 @@ interface AgroAnimalsSectionProps {
   isCommercialAnimalMovement: boolean;
   isAdjustmentAnimalMovement: boolean;
   projectedAnimalTotal: number;
+  transferAvailableSpecies: AgroSpecies[];
+  transferAvailableCategories: Array<{ categoryCode: string; quantity: number }>;
+  transferAvailableQuantity: number;
   registerAnimalFieldRef: (fieldName: string) => (element: HTMLInputElement | HTMLSelectElement | null) => void;
   requestDeleteAnimalMovement: (movementId: string) => void;
   resetAnimalForm: () => void;
@@ -104,6 +107,9 @@ export function AgroAnimalsSection({
   isCommercialAnimalMovement,
   isAdjustmentAnimalMovement,
   projectedAnimalTotal,
+  transferAvailableSpecies,
+  transferAvailableCategories,
+  transferAvailableQuantity,
   registerAnimalFieldRef,
   requestDeleteAnimalMovement,
   resetAnimalForm,
@@ -270,9 +276,12 @@ export function AgroAnimalsSection({
                 }));
               }}
             >
-              {Object.entries(speciesLabels).map(([value, label]) => (
+              {(animalForm.kind === "transfer" || animalForm.kind === "transfer_internal"
+                ? transferAvailableSpecies
+                : (Object.keys(speciesLabels) as AgroSpecies[])
+              ).map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {speciesLabels[value]}
                 </option>
               ))}
             </select>
@@ -287,7 +296,19 @@ export function AgroAnimalsSection({
                 setAnimalForm((current) => ({ ...current, categoryCode: event.target.value }));
               }}
             >
-              {categoryCatalog[animalForm.species].map((category) => (
+              {(animalForm.kind === "transfer" || animalForm.kind === "transfer_internal"
+                ? transferAvailableCategories.map((entry) => {
+                    const category = categoryCatalog[animalForm.species].find((item) => item.code === entry.categoryCode);
+                    return {
+                      code: entry.categoryCode,
+                      label: category ? `${category.label} (${formatNumber(entry.quantity, 0)} disponibles)` : entry.categoryCode
+                    };
+                  })
+                : categoryCatalog[animalForm.species].map((category) => ({
+                    code: category.code,
+                    label: category.label
+                  }))
+              ).map((category) => (
                 <option key={category.code} value={category.code}>
                   {category.label}
                 </option>
@@ -428,12 +449,14 @@ export function AgroAnimalsSection({
             <div className="projection-card span-2 compact-card">
               <span>Traslado entre campos</span>
               <strong>Al guardar, baja stock en el campo y potrero origen y sube el mismo stock en el campo y potrero destino.</strong>
+              <small>Disponibles en origen: {formatNumber(transferAvailableQuantity, 0)}</small>
             </div>
           ) : null}
           {animalForm.kind === "transfer_internal" ? (
             <div className="projection-card span-2 compact-card">
               <span>Traslado interno</span>
               <strong>Al guardar, baja stock en el potrero origen y sube el mismo stock en el potrero destino.</strong>
+              <small>Disponibles en origen: {formatNumber(transferAvailableQuantity, 0)}</small>
             </div>
           ) : null}
           {isAdjustmentAnimalMovement ? (

@@ -931,6 +931,75 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     return breakdown;
   }, [selectedFieldIdSet, stockBalanceMap]);
 
+  const currentEditingTransferMovement = useMemo(() => {
+    if (!editingAnimalMovementId) {
+      return null;
+    }
+
+    const movement = animalMovements.find((item) => item.id === editingAnimalMovementId);
+    if (!movement || !isTransferMovementKind(movement.kind)) {
+      return null;
+    }
+
+    const pairedMovement = movement.pairedTransferMovementId
+      ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
+      : undefined;
+    if (!pairedMovement) {
+      return null;
+    }
+
+    return movement.kind === "transfer_out"
+      ? { sourceMovement: movement, destinationMovement: pairedMovement }
+      : { sourceMovement: pairedMovement, destinationMovement: movement };
+  }, [animalMovements, editingAnimalMovementId]);
+
+  const transferOriginAvailability = useMemo(() => {
+    const availability = new Map<AgroSpecies, Array<{ categoryCode: string; quantity: number }>>();
+
+    for (const [key, rawQuantity] of stockBalanceMap.entries()) {
+      const [fieldId, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
+      if (fieldId !== animalForm.fieldId) {
+        continue;
+      }
+
+      let quantity = rawQuantity;
+      if (
+        currentEditingTransferMovement &&
+        currentEditingTransferMovement.sourceMovement.fieldId === fieldId &&
+        currentEditingTransferMovement.sourceMovement.species === species &&
+        currentEditingTransferMovement.sourceMovement.categoryCode === categoryCode
+      ) {
+        quantity += currentEditingTransferMovement.sourceMovement.quantity;
+      }
+
+      if (quantity <= 0) {
+        continue;
+      }
+
+      const rows = availability.get(species) ?? [];
+      rows.push({ categoryCode, quantity });
+      availability.set(species, rows);
+    }
+
+    return availability;
+  }, [animalForm.fieldId, currentEditingTransferMovement, stockBalanceMap]);
+
+  const transferAvailableSpecies = useMemo(
+    () => Array.from(transferOriginAvailability.keys()),
+    [transferOriginAvailability]
+  );
+
+  const transferAvailableCategories = useMemo(
+    () => transferOriginAvailability.get(animalForm.species) ?? [],
+    [animalForm.species, transferOriginAvailability]
+  );
+
+  const transferAvailableQuantity = useMemo(
+    () =>
+      transferAvailableCategories.find((item) => item.categoryCode === animalForm.categoryCode)?.quantity ?? 0,
+    [animalForm.categoryCode, transferAvailableCategories]
+  );
+
   const accountingTotals = useMemo(() => {
     return accountingEntries
       .filter(
@@ -1738,6 +1807,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     animalForm.kind === "birth" ||
     animalForm.kind === "death" ||
     animalForm.kind === "transfer" ||
+    animalForm.kind === "transfer_internal" ||
     animalForm.kind === "shortage";
   const isAdjustmentAnimalMovement = animalForm.kind === "adjustment";
   const isCattleDeathWithEarTag = requiresEarTag(animalForm.kind, animalForm.species);
@@ -1757,6 +1827,32 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         : categoryCatalog[setupSpecies][0]?.code ?? ""
     }));
   }, [setupSpecies]);
+
+  useEffect(() => {
+    if (animalForm.kind !== "transfer" && animalForm.kind !== "transfer_internal") {
+      return;
+    }
+
+    setAnimalForm((current) => {
+      const nextSpecies =
+        transferAvailableSpecies.includes(current.species) ? current.species : transferAvailableSpecies[0] ?? current.species;
+      const nextCategories = transferOriginAvailability.get(nextSpecies) ?? [];
+      const nextCategoryCode =
+        nextCategories.some((item) => item.categoryCode === current.categoryCode)
+          ? current.categoryCode
+          : nextCategories[0]?.categoryCode ?? current.categoryCode;
+
+      if (nextSpecies === current.species && nextCategoryCode === current.categoryCode) {
+        return current;
+      }
+
+      return {
+        ...current,
+        species: nextSpecies,
+        categoryCode: nextCategoryCode
+      };
+    });
+  }, [animalForm.kind, transferAvailableSpecies, transferOriginAvailability]);
 
   function showSuccess(message: string) {
     toast.success(message, { autoClose: 2400 });
@@ -1978,6 +2074,20 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         animalForm.transferDestinationFieldId === animalForm.fieldId
       ) {
         nextErrors.transferDestinationFieldId = "El potrero destino debe ser distinto del origen.";
+      }
+
+      if (!transferAvailableSpecies.includes(animalForm.species)) {
+        nextErrors.species = "Esa especie no tiene stock disponible en el potrero origen.";
+      }
+
+      const availableCategory = transferOriginAvailability
+        .get(animalForm.species)
+        ?.find((item) => item.categoryCode === animalForm.categoryCode);
+
+      if (!availableCategory) {
+        nextErrors.categoryCode = "Esa categoria no tiene stock disponible en el potrero origen.";
+      } else if (Number.isFinite(quantity) && quantity > availableCategory.quantity) {
+        nextErrors.quantity = `Solo hay ${formatNumber(availableCategory.quantity, 0)} disponibles en el potrero origen.`;
       }
     }
 
@@ -2701,6 +2811,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             isCommercialAnimalMovement={isCommercialAnimalMovement}
             isAdjustmentAnimalMovement={isAdjustmentAnimalMovement}
             projectedAnimalTotal={projectedAnimalTotal}
+            transferAvailableSpecies={transferAvailableSpecies}
+            transferAvailableCategories={transferAvailableCategories}
+            transferAvailableQuantity={transferAvailableQuantity}
             registerAnimalFieldRef={registerAnimalFieldRef}
             requestDeleteAnimalMovement={requestDeleteAnimalMovement}
             resetAnimalForm={resetAnimalForm}
