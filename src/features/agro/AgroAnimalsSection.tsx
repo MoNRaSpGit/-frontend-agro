@@ -118,12 +118,15 @@ export function AgroAnimalsSection({
   showAnimalFloatingScrollbar,
   onEditMovement
 }: AgroAnimalsSectionProps) {
+  const isInternalTransfer = animalForm.kind === "transfer_internal";
+  const isTransferMovement = animalForm.kind === "transfer" || isInternalTransfer;
   const selectedEstablishment = establishments.find((item) => item.id === animalForm.establishmentId);
   const selectedFields = fields.filter((item) => item.establishmentId === animalForm.establishmentId);
+  const externalTransferDestinations = establishments.filter((item) => item.id !== animalForm.establishmentId);
   const transferDestinationFields = fields.filter(
     (item) =>
       item.establishmentId === animalForm.transferDestinationEstablishmentId &&
-      (animalForm.kind !== "transfer_internal" || item.id !== animalForm.fieldId)
+      (!isInternalTransfer || item.id !== animalForm.fieldId)
   );
 
   function getMovementLabel(movement: AnimalMovementRecord) {
@@ -176,41 +179,6 @@ export function AgroAnimalsSection({
               }}
             />
           </label>
-          <label>
-            <span>Campo origen</span>
-            <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
-          </label>
-          <label className={animalFormErrors.fieldId ? "field-error" : undefined}>
-            <span>Potrero origen</span>
-            <select
-              ref={registerAnimalFieldRef("fieldId")}
-              value={animalForm.fieldId}
-              onChange={(event) => {
-                clearAnimalFieldError("fieldId");
-                const nextFieldId = event.target.value;
-                setAnimalForm((current) => ({
-                  ...current,
-                  fieldId: nextFieldId,
-                  transferDestinationEstablishmentId:
-                    current.kind === "transfer_internal"
-                      ? current.establishmentId
-                      : current.transferDestinationEstablishmentId,
-                  transferDestinationFieldId:
-                    current.kind === "transfer_internal" && current.transferDestinationFieldId === nextFieldId
-                      ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
-                      : current.kind === "transfer_internal" && !selectedFields.some((item) => item.id === current.transferDestinationFieldId && item.id !== nextFieldId)
-                        ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
-                        : current.transferDestinationFieldId
-                }));
-              }}
-            >
-              {selectedFields.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
           <label className={animalFormErrors.kind ? "field-error" : undefined}>
             <span>Movimiento</span>
             <select
@@ -224,6 +192,10 @@ export function AgroAnimalsSection({
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            <span>Campo origen</span>
+            <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
           </label>
           {animalForm.kind === "transfer" ? (
             <label className={animalFormErrors.transferDestinationEstablishmentId ? "field-error" : undefined}>
@@ -242,7 +214,7 @@ export function AgroAnimalsSection({
                   }));
                 }}
               >
-                {establishments.map((item) => (
+                {externalTransferDestinations.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
@@ -250,13 +222,95 @@ export function AgroAnimalsSection({
               </select>
             </label>
           ) : null}
-          {animalForm.kind === "transfer_internal" ? (
-            <label>
-              <span>Campo destino</span>
-              <div className="readonly-field">{selectedEstablishment?.name ?? "-"}</div>
+          {isInternalTransfer ? (
+            <div className="form-grid span-2">
+              <label className={animalFormErrors.fieldId ? "field-error" : undefined}>
+                <span>Potrero origen</span>
+                <select
+                  ref={registerAnimalFieldRef("fieldId")}
+                  value={animalForm.fieldId}
+                  onChange={(event) => {
+                    clearAnimalFieldError("fieldId");
+                    const nextFieldId = event.target.value;
+                    setAnimalForm((current) => ({
+                      ...current,
+                      fieldId: nextFieldId,
+                      transferDestinationEstablishmentId:
+                        current.kind === "transfer_internal"
+                          ? current.establishmentId
+                          : current.transferDestinationEstablishmentId,
+                      transferDestinationFieldId:
+                        current.kind === "transfer_internal" && current.transferDestinationFieldId === nextFieldId
+                          ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
+                          : current.kind === "transfer_internal" &&
+                              !selectedFields.some(
+                                (item) => item.id === current.transferDestinationFieldId && item.id !== nextFieldId
+                              )
+                            ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
+                            : current.transferDestinationFieldId
+                    }));
+                  }}
+                >
+                  {selectedFields.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={animalFormErrors.transferDestinationFieldId ? "field-error" : undefined}>
+                <span>Potrero destino</span>
+                <select
+                  ref={registerAnimalFieldRef("transferDestinationFieldId")}
+                  value={animalForm.transferDestinationFieldId}
+                  onChange={(event) => {
+                    clearAnimalFieldError("transferDestinationFieldId");
+                    setAnimalForm((current) => ({ ...current, transferDestinationFieldId: event.target.value }));
+                  }}
+                >
+                  {transferDestinationFields.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : (
+            <label className={animalFormErrors.fieldId ? "field-error" : undefined}>
+              <span>Potrero origen</span>
+              <select
+                ref={registerAnimalFieldRef("fieldId")}
+                value={animalForm.fieldId}
+                onChange={(event) => {
+                  clearAnimalFieldError("fieldId");
+                  const nextFieldId = event.target.value;
+                  setAnimalForm((current) => ({
+                    ...current,
+                    fieldId: nextFieldId,
+                    transferDestinationEstablishmentId:
+                      current.kind === "transfer_internal"
+                        ? current.establishmentId
+                        : current.transferDestinationEstablishmentId,
+                    transferDestinationFieldId:
+                      current.kind === "transfer_internal" && current.transferDestinationFieldId === nextFieldId
+                        ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
+                        : current.kind === "transfer_internal" &&
+                            !selectedFields.some((item) => item.id === current.transferDestinationFieldId && item.id !== nextFieldId)
+                          ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
+                          : current.transferDestinationFieldId
+                  }));
+                }}
+              >
+                {selectedFields.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
             </label>
-          ) : null}
-          {animalForm.kind === "transfer" || animalForm.kind === "transfer_internal" ? (
+          )}
+          {animalForm.kind === "transfer" ? (
             <label className={animalFormErrors.transferDestinationFieldId ? "field-error" : undefined}>
               <span>Potrero destino</span>
               <select
@@ -290,7 +344,7 @@ export function AgroAnimalsSection({
                 }));
               }}
             >
-              {(animalForm.kind === "transfer" || animalForm.kind === "transfer_internal"
+              {(isTransferMovement
                 ? transferAvailableSpecies
                 : (Object.keys(speciesLabels) as AgroSpecies[])
               ).map((value) => (
@@ -310,7 +364,7 @@ export function AgroAnimalsSection({
                 setAnimalForm((current) => ({ ...current, categoryCode: event.target.value }));
               }}
             >
-              {(animalForm.kind === "transfer" || animalForm.kind === "transfer_internal"
+              {(isTransferMovement
                 ? transferAvailableCategories.map((entry) => {
                     const category = categoryCatalog[animalForm.species].find((item) => item.code === entry.categoryCode);
                     return {
@@ -453,7 +507,7 @@ export function AgroAnimalsSection({
               </label>
             </>
           ) : null}
-          {isBirthOrDeathAnimalMovement ? (
+          {isBirthOrDeathAnimalMovement && !isInternalTransfer ? (
             <div className="projection-card span-2 compact-card">
               <span>Movimiento sin impacto economico</span>
               <strong>No lleva precio, flete, comision, IVA ni moneda.</strong>
@@ -463,13 +517,6 @@ export function AgroAnimalsSection({
             <div className="projection-card span-2 compact-card">
               <span>Traslado entre campos</span>
               <strong>Al guardar, baja stock en el campo y potrero origen y sube el mismo stock en el campo y potrero destino.</strong>
-              <small>Disponibles en origen: {formatNumber(transferAvailableQuantity, 0)}</small>
-            </div>
-          ) : null}
-          {animalForm.kind === "transfer_internal" ? (
-            <div className="projection-card span-2 compact-card">
-              <span>Traslado interno</span>
-              <strong>Al guardar, baja stock en el potrero origen y sube el mismo stock en el potrero destino.</strong>
               <small>Disponibles en origen: {formatNumber(transferAvailableQuantity, 0)}</small>
             </div>
           ) : null}

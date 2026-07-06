@@ -127,10 +127,21 @@ function getFieldIdForEstablishmentFromSource(fieldsSource: FieldUnit[], establi
   return fieldsSource.find((field) => field.establishmentId === establishmentId)?.id ?? "";
 }
 
+function resolveNormalizedFieldId(fieldsSource: FieldUnit[], establishmentId: string, currentFieldId: string) {
+  const existingField = fieldsSource.find((field) => field.id === currentFieldId);
+  if (existingField) {
+    return existingField.id;
+  }
+
+  return getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || currentFieldId;
+}
+
 function normalizeAnimalMovementRecord(movement: AnimalMovementRecord, fieldsSource: FieldUnit[]): AnimalMovementRecord {
   const establishmentId =
-    movement.establishmentId || fieldsSource.find((field) => field.id === movement.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(movement.fieldId);
-  const fieldId = getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || movement.fieldId;
+    movement.establishmentId ||
+    fieldsSource.find((field) => field.id === movement.fieldId)?.establishmentId ||
+    getLegacyEstablishmentIdFromFieldId(movement.fieldId);
+  const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, movement.fieldId);
 
   return {
     ...movement,
@@ -141,8 +152,10 @@ function normalizeAnimalMovementRecord(movement: AnimalMovementRecord, fieldsSou
 
 function normalizeAccountingEntry(entry: AccountingEntry, fieldsSource: FieldUnit[]): AccountingEntry {
   const establishmentId =
-    entry.establishmentId || fieldsSource.find((field) => field.id === entry.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(entry.fieldId);
-  const fieldId = getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || entry.fieldId;
+    entry.establishmentId ||
+    fieldsSource.find((field) => field.id === entry.fieldId)?.establishmentId ||
+    getLegacyEstablishmentIdFromFieldId(entry.fieldId);
+  const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, entry.fieldId);
   const expectedAmount = entry.type === "income" ? entry.expectedAmount ?? entry.netAmount : undefined;
   const collectedAmount = entry.type === "income" ? entry.collectedAmount ?? expectedAmount : undefined;
 
@@ -158,7 +171,7 @@ function normalizeAccountingEntry(entry: AccountingEntry, fieldsSource: FieldUni
 function normalizeRainfallRecord(record: RainfallRecord, fieldsSource: FieldUnit[]): RainfallRecord {
   const establishmentId =
     fieldsSource.find((field) => field.id === record.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(record.fieldId);
-  const fieldId = getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || record.fieldId;
+  const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, record.fieldId);
 
   return {
     ...record,
@@ -168,8 +181,10 @@ function normalizeRainfallRecord(record: RainfallRecord, fieldsSource: FieldUnit
 
 function normalizeSanitaryRecord(record: SanitaryRecord, fieldsSource: FieldUnit[]): SanitaryRecord {
   const establishmentId =
-    record.establishmentId || fieldsSource.find((field) => field.id === record.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(record.fieldId);
-  const fieldId = getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || record.fieldId;
+    record.establishmentId ||
+    fieldsSource.find((field) => field.id === record.fieldId)?.establishmentId ||
+    getLegacyEstablishmentIdFromFieldId(record.fieldId);
+  const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, record.fieldId);
 
   return {
     ...record,
@@ -242,6 +257,10 @@ function getFirstFieldIdForEstablishment(fields: FieldUnit[], establishmentId: s
 
 function getAlternativeFieldId(fields: FieldUnit[], establishmentId: string, excludedFieldId: string) {
   return fields.find((field) => field.establishmentId === establishmentId && field.id !== excludedFieldId)?.id ?? "";
+}
+
+function getAlternativeEstablishmentId(establishments: Establishment[], excludedEstablishmentId: string) {
+  return establishments.find((item) => item.id !== excludedEstablishmentId)?.id ?? "";
 }
 
 function summarizeExpenses(entries: AccountingEntry[], exchangeRateByMonth: Record<string, number>) {
@@ -449,7 +468,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   const activeEstablishmentId = selectedEstablishmentId || establishments[0]?.id || "";
   const activeFieldId = getFieldIdForEstablishmentFrom(fields, activeEstablishmentId);
-  const activeTransferDestinationId = activeEstablishmentId;
+  const activeTransferDestinationId = getAlternativeEstablishmentId(establishments, activeEstablishmentId);
   const setupFields = useMemo(
     () => fields.filter((field) => field.establishmentId === setupEstablishmentId),
     [fields, setupEstablishmentId]
@@ -469,13 +488,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         : activeTransferDestinationId,
       transferDestinationFieldId: preserveContext
         ? current.kind === "transfer"
-          ? current.transferDestinationFieldId ||
-            getAlternativeFieldId(
-              fields,
-              current.transferDestinationEstablishmentId || activeTransferDestinationId,
-              current.fieldId
-            ) ||
-            getFieldIdForEstablishmentFrom(fields, current.transferDestinationEstablishmentId || activeTransferDestinationId)
+          ? fields.some(
+              (field) =>
+                field.id === current.transferDestinationFieldId &&
+                field.establishmentId === (current.transferDestinationEstablishmentId || activeTransferDestinationId)
+            )
+            ? current.transferDestinationFieldId
+            : getFieldIdForEstablishmentFrom(fields, current.transferDestinationEstablishmentId || activeTransferDestinationId)
           : current.kind === "transfer_internal"
             ? current.transferDestinationFieldId ||
               getAlternativeFieldId(fields, current.establishmentId || activeEstablishmentId, current.fieldId) ||
@@ -582,15 +601,25 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         earTag: kind === "death" && current.species === "vacunos" ? current.earTag : "",
         transferDestinationEstablishmentId:
           kind === "transfer"
-            ? current.transferDestinationEstablishmentId || establishments.find((item) => item.id !== current.establishmentId)?.id || current.establishmentId
+            ? current.transferDestinationEstablishmentId || getAlternativeEstablishmentId(establishments, current.establishmentId) || current.establishmentId
             : "",
         transferDestinationFieldId:
           kind === "transfer"
-            ? current.transferDestinationFieldId ||
-              getFirstFieldIdForEstablishment(
-                fields,
-                current.transferDestinationEstablishmentId || establishments.find((item) => item.id !== current.establishmentId)?.id || current.establishmentId
+            ? fields.some(
+                (field) =>
+                  field.id === current.transferDestinationFieldId &&
+                  field.establishmentId ===
+                    (current.transferDestinationEstablishmentId ||
+                      getAlternativeEstablishmentId(establishments, current.establishmentId) ||
+                      current.establishmentId)
               )
+              ? current.transferDestinationFieldId
+              : getFirstFieldIdForEstablishment(
+                  fields,
+                  current.transferDestinationEstablishmentId ||
+                    getAlternativeEstablishmentId(establishments, current.establishmentId) ||
+                    current.establishmentId
+                )
             : "",
         weightKg: "",
         unitPrice: "",
@@ -740,7 +769,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     }
 
     const selectedFieldId = getFieldIdForEstablishmentFrom(fields, selectedEstablishmentId);
-    const defaultTransferDestinationId = selectedEstablishmentId;
+    const defaultExternalTransferDestinationId =
+      establishments.find((item) => item.id !== selectedEstablishmentId)?.id ?? "";
     const resolveSourceFieldId = (currentFieldId: string, currentEstablishmentId: string) =>
       currentEstablishmentId === selectedEstablishmentId &&
       fields.some((field) => field.id === currentFieldId && field.establishmentId === selectedEstablishmentId)
@@ -751,27 +781,36 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setAnimalForm((current) => {
       const nextSourceFieldId = resolveSourceFieldId(current.fieldId, current.establishmentId);
       const nextInternalDestinationFieldId =
-        getAlternativeFieldId(fields, defaultTransferDestinationId, nextSourceFieldId) ||
-        getFieldIdForEstablishmentFrom(fields, defaultTransferDestinationId);
+        getAlternativeFieldId(fields, selectedEstablishmentId, nextSourceFieldId) ||
+        getFieldIdForEstablishmentFrom(fields, selectedEstablishmentId);
+      const nextExternalDestinationEstablishmentId =
+        current.kind === "transfer" &&
+        current.transferDestinationEstablishmentId &&
+        current.transferDestinationEstablishmentId !== selectedEstablishmentId &&
+        establishments.some((item) => item.id === current.transferDestinationEstablishmentId)
+          ? current.transferDestinationEstablishmentId
+          : defaultExternalTransferDestinationId;
 
       return {
         ...current,
         establishmentId: selectedEstablishmentId,
         fieldId: nextSourceFieldId,
         transferDestinationEstablishmentId:
-          current.kind === "transfer" || current.kind === "transfer_internal"
-            ? defaultTransferDestinationId
+          current.kind === "transfer"
+            ? nextExternalDestinationEstablishmentId
+            : current.kind === "transfer_internal"
+              ? selectedEstablishmentId
             : current.transferDestinationEstablishmentId,
         transferDestinationFieldId:
           current.kind === "transfer"
             ? fields.some(
                 (field) =>
                   field.id === current.transferDestinationFieldId &&
-                  field.establishmentId === defaultTransferDestinationId &&
+                  field.establishmentId === nextExternalDestinationEstablishmentId &&
                   field.id !== nextSourceFieldId
               )
               ? current.transferDestinationFieldId
-              : nextInternalDestinationFieldId
+              : getFieldIdForEstablishmentFrom(fields, nextExternalDestinationEstablishmentId)
             : current.kind === "transfer_internal"
               ? nextInternalDestinationFieldId
               : current.transferDestinationFieldId
