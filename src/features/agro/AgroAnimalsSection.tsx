@@ -118,11 +118,11 @@ export function AgroAnimalsSection({
   showAnimalFloatingScrollbar,
   onEditMovement
 }: AgroAnimalsSectionProps) {
-  const isInternalTransfer = animalForm.kind === "transfer_internal";
-  const isTransferMovement = animalForm.kind === "transfer" || isInternalTransfer;
+  const isTransferMovement = animalForm.kind === "transfer";
+  const isInternalTransfer = isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
   const selectedEstablishment = establishments.find((item) => item.id === animalForm.establishmentId);
   const selectedFields = fields.filter((item) => item.establishmentId === animalForm.establishmentId);
-  const externalTransferDestinations = establishments.filter((item) => item.id !== animalForm.establishmentId);
+  const transferDestinations = establishments;
   const transferDestinationFields = fields.filter(
     (item) =>
       item.establishmentId === animalForm.transferDestinationEstablishmentId &&
@@ -212,8 +212,7 @@ export function AgroAnimalsSection({
                 }}
               />
             </label>
-          ) : null}
-          {animalForm.kind === "transfer" ? (
+          ) : isTransferMovement ? (
             <label className={animalFormErrors.transferDestinationEstablishmentId ? "field-error" : undefined}>
               <span>Campo destino</span>
               <select
@@ -226,11 +225,13 @@ export function AgroAnimalsSection({
                     ...current,
                     transferDestinationEstablishmentId: nextEstablishmentId,
                     transferDestinationFieldId:
-                      fields.find((item) => item.establishmentId === nextEstablishmentId)?.id ?? ""
+                      nextEstablishmentId === current.establishmentId
+                        ? fields.find((item) => item.establishmentId === nextEstablishmentId && item.id !== current.fieldId)?.id ?? ""
+                        : fields.find((item) => item.establishmentId === nextEstablishmentId)?.id ?? ""
                   }));
                 }}
               >
-                {externalTransferDestinations.map((item) => (
+                {transferDestinations.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
@@ -251,14 +252,11 @@ export function AgroAnimalsSection({
                     setAnimalForm((current) => ({
                       ...current,
                       fieldId: nextFieldId,
-                      transferDestinationEstablishmentId:
-                        current.kind === "transfer_internal"
-                          ? current.establishmentId
-                          : current.transferDestinationEstablishmentId,
                       transferDestinationFieldId:
-                        current.kind === "transfer_internal" && current.transferDestinationFieldId === nextFieldId
+                        current.transferDestinationEstablishmentId === current.establishmentId &&
+                        current.transferDestinationFieldId === nextFieldId
                           ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
-                          : current.kind === "transfer_internal" &&
+                          : current.transferDestinationEstablishmentId === current.establishmentId &&
                               !selectedFields.some(
                                 (item) => item.id === current.transferDestinationFieldId && item.id !== nextFieldId
                               )
@@ -300,22 +298,7 @@ export function AgroAnimalsSection({
                 value={animalForm.fieldId}
                 onChange={(event) => {
                   clearAnimalFieldError("fieldId");
-                  const nextFieldId = event.target.value;
-                  setAnimalForm((current) => ({
-                    ...current,
-                    fieldId: nextFieldId,
-                    transferDestinationEstablishmentId:
-                      current.kind === "transfer_internal"
-                        ? current.establishmentId
-                        : current.transferDestinationEstablishmentId,
-                    transferDestinationFieldId:
-                      current.kind === "transfer_internal" && current.transferDestinationFieldId === nextFieldId
-                        ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
-                        : current.kind === "transfer_internal" &&
-                            !selectedFields.some((item) => item.id === current.transferDestinationFieldId && item.id !== nextFieldId)
-                          ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
-                          : current.transferDestinationFieldId
-                  }));
+                  setAnimalForm((current) => ({ ...current, fieldId: event.target.value }));
                 }}
               >
                 {selectedFields.map((item) => (
@@ -326,7 +309,7 @@ export function AgroAnimalsSection({
               </select>
             </label>
           )}
-          {animalForm.kind === "transfer" ? (
+          {isTransferMovement ? (
             <label className={animalFormErrors.transferDestinationFieldId ? "field-error" : undefined}>
               <span>Potrero destino</span>
               <select

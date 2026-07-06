@@ -468,7 +468,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   const activeEstablishmentId = selectedEstablishmentId || establishments[0]?.id || "";
   const activeFieldId = getFieldIdForEstablishmentFrom(fields, activeEstablishmentId);
-  const activeTransferDestinationId = getAlternativeEstablishmentId(establishments, activeEstablishmentId);
+  const activeTransferDestinationId = activeEstablishmentId;
   const setupFields = useMemo(
     () => fields.filter((field) => field.establishmentId === setupEstablishmentId),
     [fields, setupEstablishmentId]
@@ -482,23 +482,31 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       transferDestinationEstablishmentId: preserveContext
         ? current.kind === "transfer"
           ? current.transferDestinationEstablishmentId || activeTransferDestinationId
-          : current.kind === "transfer_internal"
-            ? current.establishmentId || activeEstablishmentId
           : ""
         : activeTransferDestinationId,
       transferDestinationFieldId: preserveContext
         ? current.kind === "transfer"
-          ? fields.some(
-              (field) =>
-                field.id === current.transferDestinationFieldId &&
-                field.establishmentId === (current.transferDestinationEstablishmentId || activeTransferDestinationId)
-            )
-            ? current.transferDestinationFieldId
-            : getFieldIdForEstablishmentFrom(fields, current.transferDestinationEstablishmentId || activeTransferDestinationId)
-          : current.kind === "transfer_internal"
-            ? current.transferDestinationFieldId ||
-              getAlternativeFieldId(fields, current.establishmentId || activeEstablishmentId, current.fieldId) ||
-              getFieldIdForEstablishmentFrom(fields, current.establishmentId || activeEstablishmentId)
+          ? (() => {
+              const destinationEstablishmentId =
+                current.transferDestinationEstablishmentId || activeTransferDestinationId;
+              const isInternalTransfer = destinationEstablishmentId === (current.establishmentId || activeEstablishmentId);
+
+              if (
+                fields.some(
+                  (field) =>
+                    field.id === current.transferDestinationFieldId &&
+                    field.establishmentId === destinationEstablishmentId &&
+                    (!isInternalTransfer || field.id !== current.fieldId)
+                )
+              ) {
+                return current.transferDestinationFieldId;
+              }
+
+              return isInternalTransfer
+                ? getAlternativeFieldId(fields, destinationEstablishmentId, current.fieldId) ||
+                    getFieldIdForEstablishmentFrom(fields, destinationEstablishmentId)
+                : getFieldIdForEstablishmentFrom(fields, destinationEstablishmentId);
+            })()
           : ""
         : getAlternativeFieldId(fields, activeTransferDestinationId, preserveContext ? current.fieldId : activeFieldId) ||
           getFieldIdForEstablishmentFrom(fields, activeTransferDestinationId),
@@ -576,50 +584,36 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         };
       }
 
-      if (kind === "transfer_internal") {
-        return {
-          ...current,
-          kind,
-          earTag: "",
-          transferDestinationEstablishmentId: current.establishmentId,
-          transferDestinationFieldId:
-            getAlternativeFieldId(fields, current.establishmentId, current.fieldId) ||
-            getFirstFieldIdForEstablishment(fields, current.establishmentId),
-          weightKg: "",
-          unitPrice: "",
-          freightAmount: "",
-          commissionAmount: "",
-          taxAmount: "",
-          collectedAmount: "",
-          currency: "USD"
-        };
-      }
-
       return {
         ...current,
         kind,
         earTag: kind === "death" && current.species === "vacunos" ? current.earTag : "",
         transferDestinationEstablishmentId:
           kind === "transfer"
-            ? current.transferDestinationEstablishmentId || getAlternativeEstablishmentId(establishments, current.establishmentId) || current.establishmentId
+            ? current.transferDestinationEstablishmentId || current.establishmentId
             : "",
         transferDestinationFieldId:
           kind === "transfer"
-            ? fields.some(
-                (field) =>
-                  field.id === current.transferDestinationFieldId &&
-                  field.establishmentId ===
-                    (current.transferDestinationEstablishmentId ||
-                      getAlternativeEstablishmentId(establishments, current.establishmentId) ||
-                      current.establishmentId)
-              )
-              ? current.transferDestinationFieldId
-              : getFirstFieldIdForEstablishment(
-                  fields,
-                  current.transferDestinationEstablishmentId ||
-                    getAlternativeEstablishmentId(establishments, current.establishmentId) ||
-                    current.establishmentId
-                )
+            ? (() => {
+                const destinationEstablishmentId = current.transferDestinationEstablishmentId || current.establishmentId;
+                const isInternalTransfer = destinationEstablishmentId === current.establishmentId;
+
+                if (
+                  fields.some(
+                    (field) =>
+                      field.id === current.transferDestinationFieldId &&
+                      field.establishmentId === destinationEstablishmentId &&
+                      (!isInternalTransfer || field.id !== current.fieldId)
+                  )
+                ) {
+                  return current.transferDestinationFieldId;
+                }
+
+                return isInternalTransfer
+                  ? getAlternativeFieldId(fields, destinationEstablishmentId, current.fieldId) ||
+                      getFirstFieldIdForEstablishment(fields, destinationEstablishmentId)
+                  : getFirstFieldIdForEstablishment(fields, destinationEstablishmentId);
+              })()
             : "",
         weightKg: "",
         unitPrice: "",
@@ -769,8 +763,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     }
 
     const selectedFieldId = getFieldIdForEstablishmentFrom(fields, selectedEstablishmentId);
-    const defaultExternalTransferDestinationId =
-      establishments.find((item) => item.id !== selectedEstablishmentId)?.id ?? "";
     const resolveSourceFieldId = (currentFieldId: string, currentEstablishmentId: string) =>
       currentEstablishmentId === selectedEstablishmentId &&
       fields.some((field) => field.id === currentFieldId && field.establishmentId === selectedEstablishmentId)
@@ -780,16 +772,24 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setSetupEstablishmentId((current) => (current === selectedEstablishmentId ? current : selectedEstablishmentId));
     setAnimalForm((current) => {
       const nextSourceFieldId = resolveSourceFieldId(current.fieldId, current.establishmentId);
-      const nextInternalDestinationFieldId =
-        getAlternativeFieldId(fields, selectedEstablishmentId, nextSourceFieldId) ||
-        getFieldIdForEstablishmentFrom(fields, selectedEstablishmentId);
-      const nextExternalDestinationEstablishmentId =
+      const nextTransferDestinationEstablishmentId =
         current.kind === "transfer" &&
         current.transferDestinationEstablishmentId &&
-        current.transferDestinationEstablishmentId !== selectedEstablishmentId &&
         establishments.some((item) => item.id === current.transferDestinationEstablishmentId)
           ? current.transferDestinationEstablishmentId
-          : defaultExternalTransferDestinationId;
+          : selectedEstablishmentId;
+      const isInternalTransfer = nextTransferDestinationEstablishmentId === selectedEstablishmentId;
+      const nextTransferDestinationFieldId = fields.some(
+        (field) =>
+          field.id === current.transferDestinationFieldId &&
+          field.establishmentId === nextTransferDestinationEstablishmentId &&
+          (!isInternalTransfer || field.id !== nextSourceFieldId)
+      )
+        ? current.transferDestinationFieldId
+        : isInternalTransfer
+          ? getAlternativeFieldId(fields, nextTransferDestinationEstablishmentId, nextSourceFieldId) ||
+            getFieldIdForEstablishmentFrom(fields, nextTransferDestinationEstablishmentId)
+          : getFieldIdForEstablishmentFrom(fields, nextTransferDestinationEstablishmentId);
 
       return {
         ...current,
@@ -797,22 +797,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         fieldId: nextSourceFieldId,
         transferDestinationEstablishmentId:
           current.kind === "transfer"
-            ? nextExternalDestinationEstablishmentId
-            : current.kind === "transfer_internal"
-              ? selectedEstablishmentId
+            ? nextTransferDestinationEstablishmentId
             : current.transferDestinationEstablishmentId,
         transferDestinationFieldId:
           current.kind === "transfer"
-            ? fields.some(
-                (field) =>
-                  field.id === current.transferDestinationFieldId &&
-                  field.establishmentId === nextExternalDestinationEstablishmentId &&
-                  field.id !== nextSourceFieldId
-              )
-              ? current.transferDestinationFieldId
-              : getFieldIdForEstablishmentFrom(fields, nextExternalDestinationEstablishmentId)
-            : current.kind === "transfer_internal"
-              ? nextInternalDestinationFieldId
+            ? nextTransferDestinationFieldId
               : current.transferDestinationFieldId
       };
     });
@@ -1855,7 +1844,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     animalForm.kind === "birth" ||
     animalForm.kind === "death" ||
     animalForm.kind === "transfer" ||
-    animalForm.kind === "transfer_internal" ||
     animalForm.kind === "shortage";
   const isAdjustmentAnimalMovement = animalForm.kind === "adjustment";
   const isCattleDeathWithEarTag = requiresEarTag(animalForm.kind, animalForm.species);
@@ -1877,7 +1865,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }, [setupSpecies]);
 
   useEffect(() => {
-    if (animalForm.kind !== "transfer" && animalForm.kind !== "transfer_internal") {
+    if (animalForm.kind !== "transfer") {
       return;
     }
 
@@ -2095,8 +2083,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           : parseDecimalInput(animalForm.collectedAmount)
         : undefined;
     const commercialMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
-    const isTransferMovement = animalForm.kind === "transfer" || animalForm.kind === "transfer_internal";
-    const isInternalTransferMovement = animalForm.kind === "transfer_internal";
+    const isTransferMovement = animalForm.kind === "transfer";
+    const isInternalTransferMovement =
+      isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
     const nextErrors: Record<string, string> = {};
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -2110,8 +2099,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     if (isTransferMovement) {
       if (!animalForm.transferDestinationEstablishmentId) {
         nextErrors.transferDestinationEstablishmentId = "Falta elegir el campo destino.";
-      } else if (!isInternalTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId) {
-        nextErrors.transferDestinationEstablishmentId = "El campo destino debe ser distinto del origen.";
       }
 
       if (!animalForm.transferDestinationFieldId) {
@@ -2555,7 +2542,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         const isInternalTransfer = sourceEstablishmentId === destinationEstablishmentId;
         setAnimalForm((current) => ({
           ...current,
-          kind: isInternalTransfer ? "transfer_internal" : "transfer",
+          kind: "transfer",
           establishmentId: sourceEstablishmentId,
           fieldId:
             movement.kind === "transfer_out"
