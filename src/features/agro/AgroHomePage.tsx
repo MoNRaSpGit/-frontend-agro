@@ -735,39 +735,42 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     const selectedFieldId = getFieldIdForEstablishmentFrom(fields, selectedEstablishmentId);
     const defaultTransferDestinationId = selectedEstablishmentId;
+    const resolveSourceFieldId = (currentFieldId: string, currentEstablishmentId: string) =>
+      currentEstablishmentId === selectedEstablishmentId &&
+      fields.some((field) => field.id === currentFieldId && field.establishmentId === selectedEstablishmentId)
+        ? currentFieldId
+        : selectedFieldId;
 
     setSetupEstablishmentId((current) => (current === selectedEstablishmentId ? current : selectedEstablishmentId));
-    setAnimalForm((current) => ({
-      ...current,
-      establishmentId: selectedEstablishmentId,
-      fieldId:
-        current.establishmentId === selectedEstablishmentId && fields.some((field) => field.id === current.fieldId && field.establishmentId === selectedEstablishmentId)
-          ? current.fieldId
-          : selectedFieldId,
-      transferDestinationEstablishmentId:
-        current.kind === "transfer" ? defaultTransferDestinationId : current.transferDestinationEstablishmentId,
-      transferDestinationFieldId:
-        current.kind === "transfer"
-          ? fields.some(
-              (field) =>
-                field.id === current.transferDestinationFieldId &&
-                field.establishmentId === defaultTransferDestinationId &&
-                field.id !==
-                  (current.establishmentId === selectedEstablishmentId && fields.some((field) => field.id === current.fieldId && field.establishmentId === selectedEstablishmentId)
-                    ? current.fieldId
-                    : selectedFieldId)
-            )
-            ? current.transferDestinationFieldId
-            : getAlternativeFieldId(
-                fields,
-                defaultTransferDestinationId,
-                current.establishmentId === selectedEstablishmentId && fields.some((field) => field.id === current.fieldId && field.establishmentId === selectedEstablishmentId)
-                  ? current.fieldId
-                  : selectedFieldId
-              ) ||
-              getFieldIdForEstablishmentFrom(fields, defaultTransferDestinationId)
-          : current.transferDestinationFieldId
-    }));
+    setAnimalForm((current) => {
+      const nextSourceFieldId = resolveSourceFieldId(current.fieldId, current.establishmentId);
+      const nextInternalDestinationFieldId =
+        getAlternativeFieldId(fields, defaultTransferDestinationId, nextSourceFieldId) ||
+        getFieldIdForEstablishmentFrom(fields, defaultTransferDestinationId);
+
+      return {
+        ...current,
+        establishmentId: selectedEstablishmentId,
+        fieldId: nextSourceFieldId,
+        transferDestinationEstablishmentId:
+          current.kind === "transfer" || current.kind === "transfer_internal"
+            ? defaultTransferDestinationId
+            : current.transferDestinationEstablishmentId,
+        transferDestinationFieldId:
+          current.kind === "transfer"
+            ? fields.some(
+                (field) =>
+                  field.id === current.transferDestinationFieldId &&
+                  field.establishmentId === defaultTransferDestinationId &&
+                  field.id !== nextSourceFieldId
+              )
+              ? current.transferDestinationFieldId
+              : nextInternalDestinationFieldId
+            : current.kind === "transfer_internal"
+              ? nextInternalDestinationFieldId
+              : current.transferDestinationFieldId
+      };
+    });
     setAccountingForm((current) => ({
       ...current,
       establishmentId: selectedEstablishmentId,
