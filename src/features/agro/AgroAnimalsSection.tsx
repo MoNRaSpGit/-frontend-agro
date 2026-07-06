@@ -187,7 +187,21 @@ export function AgroAnimalsSection({
               value={animalForm.fieldId}
               onChange={(event) => {
                 clearAnimalFieldError("fieldId");
-                setAnimalForm((current) => ({ ...current, fieldId: event.target.value }));
+                const nextFieldId = event.target.value;
+                setAnimalForm((current) => ({
+                  ...current,
+                  fieldId: nextFieldId,
+                  transferDestinationEstablishmentId:
+                    current.kind === "transfer_internal"
+                      ? current.establishmentId
+                      : current.transferDestinationEstablishmentId,
+                  transferDestinationFieldId:
+                    current.kind === "transfer_internal" && current.transferDestinationFieldId === nextFieldId
+                      ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
+                      : current.kind === "transfer_internal" && !selectedFields.some((item) => item.id === current.transferDestinationFieldId && item.id !== nextFieldId)
+                        ? selectedFields.find((item) => item.id !== nextFieldId)?.id ?? ""
+                        : current.transferDestinationFieldId
+                }));
               }}
             >
               {selectedFields.map((item) => (

@@ -463,6 +463,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       transferDestinationEstablishmentId: preserveContext
         ? current.kind === "transfer"
           ? current.transferDestinationEstablishmentId || activeTransferDestinationId
+          : current.kind === "transfer_internal"
+            ? current.establishmentId || activeEstablishmentId
           : ""
         : activeTransferDestinationId,
       transferDestinationFieldId: preserveContext
@@ -474,6 +476,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
               current.fieldId
             ) ||
             getFieldIdForEstablishmentFrom(fields, current.transferDestinationEstablishmentId || activeTransferDestinationId)
+          : current.kind === "transfer_internal"
+            ? current.transferDestinationFieldId ||
+              getAlternativeFieldId(fields, current.establishmentId || activeEstablishmentId, current.fieldId) ||
+              getFieldIdForEstablishmentFrom(fields, current.establishmentId || activeEstablishmentId)
           : ""
         : getAlternativeFieldId(fields, activeTransferDestinationId, preserveContext ? current.fieldId : activeFieldId) ||
           getFieldIdForEstablishmentFrom(fields, activeTransferDestinationId),
