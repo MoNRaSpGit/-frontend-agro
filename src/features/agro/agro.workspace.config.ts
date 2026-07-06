@@ -27,12 +27,6 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     persistence: "local"
   },
   {
-    key: "transfers",
-    label: "Traslados",
-    description: "Movimientos internos entre potreros o entre campos",
-    persistence: "local"
-  },
-  {
     key: "accounting",
     label: "Contabilidad",
     description: "Caja por moneda, rubro y establecimiento",

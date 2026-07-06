@@ -21,9 +21,9 @@ export const movementKindLabels = {
   sale: "Venta",
   birth: "Nacimiento",
   death: "Muerte",
-  transfer: "Traslado",
-  transfer_in: "Traslado ingreso",
-  transfer_out: "Traslado egreso",
+  transfer: "Traslado interno",
+  transfer_in: "Traslado interno ingreso",
+  transfer_out: "Traslado interno egreso",
   shortage: "Faltante",
   adjustment: "Ajuste"
 } as const;
@@ -33,6 +33,7 @@ export const animalMovementFormKinds = [
   "sale",
   "birth",
   "death",
+  "transfer",
   "shortage",
   "adjustment"
 ] as const;
