@@ -491,25 +491,6 @@ export function AgroAnimalsSection({
               </label>
             </>
           ) : null}
-          {isBirthOrDeathAnimalMovement && !isInternalTransfer ? (
-            <div className="projection-card span-2 compact-card">
-              <span>Movimiento sin impacto economico</span>
-              <strong>No lleva precio, flete, comision, IVA ni moneda.</strong>
-            </div>
-          ) : null}
-          {animalForm.kind === "transfer" ? (
-            <div className="projection-card span-2 compact-card">
-              <span>Traslado entre campos</span>
-              <strong>Al guardar, baja stock en el campo y potrero origen y sube el mismo stock en el campo y potrero destino.</strong>
-              <small>Disponibles en origen: {formatNumber(transferAvailableQuantity, 0)}</small>
-            </div>
-          ) : null}
-          {isAdjustmentAnimalMovement ? (
-            <div className="projection-card span-2 compact-card">
-              <span>Ajuste de existencias</span>
-              <strong>Usalo para corregir diferencias entre lo que hay en el establecimiento y lo que figura cargado.</strong>
-            </div>
-          ) : null}
           <label className="span-2">
             <span>Observaciones</span>
             <textarea
