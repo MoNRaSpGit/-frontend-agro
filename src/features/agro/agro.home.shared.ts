@@ -163,13 +163,20 @@ export function describeAnimalMovementDetail(
       movement.kind === "transfer_in"
         ? movement
         : animalMovements.find((item) => item.id === movement.pairedTransferMovementId) ?? movement;
-    const sourceField = fields.find((field) => field.id === sourceMovement.fieldId)?.name ?? "campo origen";
-    const destinationField = fields.find((field) => field.id === destinationMovement.fieldId)?.name ?? "campo destino";
+    const sourceFieldRecord = fields.find((field) => field.id === sourceMovement.fieldId);
+    const destinationFieldRecord = fields.find((field) => field.id === destinationMovement.fieldId);
+    const sourceField = sourceFieldRecord?.name ?? "potrero origen";
+    const destinationField = destinationFieldRecord?.name ?? "potrero destino";
     const notes = movement.notes.trim();
+    const isInternalTransfer = sourceMovement.establishmentId === destinationMovement.establishmentId;
 
     return notes
-      ? `Del campo ${sourceField} al campo ${destinationField}. ${notes}`
-      : `Del campo ${sourceField} al campo ${destinationField}.`;
+      ? isInternalTransfer
+        ? `Del potrero ${sourceField} al potrero ${destinationField}. ${notes}`
+        : `Del potrero ${sourceField} al potrero ${destinationField}. ${notes}`
+      : isInternalTransfer
+        ? `Del potrero ${sourceField} al potrero ${destinationField}.`
+        : `Del potrero ${sourceField} al potrero ${destinationField}.`;
   }
 
   return null;

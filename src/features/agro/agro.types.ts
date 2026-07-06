@@ -1,4 +1,4 @@
-export type AgroView = "overview" | "setup" | "animals" | "accounting" | "sanity" | "rainfall" | "summary";
+export type AgroView = "overview" | "setup" | "animals" | "transfers" | "accounting" | "sanity" | "rainfall" | "summary";
 
 export type AgroSpecies = "vacunos" | "ovinos" | "equinos";
 

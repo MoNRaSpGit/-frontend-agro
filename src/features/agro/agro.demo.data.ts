@@ -33,7 +33,6 @@ export const animalMovementFormKinds = [
   "sale",
   "birth",
   "death",
-  "transfer",
   "shortage",
   "adjustment"
 ] as const;
