@@ -8,6 +8,7 @@ export type AnimalMovementKind =
   | "birth"
   | "death"
   | "transfer"
+  | "transfer_internal"
   | "transfer_in"
   | "transfer_out"
   | "shortage"

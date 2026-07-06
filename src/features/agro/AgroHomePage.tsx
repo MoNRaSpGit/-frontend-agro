@@ -233,7 +233,7 @@ function getFieldIdForEstablishmentFrom(fields: FieldUnit[], establishmentId: st
 }
 
 function isTransferMovementKind(kind: AnimalMovementKind) {
-  return kind === "transfer" || kind === "transfer_in" || kind === "transfer_out";
+  return kind === "transfer" || kind === "transfer_internal" || kind === "transfer_in" || kind === "transfer_out";
 }
 
 function getFirstFieldIdForEstablishment(fields: FieldUnit[], establishmentId: string) {
@@ -551,16 +551,40 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         };
       }
 
+      if (kind === "transfer_internal") {
+        return {
+          ...current,
+          kind,
+          earTag: "",
+          transferDestinationEstablishmentId: current.establishmentId,
+          transferDestinationFieldId:
+            getAlternativeFieldId(fields, current.establishmentId, current.fieldId) ||
+            getFirstFieldIdForEstablishment(fields, current.establishmentId),
+          weightKg: "",
+          unitPrice: "",
+          freightAmount: "",
+          commissionAmount: "",
+          taxAmount: "",
+          collectedAmount: "",
+          currency: "USD"
+        };
+      }
+
       return {
         ...current,
         kind,
         earTag: kind === "death" && current.species === "vacunos" ? current.earTag : "",
         transferDestinationEstablishmentId:
-          kind === "transfer" ? current.establishmentId : "",
+          kind === "transfer"
+            ? current.transferDestinationEstablishmentId || establishments.find((item) => item.id !== current.establishmentId)?.id || current.establishmentId
+            : "",
         transferDestinationFieldId:
           kind === "transfer"
-            ? getAlternativeFieldId(fields, current.establishmentId, current.fieldId) ||
-              getFirstFieldIdForEstablishment(fields, current.establishmentId)
+            ? current.transferDestinationFieldId ||
+              getFirstFieldIdForEstablishment(
+                fields,
+                current.transferDestinationEstablishmentId || establishments.find((item) => item.id !== current.establishmentId)?.id || current.establishmentId
+              )
             : "",
         weightKg: "",
         unitPrice: "",
@@ -1927,7 +1951,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           : parseDecimalInput(animalForm.collectedAmount)
         : undefined;
     const commercialMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
-    const isTransferMovement = animalForm.kind === "transfer";
+    const isTransferMovement = animalForm.kind === "transfer" || animalForm.kind === "transfer_internal";
+    const isInternalTransferMovement = animalForm.kind === "transfer_internal";
     const nextErrors: Record<string, string> = {};
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -1941,11 +1966,14 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     if (isTransferMovement) {
       if (!animalForm.transferDestinationEstablishmentId) {
         nextErrors.transferDestinationEstablishmentId = "Falta elegir el campo destino.";
+      } else if (!isInternalTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId) {
+        nextErrors.transferDestinationEstablishmentId = "El campo destino debe ser distinto del origen.";
       }
 
       if (!animalForm.transferDestinationFieldId) {
         nextErrors.transferDestinationFieldId = "Falta elegir el potrero destino.";
       } else if (
+        isInternalTransferMovement &&
         animalForm.transferDestinationEstablishmentId === animalForm.establishmentId &&
         animalForm.transferDestinationFieldId === animalForm.fieldId
       ) {
@@ -2364,16 +2392,18 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     if (isTransferMovementKind(movement.kind) && movement.pairedTransferMovementId) {
       const pairedMovement = animalMovements.find((item) => item.id === movement.pairedTransferMovementId);
       if (pairedMovement) {
+        const sourceEstablishmentId = movement.kind === "transfer_out" ? movement.establishmentId : pairedMovement.establishmentId;
+        const destinationEstablishmentId = movement.kind === "transfer_out" ? pairedMovement.establishmentId : movement.establishmentId;
+        const isInternalTransfer = sourceEstablishmentId === destinationEstablishmentId;
         setAnimalForm((current) => ({
           ...current,
-          kind: "transfer",
-          establishmentId: movement.kind === "transfer_out" ? movement.establishmentId : pairedMovement.establishmentId,
+          kind: isInternalTransfer ? "transfer_internal" : "transfer",
+          establishmentId: sourceEstablishmentId,
           fieldId:
             movement.kind === "transfer_out"
               ? movement.fieldId
               : pairedMovement.fieldId,
-          transferDestinationEstablishmentId:
-            movement.kind === "transfer_out" ? pairedMovement.establishmentId : movement.establishmentId,
+          transferDestinationEstablishmentId: destinationEstablishmentId,
           transferDestinationFieldId: movement.kind === "transfer_out" ? pairedMovement.fieldId : movement.fieldId
         }));
       }
