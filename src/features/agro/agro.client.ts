@@ -1,6 +1,6 @@
 import { buildApiUrl } from "../../shared/config/api";
 import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
-import { getAgroAuthHeaders } from "../../shared/auth/agroSession";
+import { fetchWithAgroAuth } from "../../shared/auth/agroSession";
 import {
   AccountingEntry,
   AnimalMovementRecord,
@@ -53,9 +53,7 @@ export async function fetchAgroWorkspace(mode: AgroPersistenceMode) {
     return readJsonStorage<AgroWorkspaceSnapshot>(AGRO_DEMO_WORKSPACE_STORAGE_KEY, createDefaultDemoSnapshot());
   }
 
-  const response = await fetch(buildApiUrl("/agro/workspace"), {
-    headers: getAgroAuthHeaders()
-  });
+  const response = await fetchWithAgroAuth(buildApiUrl("/agro/workspace"));
 
   if (!response.ok) {
     throw new Error("No se pudo cargar el workspace de agro.");
@@ -77,9 +75,9 @@ export async function saveAgroWorkspace(mode: AgroPersistenceMode, snapshot: Agr
     return nextSnapshot;
   }
 
-  const response = await fetch(buildApiUrl("/agro/workspace"), {
+  const response = await fetchWithAgroAuth(buildApiUrl("/agro/workspace"), {
     method: "PUT",
-    headers: getAgroAuthHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       workspaceKey: "public",
       version: "v1",
