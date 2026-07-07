@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { categoryCatalog } from "./agro.demo.data";
 import { AgroSpecies, Establishment } from "./agro.types";
+import { AgroDeleteConfirmModal } from "./AgroDeleteConfirmModal";
 
 interface AgroSetupSectionProps {
   establishments: Establishment[];
@@ -105,6 +106,21 @@ export function AgroSetupSection({
 }: AgroSetupSectionProps) {
   const availableCategories = categoryCatalog[setupSpecies];
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
+  const [pendingFieldAction, setPendingFieldAction] = useState<
+    | {
+        kind: "delete";
+        fieldId: string;
+        fieldName: string;
+      }
+    | {
+        kind: "merge";
+        sourceFieldId: string;
+        sourceFieldName: string;
+        targetFieldId: string;
+        targetFieldName: string;
+      }
+    | null
+  >(null);
 
   useEffect(() => {
     setMergeTargets((current) => {
@@ -119,6 +135,51 @@ export function AgroSetupSection({
       return next;
     });
   }, [setupFields]);
+
+  function openDeleteConfirm(fieldId: string) {
+    const field = setupFields.find((item) => item.id === fieldId);
+    if (!field) {
+      return;
+    }
+
+    const targetFieldId = mergeTargets[fieldId] ?? setupFields.find((item) => item.id !== fieldId)?.id ?? "";
+    const targetField = setupFields.find((item) => item.id === targetFieldId);
+
+    if (field.canDelete) {
+      setPendingFieldAction({
+        kind: "delete",
+        fieldId: field.id,
+        fieldName: field.name
+      });
+      return;
+    }
+
+    if (!targetFieldId || !targetField || targetFieldId === fieldId) {
+      return;
+    }
+
+    setPendingFieldAction({
+      kind: "merge",
+      sourceFieldId: field.id,
+      sourceFieldName: field.name,
+      targetFieldId: targetField.id,
+      targetFieldName: targetField.name
+    });
+  }
+
+  function confirmPendingFieldAction() {
+    if (!pendingFieldAction) {
+      return;
+    }
+
+    if (pendingFieldAction.kind === "delete") {
+      onDeleteField(pendingFieldAction.fieldId);
+    } else {
+      onMergeField(pendingFieldAction.sourceFieldId, pendingFieldAction.targetFieldId);
+    }
+
+    setPendingFieldAction(null);
+  }
 
   return (
     <section className="content-grid">
@@ -343,7 +404,7 @@ export function AgroSetupSection({
                 </div>
                 <div className="field-row-actions">
                   {field.canDelete ? (
-                    <button type="button" className="ghost-button danger" onClick={() => onDeleteField(field.id)}>
+                    <button type="button" className="ghost-button danger" onClick={() => openDeleteConfirm(field.id)}>
                       Eliminar
                     </button>
                   ) : setupFields.length > 1 ? (
@@ -366,23 +427,43 @@ export function AgroSetupSection({
                             </option>
                           ))}
                       </select>
-                      <button
-                        type="button"
-                        className="ghost-button danger"
-                        onClick={() => onMergeField(field.id, mergeTargets[field.id] ?? "")}
-                      >
-                        Fusionar y eliminar
-                      </button>
-                    </>
-                  ) : (
-                    <span>Crea primero otro potrero para mover los datos.</span>
-                  )}
+                        <button
+                          type="button"
+                          className="ghost-button danger"
+                          onClick={() => openDeleteConfirm(field.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </>
+                    ) : (
+                      <span>Crea primero otro potrero para mover los datos.</span>
+                    )}
                 </div>
               </div>
             ))}
           </div>
         </section>
       </article>
+
+      <AgroDeleteConfirmModal
+        pendingDelete={
+          pendingFieldAction
+            ? pendingFieldAction.kind === "delete"
+              ? {
+                  title: "Eliminar potrero",
+                  message: `El potrero ${pendingFieldAction.fieldName} se va a eliminar. No tiene datos asociados.`,
+                  confirmLabel: "Eliminar"
+                }
+              : {
+                  title: "Eliminar potrero",
+                  message: `Los animales del potrero ${pendingFieldAction.sourceFieldName} van a ir al potrero ${pendingFieldAction.targetFieldName}.`,
+                  confirmLabel: "Eliminar"
+                }
+            : null
+        }
+        onCancel={() => setPendingFieldAction(null)}
+        onConfirm={confirmPendingFieldAction}
+      />
     </section>
   );
 }

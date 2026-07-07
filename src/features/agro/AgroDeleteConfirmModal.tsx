@@ -3,6 +3,7 @@ interface AgroDeleteConfirmModalProps {
     | {
         title: string;
         message: string;
+        confirmLabel?: string;
       }
     | null;
   onCancel: () => void;
@@ -26,7 +27,7 @@ export function AgroDeleteConfirmModal({ pendingDelete, onCancel, onConfirm }: A
             Cancelar
           </button>
           <button type="button" className="ghost-button danger" onClick={onConfirm}>
-            Si, eliminar
+            {pendingDelete.confirmLabel ?? "Eliminar"}
           </button>
         </div>
       </div>

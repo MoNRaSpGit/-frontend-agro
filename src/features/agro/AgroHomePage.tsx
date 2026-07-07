@@ -2161,11 +2161,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       return;
     }
 
-    const confirmed = window.confirm(`Eliminar el potrero "${field.name}"? Esta accion solo se permite porque no tiene datos asociados.`);
-    if (!confirmed) {
-      return;
-    }
-
     const fallbackFieldId =
       fields.find((item) => item.establishmentId === setupEstablishmentId && item.id !== fieldId)?.id ?? "";
 
@@ -2200,13 +2195,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     if (sourceField.establishmentId !== targetField.establishmentId) {
       showError("Solo se pueden fusionar potreros del mismo campo.");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Fusionar "${sourceField.name}" dentro de "${targetField.name}"? Todos los animales, movimientos, lluvia, sanidad y contabilidad del potrero eliminado van a pasar al potrero destino.`
-    );
-    if (!confirmed) {
       return;
     }
 
