@@ -6,6 +6,9 @@ interface AgroSetupSectionProps {
   setupFields: Array<{
     id: string;
     name: string;
+    hectares: number;
+    canDelete: boolean;
+    deleteBlockReason: string | null;
   }>;
   setupEstablishmentId: string;
   setupFieldId: string;
@@ -67,6 +70,7 @@ interface AgroSetupSectionProps {
   resetInitialStockForm: () => void;
   onAddEstablishment: () => void;
   onAddField: () => void;
+  onDeleteField: (fieldId: string) => void;
   onSubmitInitialLoad: () => void;
 }
 
@@ -93,6 +97,7 @@ export function AgroSetupSection({
   resetInitialStockForm,
   onAddEstablishment,
   onAddField,
+  onDeleteField,
   onSubmitInitialLoad
 }: AgroSetupSectionProps) {
   const availableCategories = categoryCatalog[setupSpecies];
@@ -300,6 +305,34 @@ export function AgroSetupSection({
                 Agregar potrero
               </button>
             </div>
+          </div>
+        </section>
+
+        <section className="subpanel top-gap">
+          <div className="panel-header">
+            <div>
+              <h2>Potreros del campo</h2>
+              <p>Elimina solo potreros vacios creados por error.</p>
+            </div>
+          </div>
+          <div className="list-stack">
+            {setupFields.map((field) => (
+              <div key={field.id} className="list-row">
+                <div>
+                  <strong>{field.name}</strong>
+                  <span>{field.hectares} ha</span>
+                  {field.deleteBlockReason ? <span>{field.deleteBlockReason}</span> : null}
+                </div>
+                <button
+                  type="button"
+                  className="ghost-button danger"
+                  disabled={!field.canDelete}
+                  onClick={() => onDeleteField(field.id)}
+                >
+                  Eliminar
+                </button>
+              </div>
+            ))}
           </div>
         </section>
       </article>

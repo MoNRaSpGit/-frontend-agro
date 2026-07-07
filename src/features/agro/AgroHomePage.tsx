@@ -1722,6 +1722,46 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     };
   }, [animalMovements]);
 
+  function getFieldDeleteBlockReason(fieldId: string) {
+    if (setupFields.length <= 1) {
+      return "No se puede eliminar el unico potrero del campo.";
+    }
+
+    if (animalMovements.some((movement) => movement.fieldId === fieldId)) {
+      return "Tiene animales o movimientos cargados.";
+    }
+
+    if (accountingEntries.some((entry) => entry.fieldId === fieldId)) {
+      return "Tiene movimientos contables asociados.";
+    }
+
+    if (rainfallRecords.some((record) => record.fieldId === fieldId)) {
+      return "Tiene registros de lluvia asociados.";
+    }
+
+    if (sanitaryRecords.some((record) => record.fieldId === fieldId)) {
+      return "Tiene sanidad asociada.";
+    }
+
+    return null;
+  }
+
+  const setupFieldRows = useMemo(
+    () =>
+      setupFields.map((field) => {
+        const deleteBlockReason = getFieldDeleteBlockReason(field.id);
+
+        return {
+          id: field.id,
+          name: field.name,
+          hectares: field.hectares,
+          canDelete: deleteBlockReason === null,
+          deleteBlockReason
+        };
+      }),
+    [accountingEntries, animalMovements, rainfallRecords, sanitaryRecords, setupFields]
+  );
+
   const initialLoadRows = useMemo(() => {
     return animalMovements
       .filter(
@@ -2065,6 +2105,43 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     );
     resetNewFieldForm();
     showSuccess("Potrero agregado.");
+  }
+
+  function handleDeleteField(fieldId: string) {
+    const field = fields.find((item) => item.id === fieldId);
+
+    if (!field) {
+      showError("No encontramos ese potrero.");
+      return;
+    }
+
+    if (field.establishmentId !== setupEstablishmentId) {
+      showError("Ese potrero no pertenece al campo seleccionado.");
+      return;
+    }
+
+    const deleteBlockReason = getFieldDeleteBlockReason(fieldId);
+    if (deleteBlockReason) {
+      showError(deleteBlockReason);
+      return;
+    }
+
+    const confirmed = window.confirm(`Eliminar el potrero "${field.name}"? Esta accion solo se permite porque no tiene datos asociados.`);
+    if (!confirmed) {
+      return;
+    }
+
+    const fallbackFieldId =
+      fields.find((item) => item.establishmentId === setupEstablishmentId && item.id !== fieldId)?.id ?? "";
+
+    setFields((current) => current.filter((item) => item.id !== fieldId));
+    setSetupFieldId((current) => (current === fieldId ? fallbackFieldId : current));
+    setSelectedVisibleFieldId((current) => (current === fieldId ? "all" : current));
+    setAnimalForm((current) => (current.fieldId === fieldId ? { ...current, fieldId: fallbackFieldId } : current));
+    setAccountingForm((current) => (current.fieldId === fieldId ? { ...current, fieldId: fallbackFieldId } : current));
+    setRainfallForm((current) => (current.fieldId === fieldId ? { ...current, fieldId: fallbackFieldId } : current));
+    setSanitaryForm((current) => (current.fieldId === fieldId ? { ...current, fieldId: fallbackFieldId } : current));
+    showSuccess("Potrero eliminado.");
   }
 
   function handleAnimalSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -2796,7 +2873,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         {activeView === "setup" ? (
           <AgroSetupSection
             establishments={establishments}
-            setupFields={setupFields.map((field) => ({ id: field.id, name: field.name }))}
+            setupFields={setupFieldRows}
             setupEstablishmentId={setupEstablishmentId}
             setupFieldId={setupFieldId}
             setupSpecies={setupSpecies}
@@ -2817,6 +2894,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             resetInitialStockForm={resetInitialStockForm}
             onAddEstablishment={handleAddEstablishment}
             onAddField={handleAddField}
+            onDeleteField={handleDeleteField}
             onSubmitInitialLoad={handleInitialLoadSubmit}
           />
         ) : null}
