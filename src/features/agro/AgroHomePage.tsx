@@ -94,6 +94,66 @@ function getVisibleMonthRange(year: string, month: string): AgroPeriodRange {
   };
 }
 
+function friendlyAgroToastMessage(message: string, kind: "success" | "error") {
+  const normalized = message.trim().toLowerCase();
+
+  if (kind === "error") {
+    if (normalized.includes("workspace")) {
+      return "No se pudo guardar la carga del campo o potrero. Reintentá.";
+    }
+    if (normalized.includes("potrero destino") && normalized.includes("distinto")) {
+      return "El potrero destino tiene que ser distinto del origen.";
+    }
+    if (normalized.includes("solo hay")) {
+      return message;
+    }
+  }
+
+  if (kind === "success") {
+    if (normalized.includes("potreros fusionados")) {
+      return "Traslado de potreros realizado.";
+    }
+    if (normalized.includes("potrero eliminado")) {
+      return "Potrero eliminado correctamente.";
+    }
+    if (normalized.includes("movimiento de animales guardado")) {
+      return "Movimiento de animales guardado.";
+    }
+    if (normalized.includes("movimiento de animales actualizado")) {
+      return "Movimiento de animales actualizado.";
+    }
+    if (normalized.includes("movimiento contable guardado")) {
+      return "Movimiento contable guardado.";
+    }
+    if (normalized.includes("movimiento contable actualizado")) {
+      return "Movimiento contable actualizado.";
+    }
+    if (normalized.includes("registro de lluvia guardado")) {
+      return "Registro de lluvia guardado.";
+    }
+    if (normalized.includes("registro de lluvia actualizado")) {
+      return "Registro de lluvia actualizado.";
+    }
+    if (normalized.includes("tratamiento sanitario guardado")) {
+      return "Tratamiento sanitario guardado.";
+    }
+    if (normalized.includes("tratamiento sanitario actualizado")) {
+      return "Tratamiento sanitario actualizado.";
+    }
+    if (normalized.includes("tipo de cambio guardado")) {
+      return "Tipo de cambio guardado.";
+    }
+    if (normalized.includes("tipo de cambio actualizado")) {
+      return "Tipo de cambio actualizado.";
+    }
+    if (normalized.includes("stock inicial cargado")) {
+      return "Carga inicial guardada.";
+    }
+  }
+
+  return message;
+}
+
 function getFiscalYearToDateRange(year: string, month: string): AgroPeriodRange {
   const fiscalYearRange = getFiscalYearRange(year, month);
   const visibleMonthRange = getMonthDateRange(year, month);
@@ -1933,11 +1993,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }, [animalForm.kind, transferAvailableSpecies, transferOriginAvailability]);
 
   function showSuccess(message: string) {
-    toast.success(message, { autoClose: 2400 });
+    toast.success(friendlyAgroToastMessage(message, "success"), { autoClose: 2400 });
   }
 
   function showError(message: string) {
-    toast.error(message, { autoClose: false });
+    toast.error(friendlyAgroToastMessage(message, "error"), { autoClose: false });
   }
 
   async function flushWorkspaceSaveQueue() {
@@ -1956,6 +2016,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           await saveAgroWorkspace(nextSave.mode, nextSave.snapshot);
         } catch (error) {
           const message = error instanceof Error ? error.message : "No se pudo guardar el workspace de agro.";
+          console.error("[agro-workspace-save]", message, error);
           showError(message);
         }
       }
