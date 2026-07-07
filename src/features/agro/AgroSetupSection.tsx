@@ -326,7 +326,6 @@ export function AgroSetupSection({
                 <button
                   type="button"
                   className="ghost-button danger"
-                  disabled={!field.canDelete}
                   onClick={() => onDeleteField(field.id)}
                 >
                   Eliminar
