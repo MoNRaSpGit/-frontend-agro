@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { categoryCatalog } from "./agro.demo.data";
 import { AgroSpecies, Establishment } from "./agro.types";
 
@@ -71,6 +72,7 @@ interface AgroSetupSectionProps {
   onAddEstablishment: () => void;
   onAddField: () => void;
   onDeleteField: (fieldId: string) => void;
+  onMergeField: (sourceFieldId: string, targetFieldId: string) => void;
   onSubmitInitialLoad: () => void;
 }
 
@@ -98,9 +100,25 @@ export function AgroSetupSection({
   onAddEstablishment,
   onAddField,
   onDeleteField,
+  onMergeField,
   onSubmitInitialLoad
 }: AgroSetupSectionProps) {
   const availableCategories = categoryCatalog[setupSpecies];
+  const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setMergeTargets((current) => {
+      const next: Record<string, string> = {};
+
+      for (const field of setupFields) {
+        const alternatives = setupFields.filter((item) => item.id !== field.id);
+        const currentTarget = current[field.id];
+        next[field.id] = alternatives.some((item) => item.id === currentTarget) ? currentTarget : alternatives[0]?.id ?? "";
+      }
+
+      return next;
+    });
+  }, [setupFields]);
 
   return (
     <section className="content-grid">
@@ -323,13 +341,43 @@ export function AgroSetupSection({
                   <span>{field.hectares} ha</span>
                   {field.deleteBlockReason ? <span>{field.deleteBlockReason}</span> : null}
                 </div>
-                <button
-                  type="button"
-                  className="ghost-button danger"
-                  onClick={() => onDeleteField(field.id)}
-                >
-                  Eliminar
-                </button>
+                <div className="field-row-actions">
+                  {field.canDelete ? (
+                    <button type="button" className="ghost-button danger" onClick={() => onDeleteField(field.id)}>
+                      Eliminar
+                    </button>
+                  ) : setupFields.length > 1 ? (
+                    <>
+                      <select
+                        value={mergeTargets[field.id] ?? ""}
+                        onChange={(event) =>
+                          setMergeTargets((current) => ({
+                            ...current,
+                            [field.id]: event.target.value
+                          }))
+                        }
+                        aria-label={`Potrero destino para fusionar ${field.name}`}
+                      >
+                        {setupFields
+                          .filter((item) => item.id !== field.id)
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="ghost-button danger"
+                        onClick={() => onMergeField(field.id, mergeTargets[field.id] ?? "")}
+                      >
+                        Fusionar y eliminar
+                      </button>
+                    </>
+                  ) : (
+                    <span>Crea primero otro potrero para mover los datos.</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>

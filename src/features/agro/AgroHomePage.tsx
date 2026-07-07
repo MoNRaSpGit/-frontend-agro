@@ -2179,6 +2179,67 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     showSuccess("Potrero eliminado.");
   }
 
+  function handleMergeField(sourceFieldId: string, targetFieldId: string) {
+    const sourceField = fields.find((item) => item.id === sourceFieldId);
+    const targetField = fields.find((item) => item.id === targetFieldId);
+
+    if (!sourceField) {
+      showError("No encontramos el potrero que queres eliminar.");
+      return;
+    }
+
+    if (!targetField) {
+      showError("Elegí un potrero destino para mover los datos.");
+      return;
+    }
+
+    if (sourceField.id === targetField.id) {
+      showError("El potrero destino debe ser distinto.");
+      return;
+    }
+
+    if (sourceField.establishmentId !== targetField.establishmentId) {
+      showError("Solo se pueden fusionar potreros del mismo campo.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Fusionar "${sourceField.name}" dentro de "${targetField.name}"? Todos los animales, movimientos, lluvia, sanidad y contabilidad del potrero eliminado van a pasar al potrero destino.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setAnimalMovements((current) =>
+      current.map((movement) =>
+        movement.fieldId === sourceFieldId
+          ? { ...movement, fieldId: targetFieldId, establishmentId: targetField.establishmentId }
+          : movement
+      )
+    );
+    setAccountingEntries((current) =>
+      current.map((entry) =>
+        entry.fieldId === sourceFieldId ? { ...entry, fieldId: targetFieldId, establishmentId: targetField.establishmentId } : entry
+      )
+    );
+    setRainfallRecords((current) =>
+      current.map((record) => (record.fieldId === sourceFieldId ? { ...record, fieldId: targetFieldId } : record))
+    );
+    setSanitaryRecords((current) =>
+      current.map((record) =>
+        record.fieldId === sourceFieldId ? { ...record, fieldId: targetFieldId, establishmentId: targetField.establishmentId } : record
+      )
+    );
+    setFields((current) => current.filter((item) => item.id !== sourceFieldId));
+    setSetupFieldId((current) => (current === sourceFieldId ? targetFieldId : current));
+    setSelectedVisibleFieldId((current) => (current === sourceFieldId ? targetFieldId : current));
+    setAnimalForm((current) => (current.fieldId === sourceFieldId ? { ...current, fieldId: targetFieldId } : current));
+    setAccountingForm((current) => (current.fieldId === sourceFieldId ? { ...current, fieldId: targetFieldId } : current));
+    setRainfallForm((current) => (current.fieldId === sourceFieldId ? { ...current, fieldId: targetFieldId } : current));
+    setSanitaryForm((current) => (current.fieldId === sourceFieldId ? { ...current, fieldId: targetFieldId } : current));
+    showSuccess("Potreros fusionados.");
+  }
+
   function handleAnimalSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -2930,6 +2991,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             onAddEstablishment={handleAddEstablishment}
             onAddField={handleAddField}
             onDeleteField={handleDeleteField}
+            onMergeField={handleMergeField}
             onSubmitInitialLoad={handleInitialLoadSubmit}
           />
         ) : null}

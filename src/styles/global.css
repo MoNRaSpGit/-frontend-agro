@@ -726,6 +726,24 @@ button {
   font-size: 0.92rem;
 }
 
+.field-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+
+.field-row-actions select {
+  min-width: 180px;
+  border: 1px solid rgba(60, 77, 49, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 252, 245, 0.9);
+  padding: 8px 10px;
+  color: #273423;
+  font-weight: 700;
+}
+
 .tone-positive {
   color: #2f6d28;
 }
