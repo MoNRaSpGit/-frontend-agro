@@ -355,6 +355,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const animalTableScrollbarInnerRef = useRef<HTMLDivElement | null>(null);
   const animalFieldRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({});
   const syncingAnimalScrollRef = useRef<"table" | "bottom-bar" | null>(null);
+  const latestWorkspaceSaveRef = useRef<{
+    mode: AgroPersistenceMode;
+    snapshot: Parameters<typeof saveAgroWorkspace>[1];
+  } | null>(null);
+  const workspaceSaveInFlightRef = useRef(false);
   const [activeView, setActiveView] = useState<AgroView | null>(null);
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
@@ -1851,7 +1856,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     }
 
     const timeoutId = window.setTimeout(() => {
-      void saveAgroWorkspace(persistenceMode, {
+      enqueueWorkspaceSave(persistenceMode, {
         establishments,
         fields,
         animalMovements,
@@ -1859,9 +1864,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         rainfallRecords,
         sanitaryRecords,
         monthlyExchangeRates
-      }).catch((error) => {
-        const message = error instanceof Error ? error.message : "No se pudo guardar el workspace de agro.";
-        showError(message);
       });
     }, 350);
 
@@ -1936,6 +1938,39 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   function showError(message: string) {
     toast.error(message, { autoClose: false });
+  }
+
+  async function flushWorkspaceSaveQueue() {
+    if (workspaceSaveInFlightRef.current) {
+      return;
+    }
+
+    workspaceSaveInFlightRef.current = true;
+
+    try {
+      while (latestWorkspaceSaveRef.current) {
+        const nextSave = latestWorkspaceSaveRef.current;
+        latestWorkspaceSaveRef.current = null;
+
+        try {
+          await saveAgroWorkspace(nextSave.mode, nextSave.snapshot);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "No se pudo guardar el workspace de agro.";
+          showError(message);
+        }
+      }
+    } finally {
+      workspaceSaveInFlightRef.current = false;
+
+      if (latestWorkspaceSaveRef.current) {
+        void flushWorkspaceSaveQueue();
+      }
+    }
+  }
+
+  function enqueueWorkspaceSave(mode: AgroPersistenceMode, snapshot: Parameters<typeof saveAgroWorkspace>[1]) {
+    latestWorkspaceSaveRef.current = { mode, snapshot };
+    void flushWorkspaceSaveQueue();
   }
 
   function buildAgroSlug(value: string) {
