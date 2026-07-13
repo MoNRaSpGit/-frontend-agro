@@ -501,11 +501,12 @@ export function AgroAnimalsSection({
           </label>
           {isCommercialAnimalMovement ? (
             <div className="projection-card span-2">
-              <span>Monto total proyectado</span>
+              <span>Monto neto proyectado</span>
               <strong>{formatMoney(projectedAnimalTotal, animalForm.currency)}</strong>
               {animalForm.kind === "sale" ? (
                 <small>
-                  Pendiente {formatMoney(Math.max(0, projectedAnimalTotal - (parseDecimalInput(animalForm.collectedAmount) || 0)), animalForm.currency)}
+                  Pendiente de cobro{" "}
+                  {formatMoney(Math.max(0, projectedAnimalTotal - (parseDecimalInput(animalForm.collectedAmount) || 0)), animalForm.currency)}
                 </small>
               ) : null}
             </div>

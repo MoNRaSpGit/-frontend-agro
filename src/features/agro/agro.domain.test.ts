@@ -8,8 +8,12 @@ describe("agro functional round", () => {
     expect(getIncomeConceptForSpecies("equinos")).toBe("venta_equinos");
   });
 
-  it("calculates animal totals with freight, commission and iva", () => {
-    expect(calculateAnimalTotal(10, 4.5, 100, 50, 25)).toBe(220);
+  it("calculates sale totals subtracting commission and iva", () => {
+    expect(calculateAnimalTotal("sale", 10, 45, 100, 50, 25)).toBe(300);
+  });
+
+  it("calculates purchase totals adding freight, commission and iva", () => {
+    expect(calculateAnimalTotal("purchase", 10, 4.5, 100, 50, 25)).toBe(220);
   });
 
   it("derives stock direction from movement kind", () => {

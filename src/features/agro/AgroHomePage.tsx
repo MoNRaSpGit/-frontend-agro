@@ -2404,7 +2404,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     const normalizedCommission = commercialMovement && Number.isFinite(commissionAmount) ? commissionAmount : 0;
     const normalizedTax = commercialMovement && Number.isFinite(taxAmount) ? taxAmount : 0;
     const totalAmount = commercialMovement
-      ? calculateAnimalTotal(quantity, unitPrice, normalizedCommission, normalizedTax, normalizedFreight)
+      ? calculateAnimalTotal(animalForm.kind, quantity, unitPrice, normalizedCommission, normalizedTax, normalizedFreight)
       : undefined;
 
     if (animalForm.kind === "sale") {
@@ -2968,6 +2968,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   );
 
   const projectedAnimalTotal = calculateAnimalTotal(
+    animalForm.kind,
     parseDecimalInput(animalForm.quantity) || 0,
     parseDecimalInput(animalForm.unitPrice) || 0,
     parseDecimalInput(animalForm.commissionAmount) || 0,

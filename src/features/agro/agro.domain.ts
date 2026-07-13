@@ -5,13 +5,20 @@ export function deriveMovementDirection(kind: AnimalMovementKind) {
 }
 
 export function calculateAnimalTotal(
+  kind: AnimalMovementKind,
   quantity: number,
   unitPrice: number,
   commissionAmount: number,
   taxAmount: number,
   freightAmount: number
 ) {
-  return quantity * unitPrice + commissionAmount + taxAmount + freightAmount;
+  const grossAmount = quantity * unitPrice;
+
+  if (kind === "sale") {
+    return grossAmount - commissionAmount - taxAmount;
+  }
+
+  return grossAmount + commissionAmount + taxAmount + freightAmount;
 }
 
 export function getIncomeConceptForSpecies(species: AgroSpecies): IncomeConcept {
