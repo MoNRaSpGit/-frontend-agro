@@ -8,6 +8,7 @@ import {
   getAlternativeFieldId,
   getFieldIdForEstablishmentFrom,
   getFirstFieldIdForEstablishment,
+  getEstablishmentFlowDirection,
   getFiscalYearToDateRange,
   getIncomeCollectedAmount,
   getIncomeCollectionStatus,
@@ -207,6 +208,59 @@ describe("movement direction helpers", () => {
   });
 });
 
+describe("getEstablishmentFlowDirection", () => {
+  // Reproduce el bug reportado: un traslado entre dos potreros del MISMO
+  // establecimiento genera un transfer_out y un transfer_in pareados. A
+  // nivel de establecimiento eso no es ni entrada ni salida (el animal
+  // nunca salio del rodeo), aunque a nivel de potrero si se movio.
+  it("excludes an internal transfer (same establishment) from entries and exits", () => {
+    const transferOut = makeMovement({
+      id: "out-1",
+      kind: "transfer_out",
+      establishmentId: "est-1",
+      fieldId: "field-1",
+      pairedTransferMovementId: "in-1"
+    });
+    const transferIn = makeMovement({
+      id: "in-1",
+      kind: "transfer_in",
+      establishmentId: "est-1",
+      fieldId: "field-2",
+      pairedTransferMovementId: "out-1"
+    });
+    const allMovements = [transferOut, transferIn];
+
+    expect(getEstablishmentFlowDirection(transferOut, allMovements)).toBe("none");
+    expect(getEstablishmentFlowDirection(transferIn, allMovements)).toBe("none");
+  });
+
+  it("still counts a transfer between two DIFFERENT establishments as exit/entry", () => {
+    const transferOut = makeMovement({
+      id: "out-1",
+      kind: "transfer_out",
+      establishmentId: "est-1",
+      fieldId: "field-1",
+      pairedTransferMovementId: "in-1"
+    });
+    const transferIn = makeMovement({
+      id: "in-1",
+      kind: "transfer_in",
+      establishmentId: "est-2",
+      fieldId: "field-3",
+      pairedTransferMovementId: "out-1"
+    });
+    const allMovements = [transferOut, transferIn];
+
+    expect(getEstablishmentFlowDirection(transferOut, allMovements)).toBe("exit");
+    expect(getEstablishmentFlowDirection(transferIn, allMovements)).toBe("entry");
+  });
+
+  it("falls back to the normal entry/exit classification for non-transfer kinds", () => {
+    expect(getEstablishmentFlowDirection(makeMovement({ kind: "purchase" }), [])).toBe("entry");
+    expect(getEstablishmentFlowDirection(makeMovement({ kind: "sale" }), [])).toBe("exit");
+  });
+});
+
 describe("field lookup helpers", () => {
   const multiFields: FieldUnit[] = [
     { id: "field-1", establishmentId: "est-1", name: "Norte", hectares: 100, notes: "" },
@@ -306,6 +360,65 @@ describe("summarizeRangeData", () => {
     expect(summary.entries).toBe(0);
     expect(summary.exits).toBe(0);
     expect(summary.rainfallTotal).toBe(0);
+  });
+
+  it("does not count an internal transfer (same establishment) as either an entry or an exit", () => {
+    const movementsWithInternalTransfer: AnimalMovementRecord[] = [
+      ...movements,
+      makeMovement({
+        id: "transfer-out-1",
+        kind: "transfer_out",
+        establishmentId: "est-1",
+        fieldId: "field-1",
+        quantity: 10,
+        date: "2024-03-12",
+        pairedTransferMovementId: "transfer-in-1"
+      }),
+      makeMovement({
+        id: "transfer-in-1",
+        kind: "transfer_in",
+        establishmentId: "est-1",
+        fieldId: "field-1",
+        quantity: 10,
+        date: "2024-03-12",
+        pairedTransferMovementId: "transfer-out-1"
+      })
+    ];
+
+    const summary = summarizeRangeData(movementsWithInternalTransfer, entries, rainfallRecords, {}, "2024-03-01", "2024-03-31");
+
+    // Los mismos totales que sin el traslado interno: no debe sumar nada.
+    expect(summary.entries).toBe(5);
+    expect(summary.exits).toBe(3);
+  });
+
+  it("counts a transfer between two different establishments as a real exit + entry", () => {
+    const movementsWithCrossEstablishmentTransfer: AnimalMovementRecord[] = [
+      ...movements,
+      makeMovement({
+        id: "transfer-out-2",
+        kind: "transfer_out",
+        establishmentId: "est-1",
+        fieldId: "field-1",
+        quantity: 7,
+        date: "2024-03-12",
+        pairedTransferMovementId: "transfer-in-2"
+      }),
+      makeMovement({
+        id: "transfer-in-2",
+        kind: "transfer_in",
+        establishmentId: "est-2",
+        fieldId: "field-3",
+        quantity: 7,
+        date: "2024-03-12",
+        pairedTransferMovementId: "transfer-out-2"
+      })
+    ];
+
+    const summary = summarizeRangeData(movementsWithCrossEstablishmentTransfer, entries, rainfallRecords, {}, "2024-03-01", "2024-03-31");
+
+    expect(summary.entries).toBe(5 + 7);
+    expect(summary.exits).toBe(3 + 7);
   });
 });
 

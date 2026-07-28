@@ -385,6 +385,36 @@ export function getMovementDirection(movement: AnimalMovementRecord) {
   return isInitialStockLoad(movement) ? "entry" : deriveMovementDirection(movement.kind);
 }
 
+// Un traslado (transfer_in/transfer_out) es interno cuando su movimiento
+// pareja pertenece al mismo establecimiento: el animal solo cambio de
+// potrero, nunca salio del rodeo del establecimiento.
+function isInternalTransferMovement(movement: AnimalMovementRecord, allMovements: AnimalMovementRecord[]) {
+  if (movement.kind !== "transfer_in" && movement.kind !== "transfer_out") {
+    return false;
+  }
+
+  const pairedMovement = allMovements.find((item) => item.id === movement.pairedTransferMovementId);
+  return pairedMovement ? pairedMovement.establishmentId === movement.establishmentId : false;
+}
+
+// Direccion de flujo a nivel de establecimiento, para los totales de
+// entradas/salidas (usado en Resumen). Es distinto de getMovementDirection
+// (que se usa para el stock por potrero, donde un traslado interno si
+// mueve stock real de un potrero a otro): aca un traslado interno no debe
+// sumar ni a entradas ni a salidas, porque el rodeo del establecimiento no
+// cambio. Un traslado entre establecimientos distintos si cuenta (salida
+// del origen, entrada en el destino).
+export function getEstablishmentFlowDirection(
+  movement: AnimalMovementRecord,
+  allMovements: AnimalMovementRecord[]
+): "entry" | "exit" | "none" {
+  if (isInternalTransferMovement(movement, allMovements)) {
+    return "none";
+  }
+
+  return getMovementDirection(movement);
+}
+
 export function getFieldIdForEstablishmentFrom(fields: FieldUnit[], establishmentId: string) {
   return fields.find((field) => field.establishmentId === establishmentId)?.id ?? "";
 }
@@ -458,10 +488,10 @@ export function summarizeRangeData(
 
   return {
     entries: filteredAnimalMovements
-      .filter((movement) => getMovementDirection(movement) === "entry")
+      .filter((movement) => getEstablishmentFlowDirection(movement, animalMovements) === "entry")
       .reduce((sum, movement) => sum + movement.quantity, 0),
     exits: filteredAnimalMovements
-      .filter((movement) => getMovementDirection(movement) === "exit")
+      .filter((movement) => getEstablishmentFlowDirection(movement, animalMovements) === "exit")
       .reduce((sum, movement) => sum + movement.quantity, 0),
     incomeUsd: filteredAccountingEntries
       .filter((entry) => entry.type === "income" && entry.currency === "USD")
