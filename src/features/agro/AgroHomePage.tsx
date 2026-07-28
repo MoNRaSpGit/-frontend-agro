@@ -1948,6 +1948,37 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     showSuccess("Potrero agregado.");
   }
 
+  function handleUpdateEstablishmentHectares(establishmentId: string, hectaresInput: string) {
+    const hectares = parseDecimalInput(hectaresInput);
+
+    if (!establishmentId) {
+      showError("Elegi un establecimiento para editar sus hectareas.");
+      return;
+    }
+
+    if (!Number.isFinite(hectares) || hectares <= 0) {
+      showError("Las hectareas del campo deben ser un numero mayor a 0.");
+      return;
+    }
+
+    setEstablishments((current) =>
+      current.map((item) => (item.id === establishmentId ? { ...item, hectares } : item))
+    );
+    showSuccess("Hectareas del campo actualizadas.");
+  }
+
+  function handleUpdateFieldHectares(fieldId: string, hectaresInput: string) {
+    const hectares = parseDecimalInput(hectaresInput);
+
+    if (!Number.isFinite(hectares) || hectares <= 0) {
+      showError("Las hectareas del potrero deben ser un numero mayor a 0.");
+      return;
+    }
+
+    setFields((current) => current.map((item) => (item.id === fieldId ? { ...item, hectares } : item)));
+    showSuccess("Hectareas del potrero actualizadas.");
+  }
+
   function handleDeleteField(fieldId: string) {
     const field = fields.find((item) => item.id === fieldId);
 
@@ -2801,6 +2832,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             onDeleteField={handleDeleteField}
             onMergeField={handleMergeField}
             onSubmitInitialLoad={handleInitialLoadSubmit}
+            onUpdateEstablishmentHectares={handleUpdateEstablishmentHectares}
+            onUpdateFieldHectares={handleUpdateFieldHectares}
           />
         ) : null}
 

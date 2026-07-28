@@ -75,6 +75,8 @@ interface AgroSetupSectionProps {
   onDeleteField: (fieldId: string) => void;
   onMergeField: (sourceFieldId: string, targetFieldId: string) => void;
   onSubmitInitialLoad: () => void;
+  onUpdateEstablishmentHectares: (establishmentId: string, hectares: string) => void;
+  onUpdateFieldHectares: (fieldId: string, hectares: string) => void;
 }
 
 export function AgroSetupSection({
@@ -102,10 +104,30 @@ export function AgroSetupSection({
   onAddField,
   onDeleteField,
   onMergeField,
-  onSubmitInitialLoad
+  onSubmitInitialLoad,
+  onUpdateEstablishmentHectares,
+  onUpdateFieldHectares
 }: AgroSetupSectionProps) {
   const availableCategories = categoryCatalog[setupSpecies];
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
+  const [establishmentHectaresInput, setEstablishmentHectaresInput] = useState("");
+  const [fieldHectaresInputs, setFieldHectaresInputs] = useState<Record<string, string>>({});
+
+  const selectedEstablishment = establishments.find((item) => item.id === setupEstablishmentId);
+
+  useEffect(() => {
+    setEstablishmentHectaresInput(selectedEstablishment ? `${selectedEstablishment.hectares}` : "");
+  }, [selectedEstablishment]);
+
+  useEffect(() => {
+    setFieldHectaresInputs((current) => {
+      const next: Record<string, string> = {};
+      for (const field of setupFields) {
+        next[field.id] = current[field.id] !== undefined ? current[field.id] : `${field.hectares}`;
+      }
+      return next;
+    });
+  }, [setupFields]);
   const [pendingFieldAction, setPendingFieldAction] = useState<
     | {
         kind: "delete";
@@ -223,6 +245,35 @@ export function AgroSetupSection({
             </select>
           </label>
         </form>
+
+        <section className="subpanel top-gap">
+          <div className="panel-header">
+            <div>
+              <h2>Editar hectareas del campo</h2>
+              <p>Actualiza la superficie total del establecimiento elegido arriba.</p>
+            </div>
+          </div>
+          <div className="form-grid">
+            <label>
+              <span>Hectareas de {selectedEstablishment?.name ?? "-"}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={establishmentHectaresInput}
+                onChange={(event) => setEstablishmentHectaresInput(event.target.value)}
+              />
+            </label>
+            <div className="action-row">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => onUpdateEstablishmentHectares(setupEstablishmentId, establishmentHectaresInput)}
+              >
+                Guardar hectareas
+              </button>
+            </div>
+          </div>
+        </section>
 
         <div className="content-grid top-gap">
           <section className="subpanel">
@@ -391,7 +442,7 @@ export function AgroSetupSection({
           <div className="panel-header">
             <div>
               <h2>Potreros del campo</h2>
-              <p>Elimina solo potreros vacios creados por error.</p>
+              <p>Edita las hectareas o elimina potreros vacios creados por error.</p>
             </div>
           </div>
           <div className="list-stack">
@@ -399,10 +450,27 @@ export function AgroSetupSection({
               <div key={field.id} className="list-row">
                 <div>
                   <strong>{field.name}</strong>
-                  <span>{field.hectares} ha</span>
                   {field.deleteBlockReason ? <span>{field.deleteBlockReason}</span> : null}
                 </div>
                 <div className="field-row-actions">
+                  <label className="field-hectares-edit">
+                    <span>Hectareas</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={fieldHectaresInputs[field.id] ?? `${field.hectares}`}
+                      onChange={(event) =>
+                        setFieldHectaresInputs((current) => ({ ...current, [field.id]: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onUpdateFieldHectares(field.id, fieldHectaresInputs[field.id] ?? `${field.hectares}`)}
+                  >
+                    Guardar
+                  </button>
                   {field.canDelete ? (
                     <button type="button" className="ghost-button danger" onClick={() => openDeleteConfirm(field.id)}>
                       Eliminar

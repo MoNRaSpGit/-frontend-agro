@@ -776,6 +776,28 @@ button {
   font-weight: 700;
 }
 
+.field-hectares-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-hectares-edit span {
+  font-size: 0.85rem;
+  color: #3a4738;
+  white-space: nowrap;
+}
+
+.field-hectares-edit input {
+  width: 90px;
+  border: 1px solid rgba(60, 77, 49, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 252, 245, 0.9);
+  padding: 8px 10px;
+  color: #273423;
+  font-weight: 700;
+}
+
 .tone-positive {
   color: #2f6d28;
 }
