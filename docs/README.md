@@ -1,6 +1,6 @@
 # Agro Docs
 
-Fecha de actualizacion: 2026-05-22
+Fecha de actualizacion: 2026-07-28
 
 ## Objetivo
 

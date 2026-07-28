@@ -1,6 +1,6 @@
 # Agro - Estado actual del frontend
 
-Fecha de actualizacion: 2026-06-05
+Fecha de actualizacion: 2026-07-28
 
 ## Estado general
 
@@ -51,6 +51,9 @@ Hoy el modulo ya deja ver:
 - acceso directo con un solo boton `Ingresar`
 - cierre de sesion visible dentro de la app
 - cambio manual de contrasena para la cuenta real `rosendo`
+- indicador siempre visible del estado real de guardado ("Guardando...", "Guardado", o el motivo especifico si falla)
+- deteccion de edicion simultanea entre dispositivos/pestanas antes de pisar un guardado ajeno
+- pantalla de aviso si ocurre un error inesperado, en vez de quedar en blanco
 
 ## Regla de persistencia actual
 
@@ -85,7 +88,8 @@ Hoy el ingreso visible del cliente funciona asi:
 - boton `Demo`
 - login directo contra backend con un usuario demo real separado del cliente
 - boton visible de `Cerrar sesion` dentro de la app
-- si aparece una nueva version y el cliente acepta `Actualizar`, la app vuelve al login y obliga reingreso
+- si aparece una nueva version y el cliente acepta `Actualizar`, la app recarga con la version nueva sin cerrar la sesion (hasta 2026-06-05 si forzaba reingreso; se corrigio en 2026-07-28 porque desloguaba sin motivo real, ver bitacora)
+- la sesion se renueva sola en segundo plano mientras haya actividad dentro de una ventana de 7 dias; si vence de verdad, manda al login en vez de dejar la app trabada sin poder guardar
 
 ## Carga inicial actual
 

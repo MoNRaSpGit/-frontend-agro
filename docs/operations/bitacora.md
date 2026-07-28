@@ -1,6 +1,6 @@
 # Agro - Bitacora
 
-Fecha de actualizacion: 2026-06-05
+Fecha de actualizacion: 2026-07-28
 
 ## Regla de este archivo
 
@@ -17,6 +17,50 @@ Aca corresponde anotar:
 ## Corte actual
 
 `agro` quedo en un corte activo publicado para esperar devolucion del cliente.
+
+## 2026-07-28 - El guardado mentia y la sesion se cerraba sin motivo real
+
+Rosendo reporto dos sintomas que en un principio parecian sueltos, pero resultaron ser dos bugs de confianza reales, no cosmeticos: (1) a veces la app decia "no se pudo guardar la carga del campo o potrero" y sin embargo el dato **si** habia quedado guardado; y (2) con la app abierta e inactiva un tiempo (ej. 4 horas), a veces la sesion se cerraba sola y otras veces no, sin ningun patron aparente.
+
+### Por que importa este corte
+
+No es un ajuste visual. Si la app puede decir "no se guardo" estando guardado (o al reves), el cliente deja de poder confiar en lo que ve en pantalla mientras carga datos productivos reales. Y si la sesion se cierra al azar, puede perder trabajo en progreso sin previo aviso. Por eso este bloque se aborda con precision antes que con velocidad: se prefirio hacer el guardado mas explicito (indicador de estado, avisos especificos) en vez de mas rapido/silencioso.
+
+### Que se encontro (causa real, no sintoma)
+
+1. `agro.client.ts` tiraba siempre el mismo string generico ante cualquier error HTTP al guardar/cargar, sin mirar el status code ni el mensaje real que ya devolvia el backend. Un error de validacion (ej. el guardia que bloquea un guardado que parece vaciar informacion existente), un error de sesion vencida, un error de servidor y un corte de conexion terminaban todos mostrando el mismo mensaje generico.
+2. El autoguardado era silencioso cuando salia bien, y si fallaba una vez mostraba un aviso de error **que nunca se cerraba solo**. Si el guardado siguiente si tenia exito, el aviso viejo se quedaba pegado en pantalla diciendo "no se guardo" aunque el dato ya estuviera a salvo.
+3. El cierre de sesion intermitente era una carrera al renovar el token: el refresh token del backend es de un solo uso (se invalida apenas se canjea). Si dos pedidos pedian renovarlo casi al mismo tiempo (mas de una pestana abierta con la misma sesion, o dos pedidos en paralelo), el segundo perdia la carrera, el backend lo rechazaba, y el frontend interpretaba ese rechazo como "la sesion murio" y borraba todo — aunque el token de 7 dias en realidad seguia vigente.
+4. Sin buscarlo, tambien se confirmo que no habia proteccion real ante edicion simultanea desde dos dispositivos/pestanas: el guardado era "el ultimo que llega gana", sin deteccion de conflicto.
+
+### Queda asi
+
+- los errores de guardado/carga ahora se clasifican por causa real: sin conexion, sesion vencida, dato invalido (con el mensaje que ya manda el backend), error de servidor
+- hay un indicador de estado siempre visible ("Guardando...", "Guardado (hora)", o el motivo especifico del error) en vez de depender solo de un toast
+- si un guardado falla y el siguiente tiene exito, el aviso de error viejo se cierra solo
+- si se cierra la pestana con un guardado pendiente o en viaje, el navegador avisa antes de perder ese cambio
+- se arreglo la carrera de renovacion de sesion: dentro de la misma pestana los pedidos concurrentes esperan un unico refresh en curso; ademas, antes de pedir un refresh se chequea si otra pestana ya lo hizo, y si el propio refresh falla se revisa si ya quedo guardada una sesion mas nueva antes de cerrar todo
+- si la sesion vence de verdad (7 dias sin actividad), ahora manda al login en vez de dejar la app trabada sin poder guardar nada
+- el cartel `Actualizar` ya no cierra la sesion al aplicar una version nueva (antes si lo hacia, ver nota de 2026-05-22 mas abajo, que queda superada por este corte)
+- se agrego deteccion de edicion simultanea entre dispositivos/pestanas: cada guardado manda la version de fila que vio la ultima vez (`expectedRowVersion`); si el backend ya tiene una version mas nueva, rechaza el guardado con un aviso claro pidiendo recargar, en vez de pisar en silencio el cambio de otro dispositivo
+- se subio el limite de tamano de body en el backend (100kb -> 10mb) para que un workspace grande no falle con un error de servidor generico
+- se agrego un Error Boundary global: un error de render en cualquier parte de la app ya no deja una pantalla en blanco sin explicacion
+- se agregaron 60 tests (antes habia 7), incluyendo tests que reproducen exactamente la carrera de sesion arreglada, para que si alguien vuelve a tocar ese codigo y rompe el fix, quede detectado
+- de paso, `AgroHomePage.tsx` (3753 lineas) se redujo a 3399 sacando funciones puras a archivos aparte, sin cambio de comportamiento
+
+### Deliberadamente fuera de este corte
+
+- el fix viejo de calculo de venta neta (rama `agent/fix-agro-sale-net-total`) sigue archivado, no se toco a pedido explicito
+- el endpoint `GET/PUT /agro/workspace/public` sigue sin autenticacion; no lo usa el frontend pero tampoco se cerro, a pedido explicito
+- todavia no hay tests de UI/componentes ni end-to-end, solo tests unitarios de funciones puras y de la logica de sesion/errores
+
+### Validacion tecnica de este corte
+
+- `lint`: OK (0 errores/warnings en los archivos tocados)
+- `typecheck`: OK
+- `test`: OK (60/60)
+- `build`: OK (bundle final practicamente identico en tamano, confirma que el refactor no cambio comportamiento)
+- deploy verificado en vivo (frontend GitHub Pages + backend Render) despues del merge a `main`
 
 ## 2026-06-05 - Rosendo pasa de acceso automatico a clave propia
 
