@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ProductShell } from "../../shared/components/ProductShell";
 import { AgroAccountingSection } from "./AgroAccountingSection";
@@ -98,6 +98,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // guardado con exito). Se manda en cada guardado para que el backend
   // pueda detectar si otro dispositivo/pestana ya guardo algo mas nuevo.
   const workspaceRowVersionRef = useRef<number | null>(null);
+  // Referencias siempre-actualizadas para usar dentro de efectos sin
+  // tenerlas que poner en el array de dependencias: onSignOut es una prop
+  // que el padre recrea en cada render, y enqueueWorkspaceSave se recrea en
+  // cada render del propio componente - si cualquiera de las dos entrara
+  // directo en un array de dependencias, el efecto se volveria a disparar
+  // en cada render (fetch repetido / autoguardado de mas), no solo cuando
+  // realmente cambia lo que le importa a ese efecto.
+  const onSignOutRef = useRef(onSignOut);
+  onSignOutRef.current = onSignOut;
+  const enqueueWorkspaceSaveRef = useRef(enqueueWorkspaceSave);
+  enqueueWorkspaceSaveRef.current = enqueueWorkspaceSave;
   const [activeView, setActiveView] = useState<AgroView | null>(null);
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
@@ -1319,7 +1330,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         }
       )
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [establishmentFieldIds, establishments, rainfallRecords, rainfallSearchTerm, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+  }, [establishmentFieldIds, establishments, fields, rainfallRecords, rainfallSearchTerm, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   const sanitaryRows = useMemo(() => {
     return [...sanitaryRecords]
@@ -1397,7 +1408,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         return isDateWithinRange(entry.date, visibleMonthRange.startDate, visibleMonthRange.endDate);
       })
       .map((entry) => {
-        const field = fields.find((item) => item.id === entry.fieldId);
         const linkedMovement = entry.linkedAnimalMovementId
           ? animalMovements.find((movement) => movement.id === entry.linkedAnimalMovementId)
           : undefined;
@@ -1468,29 +1478,32 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     };
   }, [animalMovements]);
 
-  function getFieldDeleteBlockReason(fieldId: string) {
-    if (setupFields.length <= 1) {
-      return "No se puede eliminar el unico potrero del campo.";
-    }
+  const getFieldDeleteBlockReason = useCallback(
+    (fieldId: string) => {
+      if (setupFields.length <= 1) {
+        return "No se puede eliminar el unico potrero del campo.";
+      }
 
-    if (animalMovements.some((movement) => movement.fieldId === fieldId)) {
-      return "Tiene animales o movimientos cargados.";
-    }
+      if (animalMovements.some((movement) => movement.fieldId === fieldId)) {
+        return "Tiene animales o movimientos cargados.";
+      }
 
-    if (accountingEntries.some((entry) => entry.fieldId === fieldId)) {
-      return "Tiene movimientos contables asociados.";
-    }
+      if (accountingEntries.some((entry) => entry.fieldId === fieldId)) {
+        return "Tiene movimientos contables asociados.";
+      }
 
-    if (rainfallRecords.some((record) => record.fieldId === fieldId)) {
-      return "Tiene registros de lluvia asociados.";
-    }
+      if (rainfallRecords.some((record) => record.fieldId === fieldId)) {
+        return "Tiene registros de lluvia asociados.";
+      }
 
-    if (sanitaryRecords.some((record) => record.fieldId === fieldId)) {
-      return "Tiene sanidad asociada.";
-    }
+      if (sanitaryRecords.some((record) => record.fieldId === fieldId)) {
+        return "Tiene sanidad asociada.";
+      }
 
-    return null;
-  }
+      return null;
+    },
+    [setupFields, animalMovements, accountingEntries, rainfallRecords, sanitaryRecords]
+  );
 
   const setupFieldRows = useMemo(
     () =>
@@ -1505,7 +1518,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           deleteBlockReason
         };
       }),
-    [accountingEntries, animalMovements, rainfallRecords, sanitaryRecords, setupFields]
+    [setupFields, getFieldDeleteBlockReason]
   );
 
   const initialLoadRows = useMemo(() => {
@@ -1583,7 +1596,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         // sentido dejar al usuario mirando una app rota que nunca va a poder
         // guardar nada: lo mandamos derecho a la pantalla de login.
         if (error instanceof AgroApiError && error.kind === "auth") {
-          onSignOut();
+          onSignOutRef.current();
         }
       } finally {
         if (!isCancelled) {
@@ -1607,7 +1620,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setWorkspaceSaveStatus("pending");
 
     const timeoutId = window.setTimeout(() => {
-      enqueueWorkspaceSave(persistenceMode, {
+      enqueueWorkspaceSaveRef.current(persistenceMode, {
         establishments,
         fields,
         animalMovements,
@@ -2493,7 +2506,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       if (pairedMovement) {
         const sourceEstablishmentId = movement.kind === "transfer_out" ? movement.establishmentId : pairedMovement.establishmentId;
         const destinationEstablishmentId = movement.kind === "transfer_out" ? pairedMovement.establishmentId : movement.establishmentId;
-        const isInternalTransfer = sourceEstablishmentId === destinationEstablishmentId;
         setAnimalForm((current) => ({
           ...current,
           kind: "transfer",
