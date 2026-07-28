@@ -30,6 +30,7 @@ export type AgroWorkspaceSnapshot = {
     monthlyExchangeRates: MonthlyExchangeRate[];
   };
   updatedAt: string | null;
+  rowVersion: number;
 };
 
 function createDefaultDemoSnapshot(): AgroWorkspaceSnapshot {
@@ -45,7 +46,8 @@ function createDefaultDemoSnapshot(): AgroWorkspaceSnapshot {
       sanitaryRecords: [],
       monthlyExchangeRates: []
     },
-    updatedAt: null
+    updatedAt: null,
+    rowVersion: 0
   };
 }
 
@@ -63,13 +65,18 @@ export async function fetchAgroWorkspace(mode: AgroPersistenceMode) {
   return (await response.json()) as AgroWorkspaceSnapshot;
 }
 
-export async function saveAgroWorkspace(mode: AgroPersistenceMode, snapshot: AgroWorkspaceSnapshot["data"]) {
+export async function saveAgroWorkspace(
+  mode: AgroPersistenceMode,
+  snapshot: AgroWorkspaceSnapshot["data"],
+  expectedRowVersion: number | null
+) {
   if (mode === "demo-local") {
     const nextSnapshot: AgroWorkspaceSnapshot = {
       workspaceKey: "public",
       version: "v1",
       data: snapshot,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      rowVersion: (expectedRowVersion ?? 0) + 1
     };
 
     writeJsonStorage(AGRO_DEMO_WORKSPACE_STORAGE_KEY, nextSnapshot);
@@ -82,6 +89,7 @@ export async function saveAgroWorkspace(mode: AgroPersistenceMode, snapshot: Agr
     body: JSON.stringify({
       workspaceKey: "public",
       version: "v1",
+      expectedRowVersion,
       ...snapshot
     })
   });

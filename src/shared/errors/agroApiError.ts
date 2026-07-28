@@ -1,4 +1,4 @@
-export type AgroApiErrorKind = "network" | "auth" | "validation" | "server" | "unknown";
+export type AgroApiErrorKind = "network" | "auth" | "validation" | "server" | "conflict" | "unknown";
 
 // Permite distinguir "el usuario cargo mal un dato" (validation, con el
 // mensaje real del backend) de "se corto la conexion" (network), "la sesion
@@ -31,11 +31,13 @@ export async function toAgroApiError(response: Response, fallbackMessage: string
   const kind: AgroApiErrorKind =
     status === 401 || status === 403
       ? "auth"
-      : status === 400 || status === 422
-        ? "validation"
-        : status >= 500
-          ? "server"
-          : "unknown";
+      : status === 409
+        ? "conflict"
+        : status === 400 || status === 422
+          ? "validation"
+          : status >= 500
+            ? "server"
+            : "unknown";
 
   return new AgroApiError(backendMessage || fallbackMessage, kind, status);
 }

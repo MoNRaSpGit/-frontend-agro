@@ -171,6 +171,8 @@ function describeAgroWorkspaceError(error: unknown, action: "guardar" | "cargar"
         return `No se pudo ${action}: hubo un error en el servidor. Intenta de nuevo en unos minutos.`;
       case "validation":
         return `No se pudo ${action}: ${error.message}`;
+      case "conflict":
+        return `No se pudo ${action}: otro dispositivo ya guardo cambios mas nuevos. Recarga la pagina (F5) antes de seguir editando.`;
       default:
         return `No se pudo ${action} el campo o potrero (${error.message}).`;
     }
@@ -446,6 +448,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   } | null>(null);
   const workspaceSaveInFlightRef = useRef(false);
   const workspaceSaveStatusRef = useRef<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+  // Ultima version de fila que vimos (carga inicial o nuestro propio ultimo
+  // guardado con exito). Se manda en cada guardado para que el backend
+  // pueda detectar si otro dispositivo/pestana ya guardo algo mas nuevo.
+  const workspaceRowVersionRef = useRef<number | null>(null);
   const [activeView, setActiveView] = useState<AgroView | null>(null);
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
@@ -1909,6 +1915,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         setRainfallRecords(snapshot.data.rainfallRecords.map((record) => normalizeRainfallRecord(record, nextFields)));
         setSanitaryRecords(snapshot.data.sanitaryRecords.map((record) => normalizeSanitaryRecord(record, nextFields)));
         setMonthlyExchangeRates(snapshot.data.monthlyExchangeRates);
+        workspaceRowVersionRef.current = snapshot.rowVersion;
         setWorkspaceLoadError(null);
       } catch (error) {
         if (isCancelled) {
@@ -2076,7 +2083,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         setWorkspaceSaveStatus("saving");
 
         try {
-          await saveAgroWorkspace(nextSave.mode, nextSave.snapshot);
+          const savedSnapshot = await saveAgroWorkspace(nextSave.mode, nextSave.snapshot, workspaceRowVersionRef.current);
+          workspaceRowVersionRef.current = savedSnapshot.rowVersion;
           setWorkspaceSaveStatus("saved");
           setWorkspaceSaveErrorMessage(null);
           setWorkspaceLastSavedAt(new Date());
