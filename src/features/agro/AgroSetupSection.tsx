@@ -246,66 +246,6 @@ export function AgroSetupSection({
           </label>
         </form>
 
-        <section className="subpanel top-gap">
-          <div className="panel-header">
-            <div>
-              <h2>Editar hectareas</h2>
-              <p>Actualiza la superficie del establecimiento elegido arriba, o la de alguno de sus potreros.</p>
-            </div>
-          </div>
-          <div className="form-grid">
-            <label>
-              <span>Hectareas de {selectedEstablishment?.name ?? "-"}</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={establishmentHectaresInput}
-                onChange={(event) => setEstablishmentHectaresInput(event.target.value)}
-              />
-            </label>
-            <div className="action-row">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => onUpdateEstablishmentHectares(setupEstablishmentId, establishmentHectaresInput)}
-              >
-                Guardar hectareas del campo
-              </button>
-            </div>
-          </div>
-
-          <div className="form-grid top-gap">
-            <label>
-              <span>Potrero</span>
-              <select value={potreroHectaresEditId} onChange={(event) => setPotreroHectaresEditId(event.target.value)}>
-                {setupFields.map((field) => (
-                  <option key={field.id} value={field.id}>
-                    {field.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Hectareas del potrero</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={potreroHectaresInput}
-                onChange={(event) => setPotreroHectaresInput(event.target.value)}
-              />
-            </label>
-            <div className="action-row">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => onUpdateFieldHectares(potreroHectaresEditId, potreroHectaresInput)}
-              >
-                Guardar hectareas del potrero
-              </button>
-            </div>
-          </div>
-        </section>
-
         <div className="content-grid top-gap">
           <section className="subpanel">
             <div className="panel-header">
@@ -523,6 +463,66 @@ export function AgroSetupSection({
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="subpanel top-gap">
+          <div className="panel-header">
+            <div>
+              <h2>Editar hectareas</h2>
+              <p>Actualiza la superficie del establecimiento elegido arriba, o la de alguno de sus potreros.</p>
+            </div>
+          </div>
+          <div className="form-grid">
+            <label>
+              <span>Hectareas de {selectedEstablishment?.name ?? "-"}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={establishmentHectaresInput}
+                onChange={(event) => setEstablishmentHectaresInput(event.target.value)}
+              />
+            </label>
+            <div className="action-row">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => onUpdateEstablishmentHectares(setupEstablishmentId, establishmentHectaresInput)}
+              >
+                Guardar hectareas del campo
+              </button>
+            </div>
+          </div>
+
+          <div className="form-grid top-gap">
+            <label>
+              <span>Potrero</span>
+              <select value={potreroHectaresEditId} onChange={(event) => setPotreroHectaresEditId(event.target.value)}>
+                {setupFields.map((field) => (
+                  <option key={field.id} value={field.id}>
+                    {field.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Hectareas del potrero</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={potreroHectaresInput}
+                onChange={(event) => setPotreroHectaresInput(event.target.value)}
+              />
+            </label>
+            <div className="action-row">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => onUpdateFieldHectares(potreroHectaresEditId, potreroHectaresInput)}
+              >
+                Guardar hectareas del potrero
+              </button>
+            </div>
           </div>
         </section>
       </article>
