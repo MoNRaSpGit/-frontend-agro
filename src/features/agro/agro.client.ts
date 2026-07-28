@@ -1,4 +1,5 @@
 import { buildApiUrl } from "../../shared/config/api";
+import { toAgroApiError } from "../../shared/errors/agroApiError";
 import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence";
 import { fetchWithAgroAuth } from "../../shared/auth/agroSession";
 import {
@@ -56,7 +57,7 @@ export async function fetchAgroWorkspace(mode: AgroPersistenceMode) {
   const response = await fetchWithAgroAuth(buildApiUrl("/agro/workspace"));
 
   if (!response.ok) {
-    throw new Error("No se pudo cargar el workspace de agro.");
+    throw await toAgroApiError(response, "No se pudo cargar el workspace de agro.");
   }
 
   return (await response.json()) as AgroWorkspaceSnapshot;
@@ -86,7 +87,7 @@ export async function saveAgroWorkspace(mode: AgroPersistenceMode, snapshot: Agr
   });
 
   if (!response.ok) {
-    throw new Error("No se pudo guardar el workspace de agro.");
+    throw await toAgroApiError(response, "No se pudo guardar el workspace de agro.");
   }
 
   return (await response.json()) as AgroWorkspaceSnapshot;

@@ -10,6 +10,7 @@ import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
+import { AgroApiError } from "../../shared/errors/agroApiError";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
   describeAnimalMovementDetail,
@@ -98,9 +99,6 @@ function friendlyAgroToastMessage(message: string, kind: "success" | "error") {
   const normalized = message.trim().toLowerCase();
 
   if (kind === "error") {
-    if (normalized.includes("workspace")) {
-      return "No se pudo guardar la carga del campo o potrero. Reintentá.";
-    }
     if (normalized.includes("potrero destino") && normalized.includes("distinto")) {
       return "El potrero destino tiene que ser distinto del origen.";
     }
@@ -152,6 +150,28 @@ function friendlyAgroToastMessage(message: string, kind: "success" | "error") {
   }
 
   return message;
+}
+
+// Convierte el error real de una carga/guardado del workspace en un mensaje
+// especifico segun la causa, en vez de un unico "no se pudo guardar"
+// generico que no distinguia error humano de error de servidor/programacion.
+function describeAgroWorkspaceError(error: unknown, action: "guardar" | "cargar") {
+  if (error instanceof AgroApiError) {
+    switch (error.kind) {
+      case "network":
+        return `No se pudo ${action} el campo o potrero: sin conexion con el servidor. Revisa tu internet e intenta de nuevo.`;
+      case "auth":
+        return `No se pudo ${action}: tu sesion vencio. Volve a iniciar sesion para seguir cargando datos.`;
+      case "server":
+        return `No se pudo ${action}: hubo un error en el servidor. Intenta de nuevo en unos minutos.`;
+      case "validation":
+        return `No se pudo ${action}: ${error.message}`;
+      default:
+        return `No se pudo ${action} el campo o potrero (${error.message}).`;
+    }
+  }
+
+  return error instanceof Error ? error.message : `No se pudo ${action} el campo o potrero.`;
 }
 
 function getFiscalYearToDateRange(year: string, month: string): AgroPeriodRange {
@@ -1886,7 +1906,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           return;
         }
 
-        const message = error instanceof Error ? error.message : "No se pudo cargar el workspace de agro.";
+        const message = describeAgroWorkspaceError(error, "cargar");
         setEstablishments([]);
         setFields([]);
         setAnimalMovements([]);
@@ -2015,7 +2035,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         try {
           await saveAgroWorkspace(nextSave.mode, nextSave.snapshot);
         } catch (error) {
-          const message = error instanceof Error ? error.message : "No se pudo guardar el workspace de agro.";
+          const message = describeAgroWorkspaceError(error, "guardar");
           console.error("[agro-workspace-save]", message, error);
           showError(message);
         }

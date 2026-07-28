@@ -1,5 +1,6 @@
 import type { AuthSession } from "./auth.client";
 import { buildApiUrl } from "../config/api";
+import { AgroApiError, toAgroNetworkError } from "../errors/agroApiError";
 import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../lib/persistence";
 
 export const AGRO_ACCESS_MODE_STORAGE_KEY = "frontend-agro.access-mode.v1";
@@ -23,7 +24,7 @@ export function getAgroAuthHeaders() {
   const accessToken = session?.tokens.accessToken?.trim();
 
   if (!accessToken) {
-    throw new Error("La sesion de agro no esta disponible.");
+    throw new AgroApiError("La sesion de agro no esta disponible.", "auth");
   }
 
   return {
@@ -63,7 +64,7 @@ export async function fetchWithAgroAuth(input: string, init?: RequestInit) {
   const accessToken = session?.tokens.accessToken?.trim();
 
   if (!accessToken) {
-    throw new Error("La sesion de agro no esta disponible.");
+    throw new AgroApiError("La sesion de agro no esta disponible.", "auth");
   }
 
   headers.set("Authorization", `Bearer ${accessToken}`);
@@ -71,7 +72,16 @@ export async function fetchWithAgroAuth(input: string, init?: RequestInit) {
     headers.set("Content-Type", "application/json");
   }
 
-  const doRequest = () => fetch(input, { ...init, headers });
+  // Si fetch tira (sin conexion, DNS, servidor caido, etc.) lo distinguimos
+  // de un error de validacion o de servidor: el pedido nunca llego a viajar.
+  async function doRequest() {
+    try {
+      return await fetch(input, { ...init, headers });
+    } catch {
+      throw toAgroNetworkError("No se pudo conectar con el servidor. Revisa tu conexion a internet e intenta de nuevo.");
+    }
+  }
+
   let response = await doRequest();
 
   if (response.status !== 401) {
