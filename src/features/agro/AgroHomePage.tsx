@@ -1925,6 +1925,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         setMonthlyExchangeRates([]);
         setWorkspaceLoadError(message);
         showError(message);
+
+        // Si la sesion realmente vencio (no una carrera pasajera), no tiene
+        // sentido dejar al usuario mirando una app rota que nunca va a poder
+        // guardar nada: lo mandamos derecho a la pantalla de login.
+        if (error instanceof AgroApiError && error.kind === "auth") {
+          onSignOut();
+        }
       } finally {
         if (!isCancelled) {
           setWorkspaceLoaded(true);
@@ -2083,6 +2090,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           setWorkspaceSaveStatus("error");
           setWorkspaceSaveErrorMessage(message);
           toast.error(message, { autoClose: false, toastId: AGRO_WORKSPACE_SAVE_ERROR_TOAST_ID });
+
+          // Sesion realmente vencida: mandamos al login en vez de dejar al
+          // usuario cargando datos que nunca se van a poder guardar.
+          if (error instanceof AgroApiError && error.kind === "auth") {
+            onSignOut();
+          }
         }
       }
     } finally {
