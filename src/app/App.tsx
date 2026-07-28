@@ -11,9 +11,6 @@ import { removeStorageItem, writeJsonStorage } from "../shared/lib/persistence";
 
 const AGRO_DIRECT_ACCOUNT = "rosendo";
 const AGRO_DIRECT_PASSWORD = "lamilagrosa";
-const AGRO_DEMO_ACCOUNT = "agrodemo";
-const AGRO_DEMO_EMAIL = "agrodemo@saaspro.local";
-const AGRO_DEMO_PASSWORD = "demo12345";
 
 type AgroAccessMode = "demo-local" | "backend";
 
@@ -51,36 +48,6 @@ export function App() {
     try {
       await authenticateWithCredentials(identifier, secret);
       setAccessMode("backend");
-    } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "No se pudo iniciar sesion.");
-    } finally {
-      setLoginPending(false);
-    }
-  }
-
-  async function loginWithCredentialFallback(
-    attempts: Array<{
-      identifier: string;
-      password: string;
-    }>
-  ) {
-    setLoginPending(true);
-    setLoginError(null);
-
-    try {
-      let lastError: unknown = null;
-
-      for (const attempt of attempts) {
-        try {
-          await authenticateWithCredentials(attempt.identifier, attempt.password);
-          setAccessMode("backend");
-          return;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-
-      throw lastError ?? new Error("No se pudo iniciar sesion.");
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "No se pudo iniciar sesion.");
     } finally {
