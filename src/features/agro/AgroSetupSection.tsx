@@ -111,7 +111,8 @@ export function AgroSetupSection({
   const availableCategories = categoryCatalog[setupSpecies];
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const [establishmentHectaresInput, setEstablishmentHectaresInput] = useState("");
-  const [fieldHectaresInputs, setFieldHectaresInputs] = useState<Record<string, string>>({});
+  const [potreroHectaresEditId, setPotreroHectaresEditId] = useState("");
+  const [potreroHectaresInput, setPotreroHectaresInput] = useState("");
 
   const selectedEstablishment = establishments.find((item) => item.id === setupEstablishmentId);
 
@@ -120,14 +121,13 @@ export function AgroSetupSection({
   }, [selectedEstablishment]);
 
   useEffect(() => {
-    setFieldHectaresInputs((current) => {
-      const next: Record<string, string> = {};
-      for (const field of setupFields) {
-        next[field.id] = current[field.id] !== undefined ? current[field.id] : `${field.hectares}`;
-      }
-      return next;
-    });
+    setPotreroHectaresEditId((current) => (setupFields.some((field) => field.id === current) ? current : setupFields[0]?.id ?? ""));
   }, [setupFields]);
+
+  useEffect(() => {
+    const field = setupFields.find((item) => item.id === potreroHectaresEditId);
+    setPotreroHectaresInput(field ? `${field.hectares}` : "");
+  }, [potreroHectaresEditId, setupFields]);
   const [pendingFieldAction, setPendingFieldAction] = useState<
     | {
         kind: "delete";
@@ -249,8 +249,8 @@ export function AgroSetupSection({
         <section className="subpanel top-gap">
           <div className="panel-header">
             <div>
-              <h2>Editar hectareas del campo</h2>
-              <p>Actualiza la superficie total del establecimiento elegido arriba.</p>
+              <h2>Editar hectareas</h2>
+              <p>Actualiza la superficie del establecimiento elegido arriba, o la de alguno de sus potreros.</p>
             </div>
           </div>
           <div className="form-grid">
@@ -269,7 +269,38 @@ export function AgroSetupSection({
                 className="primary-button"
                 onClick={() => onUpdateEstablishmentHectares(setupEstablishmentId, establishmentHectaresInput)}
               >
-                Guardar hectareas
+                Guardar hectareas del campo
+              </button>
+            </div>
+          </div>
+
+          <div className="form-grid top-gap">
+            <label>
+              <span>Potrero</span>
+              <select value={potreroHectaresEditId} onChange={(event) => setPotreroHectaresEditId(event.target.value)}>
+                {setupFields.map((field) => (
+                  <option key={field.id} value={field.id}>
+                    {field.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Hectareas del potrero</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={potreroHectaresInput}
+                onChange={(event) => setPotreroHectaresInput(event.target.value)}
+              />
+            </label>
+            <div className="action-row">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => onUpdateFieldHectares(potreroHectaresEditId, potreroHectaresInput)}
+              >
+                Guardar hectareas del potrero
               </button>
             </div>
           </div>
@@ -442,7 +473,7 @@ export function AgroSetupSection({
           <div className="panel-header">
             <div>
               <h2>Potreros del campo</h2>
-              <p>Edita las hectareas o elimina potreros vacios creados por error.</p>
+              <p>Elimina solo potreros vacios creados por error.</p>
             </div>
           </div>
           <div className="list-stack">
@@ -450,27 +481,10 @@ export function AgroSetupSection({
               <div key={field.id} className="list-row">
                 <div>
                   <strong>{field.name}</strong>
+                  <span>{field.hectares} ha</span>
                   {field.deleteBlockReason ? <span>{field.deleteBlockReason}</span> : null}
                 </div>
                 <div className="field-row-actions">
-                  <label className="field-hectares-edit">
-                    <span>Hectareas</span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={fieldHectaresInputs[field.id] ?? `${field.hectares}`}
-                      onChange={(event) =>
-                        setFieldHectaresInputs((current) => ({ ...current, [field.id]: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => onUpdateFieldHectares(field.id, fieldHectaresInputs[field.id] ?? `${field.hectares}`)}
-                  >
-                    Guardar
-                  </button>
                   {field.canDelete ? (
                     <button type="button" className="ghost-button danger" onClick={() => openDeleteConfirm(field.id)}>
                       Eliminar
