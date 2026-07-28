@@ -517,7 +517,7 @@ export function AgroSetupSection({
             <div className="action-row">
               <button
                 type="button"
-                className="primary-button"
+                className="primary-button accent-button"
                 onClick={() => onUpdateFieldHectares(potreroHectaresEditId, potreroHectaresInput)}
               >
                 Guardar hectareas del potrero
