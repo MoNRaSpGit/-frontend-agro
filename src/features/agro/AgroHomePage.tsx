@@ -152,6 +152,11 @@ function friendlyAgroToastMessage(message: string, kind: "success" | "error") {
   return message;
 }
 
+// Id fijo para el toast de error de guardado: asi, si un guardado posterior
+// tiene exito, se puede cerrar puntualmente ese aviso en vez de dejarlo
+// colgado en pantalla diciendo "no se guardo" cuando en realidad si se guardo.
+const AGRO_WORKSPACE_SAVE_ERROR_TOAST_ID = "agro-workspace-save-error";
+
 // Convierte el error real de una carga/guardado del workspace en un mensaje
 // especifico segun la causa, en vez de un unico "no se pudo guardar"
 // generico que no distinguia error humano de error de servidor/programacion.
@@ -472,6 +477,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const [monthlyExchangeRates, setMonthlyExchangeRates] = useState<MonthlyExchangeRate[]>([]);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
+  const [workspaceSaveStatus, setWorkspaceSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+  const [workspaceSaveErrorMessage, setWorkspaceSaveErrorMessage] = useState<string | null>(null);
+  const [workspaceLastSavedAt, setWorkspaceLastSavedAt] = useState<Date | null>(null);
 
   const [animalForm, setAnimalForm] = useState({
     date: today,
@@ -1935,6 +1943,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       return;
     }
 
+    setWorkspaceSaveStatus("pending");
+
     const timeoutId = window.setTimeout(() => {
       enqueueWorkspaceSave(persistenceMode, {
         establishments,
@@ -2032,12 +2042,23 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         const nextSave = latestWorkspaceSaveRef.current;
         latestWorkspaceSaveRef.current = null;
 
+        setWorkspaceSaveStatus("saving");
+
         try {
           await saveAgroWorkspace(nextSave.mode, nextSave.snapshot);
+          setWorkspaceSaveStatus("saved");
+          setWorkspaceSaveErrorMessage(null);
+          setWorkspaceLastSavedAt(new Date());
+          // Si habia quedado un aviso de error de un guardado anterior, lo
+          // cerramos: este guardado nuevo si tuvo exito, no puede quedar
+          // colgado el mensaje viejo diciendo que no se guardo.
+          toast.dismiss(AGRO_WORKSPACE_SAVE_ERROR_TOAST_ID);
         } catch (error) {
           const message = describeAgroWorkspaceError(error, "guardar");
           console.error("[agro-workspace-save]", message, error);
-          showError(message);
+          setWorkspaceSaveStatus("error");
+          setWorkspaceSaveErrorMessage(message);
+          toast.error(message, { autoClose: false, toastId: AGRO_WORKSPACE_SAVE_ERROR_TOAST_ID });
         }
       }
     } finally {
@@ -3007,6 +3028,21 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         onTitleClick={() => setActiveView(null)}
         onSignOut={onSignOut}
       >
+        {persistenceMode === "backend" && workspaceSaveStatus !== "idle" ? (
+          <div className={`workspace-save-status is-${workspaceSaveStatus}`} role="status" aria-live="polite">
+            {workspaceSaveStatus === "pending" ? "Cambios sin guardar todavia..." : null}
+            {workspaceSaveStatus === "saving" ? "Guardando cambios..." : null}
+            {workspaceSaveStatus === "saved"
+              ? `Guardado${
+                  workspaceLastSavedAt
+                    ? ` (${workspaceLastSavedAt.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })})`
+                    : ""
+                }`
+              : null}
+            {workspaceSaveStatus === "error" ? workspaceSaveErrorMessage ?? "No se pudo guardar." : null}
+          </div>
+        ) : null}
+
         <AgroToolbar
           availableYears={availableYears}
           establishments={establishments}

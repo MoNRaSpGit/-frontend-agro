@@ -449,6 +449,38 @@ button {
   flex-wrap: wrap;
 }
 
+.workspace-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  width: fit-content;
+}
+
+.workspace-save-status.is-pending {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.workspace-save-status.is-saving {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.workspace-save-status.is-saved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.workspace-save-status.is-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .establishment-picker {
   display: grid;
   gap: 6px;
