@@ -33,7 +33,30 @@ export function getAgroAuthHeaders() {
   };
 }
 
-async function refreshAgroSession() {
+// El refresh token del backend es de un solo uso: al canjearlo se invalida y
+// se emite uno nuevo. Si dos pedidos (misma pestana en paralelo, u otra
+// pestana abierta con la misma sesion) intentan refrescar casi al mismo
+// tiempo, el segundo va a fallar porque el token que tenia ya fue canjeado
+// por el primero - eso cerraba la sesion sin motivo real. Este candado hace
+// que, dentro de esta pestana, todos esperen el mismo refresh en curso en
+// vez de pedir cada uno el suyo.
+let refreshInFlight: Promise<AuthSession | null> | null = null;
+
+async function refreshAgroSession(): Promise<AuthSession | null> {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = performAgroSessionRefresh();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
+async function performAgroSessionRefresh(): Promise<AuthSession | null> {
   const session = readAgroAuthSession();
   const refreshToken = session?.tokens.refreshToken?.trim();
 
@@ -48,6 +71,15 @@ async function refreshAgroSession() {
   });
 
   if (!response.ok) {
+    // El refresh pudo fallar porque OTRA pestana con la misma sesion ya uso
+    // y roto este mismo refresh token un instante antes. Antes de cerrar la
+    // sesion, nos fijamos si mientras tanto ya quedo guardada una sesion mas
+    // nueva (la que genero esa otra pestana) para adoptarla en vez de perderla.
+    const latestSession = readAgroAuthSession();
+    if (latestSession && latestSession.tokens.refreshToken?.trim() !== refreshToken) {
+      return latestSession;
+    }
+
     clearAgroSessionStorage();
     return null;
   }
@@ -88,14 +120,26 @@ export async function fetchWithAgroAuth(input: string, init?: RequestInit) {
     return response;
   }
 
-  const refreshedSession = await refreshAgroSession();
-  const refreshedAccessToken = refreshedSession?.tokens.accessToken?.trim();
+  // Puede que mientras esperabamos la respuesta, otra pestana/pedido ya haya
+  // renovado la sesion: si el token guardado ya cambio, lo usamos directo en
+  // vez de pedir otro refresh (que invalidaria el que recien se genero).
+  const latestSessionBeforeRefresh = readAgroAuthSession();
+  const latestAccessTokenBeforeRefresh = latestSessionBeforeRefresh?.tokens.accessToken?.trim();
 
-  if (!refreshedAccessToken) {
+  let nextAccessToken: string | undefined;
+
+  if (latestAccessTokenBeforeRefresh && latestAccessTokenBeforeRefresh !== accessToken) {
+    nextAccessToken = latestAccessTokenBeforeRefresh;
+  } else {
+    const refreshedSession = await refreshAgroSession();
+    nextAccessToken = refreshedSession?.tokens.accessToken?.trim();
+  }
+
+  if (!nextAccessToken) {
     return response;
   }
 
-  headers.set("Authorization", `Bearer ${refreshedAccessToken}`);
+  headers.set("Authorization", `Bearer ${nextAccessToken}`);
   response = await doRequest();
   return response;
 }
