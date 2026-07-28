@@ -11,28 +11,47 @@ import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { AgroApiError } from "../../shared/errors/agroApiError";
-import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
+import { calculateAnimalTotal, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
   describeAnimalMovementDetail,
   formatCategoryLabel,
-  formatYearMonth,
   expenseConceptLabels,
   formatMoney,
   formatNumber,
   parseDecimalInput,
   formatShortDate,
+  getAlternativeFieldId,
+  getFieldIdForEstablishmentFrom,
+  getFirstFieldIdForEstablishment,
+  getFiscalYearToDateRange,
+  getIncomeCollectedAmount,
+  getIncomeCollectionStatus,
+  getIncomeExpectedAmount,
+  getIncomePendingAmount,
+  getMovementDirection,
   getNetAmount,
   getTodayDate,
+  getVisibleMonthRange,
   getYearMonth,
+  isDateOnOrBefore,
+  isDateWithinRange,
   isLivestockPurchaseEntry,
+  isTransferMovementKind,
+  normalizeAccountingEntry,
+  normalizeAnimalMovementRecord,
+  normalizeFieldUnits,
+  normalizeRainfallRecord,
+  normalizeSanitaryRecord,
+  summarizeExpenses,
+  summarizeRangeData,
   incomeConceptLabels
 } from "./agro.home.shared";
 import { agroWorkspaceSections } from "./agro.workspace.config";
+import { AGRO_WORKSPACE_SAVE_ERROR_TOAST_ID, describeAgroWorkspaceError, friendlyAgroToastMessage } from "./agro.workspaceErrors";
 import {
   categoryCatalog,
   establishments as initialEstablishments,
   fields as initialFields,
-  getEstablishmentIdFromFieldId as getLegacyEstablishmentIdFromFieldId,
   initialStock,
   movementKindLabels,
   speciesLabels
@@ -53,379 +72,6 @@ import {
   RainfallRecord,
   SanitaryRecord
 } from "./agro.types";
-
-type AgroPeriodRange = {
-  startDate: string;
-  endDate: string;
-  label: string;
-};
-
-const AGRO_FISCAL_YEAR_START_MONTH = 7;
-
-function getMonthDateRange(year: string, month: string) {
-  const monthStart = new Date(Date.UTC(Number(year), Number(month) - 1, 1));
-  const monthEnd = new Date(Date.UTC(Number(year), Number(month), 0));
-
-  return {
-    startDate: monthStart.toISOString().slice(0, 10),
-    endDate: monthEnd.toISOString().slice(0, 10)
-  };
-}
-
-function getFiscalYearRange(year: string, month: string) {
-  const numericYear = Number(year);
-  const numericMonth = Number(month);
-  const fiscalStartYear = numericMonth >= AGRO_FISCAL_YEAR_START_MONTH ? numericYear : numericYear - 1;
-  const fiscalEndYear = fiscalStartYear + 1;
-  const label = `${fiscalStartYear}/${String(fiscalEndYear).slice(-2)}`;
-
-  return {
-    startDate: `${fiscalStartYear}-07-01`,
-    endDate: `${fiscalEndYear}-06-30`,
-    label: `Ejercicio ${label}`
-  };
-}
-
-function getVisibleMonthRange(year: string, month: string): AgroPeriodRange {
-  const monthRange = getMonthDateRange(year, month);
-  return {
-    startDate: monthRange.startDate,
-    endDate: monthRange.endDate,
-    label: formatYearMonth(`${year}-${month}`)
-  };
-}
-
-function friendlyAgroToastMessage(message: string, kind: "success" | "error") {
-  const normalized = message.trim().toLowerCase();
-
-  if (kind === "error") {
-    if (normalized.includes("potrero destino") && normalized.includes("distinto")) {
-      return "El potrero destino tiene que ser distinto del origen.";
-    }
-    if (normalized.includes("solo hay")) {
-      return message;
-    }
-  }
-
-  if (kind === "success") {
-    if (normalized.includes("potreros fusionados")) {
-      return "Traslado de potreros realizado.";
-    }
-    if (normalized.includes("potrero eliminado")) {
-      return "Potrero eliminado correctamente.";
-    }
-    if (normalized.includes("movimiento de animales guardado")) {
-      return "Movimiento de animales guardado.";
-    }
-    if (normalized.includes("movimiento de animales actualizado")) {
-      return "Movimiento de animales actualizado.";
-    }
-    if (normalized.includes("movimiento contable guardado")) {
-      return "Movimiento contable guardado.";
-    }
-    if (normalized.includes("movimiento contable actualizado")) {
-      return "Movimiento contable actualizado.";
-    }
-    if (normalized.includes("registro de lluvia guardado")) {
-      return "Registro de lluvia guardado.";
-    }
-    if (normalized.includes("registro de lluvia actualizado")) {
-      return "Registro de lluvia actualizado.";
-    }
-    if (normalized.includes("tratamiento sanitario guardado")) {
-      return "Tratamiento sanitario guardado.";
-    }
-    if (normalized.includes("tratamiento sanitario actualizado")) {
-      return "Tratamiento sanitario actualizado.";
-    }
-    if (normalized.includes("tipo de cambio guardado")) {
-      return "Tipo de cambio guardado.";
-    }
-    if (normalized.includes("tipo de cambio actualizado")) {
-      return "Tipo de cambio actualizado.";
-    }
-    if (normalized.includes("stock inicial cargado")) {
-      return "Carga inicial guardada.";
-    }
-  }
-
-  return message;
-}
-
-// Id fijo para el toast de error de guardado: asi, si un guardado posterior
-// tiene exito, se puede cerrar puntualmente ese aviso en vez de dejarlo
-// colgado en pantalla diciendo "no se guardo" cuando en realidad si se guardo.
-const AGRO_WORKSPACE_SAVE_ERROR_TOAST_ID = "agro-workspace-save-error";
-
-// Convierte el error real de una carga/guardado del workspace en un mensaje
-// especifico segun la causa, en vez de un unico "no se pudo guardar"
-// generico que no distinguia error humano de error de servidor/programacion.
-function describeAgroWorkspaceError(error: unknown, action: "guardar" | "cargar") {
-  if (error instanceof AgroApiError) {
-    switch (error.kind) {
-      case "network":
-        return `No se pudo ${action} el campo o potrero: sin conexion con el servidor. Revisa tu internet e intenta de nuevo.`;
-      case "auth":
-        return `No se pudo ${action}: tu sesion vencio. Volve a iniciar sesion para seguir cargando datos.`;
-      case "server":
-        return `No se pudo ${action}: hubo un error en el servidor. Intenta de nuevo en unos minutos.`;
-      case "validation":
-        return `No se pudo ${action}: ${error.message}`;
-      case "conflict":
-        return `No se pudo ${action}: otro dispositivo ya guardo cambios mas nuevos. Recarga la pagina (F5) antes de seguir editando.`;
-      default:
-        return `No se pudo ${action} el campo o potrero (${error.message}).`;
-    }
-  }
-
-  return error instanceof Error ? error.message : `No se pudo ${action} el campo o potrero.`;
-}
-
-function getFiscalYearToDateRange(year: string, month: string): AgroPeriodRange {
-  const fiscalYearRange = getFiscalYearRange(year, month);
-  const visibleMonthRange = getMonthDateRange(year, month);
-
-  return {
-    startDate: fiscalYearRange.startDate,
-    endDate: visibleMonthRange.endDate,
-    label: `${fiscalYearRange.label} hasta ${formatYearMonth(`${year}-${month}`)}`
-  };
-}
-
-function isDateWithinRange(date: string, startDate: string, endDate: string) {
-  return date >= startDate && date <= endDate;
-}
-
-function isDateOnOrBefore(date: string, endDate: string) {
-  return date <= endDate;
-}
-
-function normalizeFieldUnits(nextFields: FieldUnit[], nextEstablishments: Establishment[]) {
-  return nextFields.map((field) => ({
-    ...field,
-    hectares:
-      typeof field.hectares === "number"
-        ? field.hectares
-        : nextEstablishments.find((item) => item.id === field.establishmentId)?.hectares ?? 0
-  }));
-}
-
-function getFieldIdForEstablishmentFromSource(fieldsSource: FieldUnit[], establishmentId: string) {
-  return fieldsSource.find((field) => field.establishmentId === establishmentId)?.id ?? "";
-}
-
-function resolveNormalizedFieldId(fieldsSource: FieldUnit[], establishmentId: string, currentFieldId: string) {
-  const existingField = fieldsSource.find((field) => field.id === currentFieldId);
-  if (existingField) {
-    return existingField.id;
-  }
-
-  return getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || currentFieldId;
-}
-
-function normalizeAnimalMovementRecord(movement: AnimalMovementRecord, fieldsSource: FieldUnit[]): AnimalMovementRecord {
-  const establishmentId =
-    movement.establishmentId ||
-    fieldsSource.find((field) => field.id === movement.fieldId)?.establishmentId ||
-    getLegacyEstablishmentIdFromFieldId(movement.fieldId);
-  const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, movement.fieldId);
-
-  return {
-    ...movement,
-    establishmentId,
-    fieldId
-  };
-}
-
-function normalizeAccountingEntry(entry: AccountingEntry, fieldsSource: FieldUnit[]): AccountingEntry {
-  const establishmentId =
-    entry.establishmentId ||
-    fieldsSource.find((field) => field.id === entry.fieldId)?.establishmentId ||
-    getLegacyEstablishmentIdFromFieldId(entry.fieldId);
-  const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, entry.fieldId);
-  const expectedAmount = entry.type === "income" ? entry.expectedAmount ?? entry.netAmount : undefined;
-  const collectedAmount = entry.type === "income" ? entry.collectedAmount ?? expectedAmount : undefined;
-
-  return {
-    ...entry,
-    establishmentId,
-    fieldId,
-    expectedAmount,
-    collectedAmount
-  };
-}
-
-function normalizeRainfallRecord(record: RainfallRecord, fieldsSource: FieldUnit[]): RainfallRecord {
-  const establishmentId =
-    fieldsSource.find((field) => field.id === record.fieldId)?.establishmentId || getLegacyEstablishmentIdFromFieldId(record.fieldId);
-  const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, record.fieldId);
-
-  return {
-    ...record,
-    fieldId
-  };
-}
-
-function normalizeSanitaryRecord(record: SanitaryRecord, fieldsSource: FieldUnit[]): SanitaryRecord {
-  const establishmentId =
-    record.establishmentId ||
-    fieldsSource.find((field) => field.id === record.fieldId)?.establishmentId ||
-    getLegacyEstablishmentIdFromFieldId(record.fieldId);
-  const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, record.fieldId);
-
-  return {
-    ...record,
-    establishmentId,
-    fieldId,
-    species: record.species ?? "vacunos"
-  };
-}
-
-function getIncomeExpectedAmount(entry: AccountingEntry) {
-  return entry.type === "income" ? entry.expectedAmount ?? entry.netAmount : 0;
-}
-
-function getIncomeCollectedAmount(entry: AccountingEntry) {
-  if (entry.type !== "income") {
-    return 0;
-  }
-
-  const expectedAmount = getIncomeExpectedAmount(entry);
-  const collectedAmount = entry.collectedAmount ?? expectedAmount;
-  return Math.max(0, Math.min(collectedAmount, expectedAmount));
-}
-
-function getIncomePendingAmount(entry: AccountingEntry) {
-  if (entry.type !== "income") {
-    return 0;
-  }
-
-  return Math.max(0, getIncomeExpectedAmount(entry) - getIncomeCollectedAmount(entry));
-}
-
-function getIncomeCollectionStatus(entry: AccountingEntry) {
-  if (entry.type !== "income") {
-    return null;
-  }
-
-  const collectedAmount = getIncomeCollectedAmount(entry);
-  const pendingAmount = getIncomePendingAmount(entry);
-
-  if (collectedAmount <= 0) {
-    return "Pendiente";
-  }
-
-  if (pendingAmount > 0) {
-    return "Parcial";
-  }
-
-  return "Cobrado";
-}
-
-function isInitialStockLoad(movement: AnimalMovementRecord) {
-  return movement.kind === "adjustment" && movement.notes.startsWith("Carga inicial:");
-}
-
-function getMovementDirection(movement: AnimalMovementRecord) {
-  return isInitialStockLoad(movement) ? "entry" : deriveMovementDirection(movement.kind);
-}
-
-function getFieldIdForEstablishmentFrom(fields: FieldUnit[], establishmentId: string) {
-  return fields.find((field) => field.establishmentId === establishmentId)?.id ?? "";
-}
-
-function isTransferMovementKind(kind: AnimalMovementKind) {
-  return kind === "transfer" || kind === "transfer_internal" || kind === "transfer_in" || kind === "transfer_out";
-}
-
-function getFirstFieldIdForEstablishment(fields: FieldUnit[], establishmentId: string) {
-  return fields.find((field) => field.establishmentId === establishmentId)?.id ?? "";
-}
-
-function getAlternativeFieldId(fields: FieldUnit[], establishmentId: string, excludedFieldId: string) {
-  return fields.find((field) => field.establishmentId === establishmentId && field.id !== excludedFieldId)?.id ?? "";
-}
-
-function getAlternativeEstablishmentId(establishments: Establishment[], excludedEstablishmentId: string) {
-  return establishments.find((item) => item.id !== excludedEstablishmentId)?.id ?? "";
-}
-
-function summarizeExpenses(entries: AccountingEntry[], exchangeRateByMonth: Record<string, number>) {
-  return entries.reduce(
-    (summary, entry) => {
-      if (entry.type !== "expense") {
-        return summary;
-      }
-
-      const expenseGroup = isLivestockPurchaseEntry(entry) ? "livestockPurchase" : "operational";
-      const currencyGroup = entry.currency === "USD" ? "usd" : "uyu";
-
-      if (currencyGroup === "usd") {
-        summary[expenseGroup].usd += entry.netAmount;
-      } else {
-        summary[expenseGroup].uyu += entry.netAmount;
-        const exchangeRate = exchangeRateByMonth[getYearMonth(entry.date)];
-        if (exchangeRate) {
-          summary[expenseGroup].uyuDollarized += entry.netAmount / exchangeRate;
-        }
-      }
-
-      return summary;
-    },
-    {
-      livestockPurchase: { usd: 0, uyu: 0, uyuDollarized: 0 },
-      operational: { usd: 0, uyu: 0, uyuDollarized: 0 }
-    }
-  );
-}
-
-function summarizeRangeData(
-  animalMovements: AnimalMovementRecord[],
-  accountingEntries: AccountingEntry[],
-  rainfallRecords: RainfallRecord[],
-  exchangeRateByMonth: Record<string, number>,
-  startDate: string,
-  endDate: string,
-  fieldIds?: Set<string>
-) {
-  const matchesField = (fieldId: string) => !fieldIds || fieldIds.has(fieldId);
-
-  const filteredAnimalMovements = animalMovements.filter(
-    (movement) => matchesField(movement.fieldId) && isDateWithinRange(movement.date, startDate, endDate)
-  );
-  const filteredAccountingEntries = accountingEntries.filter(
-    (entry) => matchesField(entry.fieldId) && isDateWithinRange(entry.date, startDate, endDate)
-  );
-  const filteredRainfallRecords = rainfallRecords.filter(
-    (record) => matchesField(record.fieldId) && isDateWithinRange(record.date, startDate, endDate)
-  );
-  const expenseSummary = summarizeExpenses(filteredAccountingEntries, exchangeRateByMonth);
-
-  return {
-    entries: filteredAnimalMovements
-      .filter((movement) => getMovementDirection(movement) === "entry")
-      .reduce((sum, movement) => sum + movement.quantity, 0),
-    exits: filteredAnimalMovements
-      .filter((movement) => getMovementDirection(movement) === "exit")
-      .reduce((sum, movement) => sum + movement.quantity, 0),
-    incomeUsd: filteredAccountingEntries
-      .filter((entry) => entry.type === "income" && entry.currency === "USD")
-      .reduce((sum, entry) => sum + getIncomeCollectedAmount(entry), 0),
-    pendingIncomeUsd: filteredAccountingEntries
-      .filter((entry) => entry.type === "income" && entry.currency === "USD")
-      .reduce((sum, entry) => sum + getIncomePendingAmount(entry), 0),
-    livestockPurchaseExpenseUsd: expenseSummary.livestockPurchase.usd,
-    livestockPurchaseExpenseUyu: expenseSummary.livestockPurchase.uyu,
-    livestockPurchaseExpenseUyuDollarized: expenseSummary.livestockPurchase.uyuDollarized,
-    totalLivestockPurchaseExpenseUsdEquivalent:
-      expenseSummary.livestockPurchase.usd + expenseSummary.livestockPurchase.uyuDollarized,
-    operationalExpenseUsd: expenseSummary.operational.usd,
-    operationalExpenseUyu: expenseSummary.operational.uyu,
-    operationalExpenseUyuDollarized: expenseSummary.operational.uyuDollarized,
-    totalOperationalExpenseUsdEquivalent: expenseSummary.operational.usd + expenseSummary.operational.uyuDollarized,
-    rainfallTotal: filteredRainfallRecords.reduce((sum, record) => sum + record.millimeters, 0)
-  };
-}
 
 interface AgroHomePageProps {
   persistenceMode: AgroPersistenceMode;
