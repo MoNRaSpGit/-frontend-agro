@@ -42,6 +42,7 @@ import {
   normalizeFieldUnits,
   normalizeRainfallRecord,
   normalizeSanitaryRecord,
+  sumFieldHectares,
   summarizeExpenses,
   summarizeRangeData,
   incomeConceptLabels
@@ -1835,6 +1836,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     if (!Number.isFinite(firstFieldHectares) || firstFieldHectares <= 0) {
       nextErrors.firstFieldHectares = "Faltan las hectareas del potrero.";
+    } else if (Number.isFinite(hectares) && firstFieldHectares > hectares) {
+      nextErrors.firstFieldHectares = "Las hectareas del potrero no pueden superar las del establecimiento.";
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -1904,6 +1907,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     if (!Number.isFinite(hectares) || hectares <= 0) {
       nextErrors.hectares = "Faltan las hectareas del potrero.";
+    } else {
+      const establishmentHectares = establishments.find((item) => item.id === setupEstablishmentId)?.hectares ?? 0;
+      const otherFieldsHectares = sumFieldHectares(fields, setupEstablishmentId);
+
+      if (otherFieldsHectares + hectares > establishmentHectares) {
+        nextErrors.hectares = "La suma de los potreros no puede superar las hectareas del establecimiento.";
+      }
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -1961,6 +1971,14 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       return;
     }
 
+    const fieldsHectares = sumFieldHectares(fields, establishmentId);
+    if (hectares < fieldsHectares) {
+      showError(
+        `Las hectareas del campo no pueden ser menos que la suma de sus potreros (${fieldsHectares} ha ya asignadas).`
+      );
+      return;
+    }
+
     setEstablishments((current) =>
       current.map((item) => (item.id === establishmentId ? { ...item, hectares } : item))
     );
@@ -1972,6 +1990,20 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     if (!Number.isFinite(hectares) || hectares <= 0) {
       showError("Las hectareas del potrero deben ser un numero mayor a 0.");
+      return;
+    }
+
+    const field = fields.find((item) => item.id === fieldId);
+    if (!field) {
+      showError("No encontramos ese potrero.");
+      return;
+    }
+
+    const establishmentHectares = establishments.find((item) => item.id === field.establishmentId)?.hectares ?? 0;
+    const otherFieldsHectares = sumFieldHectares(fields, field.establishmentId, fieldId);
+
+    if (otherFieldsHectares + hectares > establishmentHectares) {
+      showError("La suma de los potreros no puede superar las hectareas del establecimiento.");
       return;
     }
 

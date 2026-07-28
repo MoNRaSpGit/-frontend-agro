@@ -28,6 +28,7 @@ import {
   normalizeRainfallRecord,
   normalizeSanitaryRecord,
   parseDecimalInput,
+  sumFieldHectares,
   summarizeExpenses,
   summarizeRangeData
 } from "./agro.home.shared";
@@ -284,6 +285,19 @@ describe("field lookup helpers", () => {
 
   it("has no alternative when the establishment only has one field", () => {
     expect(getAlternativeFieldId(multiFields, "est-2", "field-3")).toBe("");
+  });
+
+  it("sums the hectares of every field in an establishment", () => {
+    expect(sumFieldHectares(multiFields, "est-1")).toBe(180);
+    expect(sumFieldHectares(multiFields, "est-2")).toBe(60);
+  });
+
+  it("excludes one field from the sum, for validating an edit against the rest", () => {
+    expect(sumFieldHectares(multiFields, "est-1", "field-1")).toBe(80);
+  });
+
+  it("returns 0 for an establishment with no fields", () => {
+    expect(sumFieldHectares(multiFields, "est-missing")).toBe(0);
   });
 });
 

@@ -419,6 +419,15 @@ export function getFieldIdForEstablishmentFrom(fields: FieldUnit[], establishmen
   return fields.find((field) => field.establishmentId === establishmentId)?.id ?? "";
 }
 
+// Suma las hectareas de los potreros de un establecimiento. Se usa para
+// validar que ningun potrero, ni la suma de todos, supere las hectareas
+// totales del establecimiento (si puede sobrar superficie sin asignar).
+export function sumFieldHectares(fields: FieldUnit[], establishmentId: string, excludeFieldId?: string) {
+  return fields
+    .filter((field) => field.establishmentId === establishmentId && field.id !== excludeFieldId)
+    .reduce((sum, field) => sum + field.hectares, 0);
+}
+
 export function isTransferMovementKind(kind: AnimalMovementKind) {
   return kind === "transfer" || kind === "transfer_internal" || kind === "transfer_in" || kind === "transfer_out";
 }
