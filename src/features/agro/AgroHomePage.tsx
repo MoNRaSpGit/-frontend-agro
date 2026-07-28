@@ -445,6 +445,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     snapshot: Parameters<typeof saveAgroWorkspace>[1];
   } | null>(null);
   const workspaceSaveInFlightRef = useRef(false);
+  const workspaceSaveStatusRef = useRef<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [activeView, setActiveView] = useState<AgroView | null>(null);
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
@@ -1970,6 +1971,29 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     workspaceLoadError,
     persistenceMode
   ]);
+
+  useEffect(() => {
+    workspaceSaveStatusRef.current = workspaceSaveStatus;
+  }, [workspaceSaveStatus]);
+
+  // Si cierra la pestana o navega afuera mientras todavia hay un cambio sin
+  // guardar (esperando el debounce o con el pedido en viaje), el navegador
+  // le muestra una confirmacion nativa en vez de perder ese ultimo cambio
+  // en silencio.
+  useEffect(() => {
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      const status = workspaceSaveStatusRef.current;
+      if (status !== "pending" && status !== "saving") {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
   const isBirthOrDeathAnimalMovement =
