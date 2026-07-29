@@ -1563,10 +1563,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         const nextEstablishments = Array.isArray(snapshot.data.establishments)
           ? snapshot.data.establishments
           : initialEstablishments;
-        const nextFields = normalizeFieldUnits(
-          Array.isArray(snapshot.data.fields) ? snapshot.data.fields : initialFields,
-          nextEstablishments
-        );
+        const nextFields = normalizeFieldUnits(Array.isArray(snapshot.data.fields) ? snapshot.data.fields : initialFields);
 
         setEstablishments(nextEstablishments);
         setFields(nextFields);

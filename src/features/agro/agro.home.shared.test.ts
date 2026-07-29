@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AccountingEntry, AnimalMovementRecord, Establishment, FieldUnit, RainfallRecord } from "./agro.types";
+import type { AccountingEntry, AnimalMovementRecord, FieldUnit, RainfallRecord } from "./agro.types";
 import {
   formatCategoryLabel,
   formatMoney,
@@ -33,7 +33,6 @@ import {
   summarizeRangeData
 } from "./agro.home.shared";
 
-const establishments: Establishment[] = [{ id: "est-1", name: "La Fortuna", location: "Rocha", hectares: 500 }];
 const fields: FieldUnit[] = [{ id: "field-1", establishmentId: "est-1", name: "Potrero Norte", hectares: 120, notes: "" }];
 
 function makeMovement(overrides: Partial<AnimalMovementRecord> = {}): AnimalMovementRecord {
@@ -110,9 +109,17 @@ describe("date range helpers", () => {
 });
 
 describe("normalization helpers", () => {
-  it("fills in missing field hectares from the parent establishment", () => {
+  it("defaults a field with no hectares of its own to 0, not the establishment total", () => {
+    // Antes heredaba el total del establecimiento, lo que corrompia la
+    // validacion de "la suma de potreros no puede superar el total del
+    // campo" (un potrero terminaba "valiendo" el campo entero).
     const rawFields: FieldUnit[] = [{ id: "field-2", establishmentId: "est-1", name: "Potrero Sur", hectares: undefined as unknown as number, notes: "" }];
-    expect(normalizeFieldUnits(rawFields, establishments)).toEqual([{ ...rawFields[0], hectares: 500 }]);
+    expect(normalizeFieldUnits(rawFields)).toEqual([{ ...rawFields[0], hectares: 0 }]);
+  });
+
+  it("coerces a string hectares value from the backend into a number", () => {
+    const rawFields: FieldUnit[] = [{ id: "field-3", establishmentId: "est-1", name: "Potrero Norte", hectares: "75" as unknown as number, notes: "" }];
+    expect(normalizeFieldUnits(rawFields)).toEqual([{ ...rawFields[0], hectares: 75 }]);
   });
 
   it("resolves establishmentId for an animal movement missing it", () => {

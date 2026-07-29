@@ -255,14 +255,20 @@ export function isDateOnOrBefore(date: string, endDate: string) {
   return date <= endDate;
 }
 
-export function normalizeFieldUnits(nextFields: FieldUnit[], nextEstablishments: Establishment[]) {
-  return nextFields.map((field) => ({
-    ...field,
-    hectares:
-      typeof field.hectares === "number"
-        ? field.hectares
-        : nextEstablishments.find((item) => item.id === field.establishmentId)?.hectares ?? 0
-  }));
+export function normalizeFieldUnits(nextFields: FieldUnit[]) {
+  // Antes, un potrero sin hectareas propias (dato legado) heredaba el total
+  // del establecimiento entero como estimacion. Con la validacion de que la
+  // suma de potreros no puede superar el total del campo, ese fallback
+  // corrompia el dato (un potrero "vale" todo el campo) y despues bloqueaba
+  // cualquier otra edicion. Ahora un potrero sin hectareas queda en 0
+  // (superficie sin asignar), que es un valor valido dentro de esa suma.
+  return nextFields.map((field) => {
+    const numericHectares = typeof field.hectares === "number" ? field.hectares : Number(field.hectares);
+    return {
+      ...field,
+      hectares: Number.isFinite(numericHectares) ? numericHectares : 0
+    };
+  });
 }
 
 export function getFieldIdForEstablishmentFromSource(fieldsSource: FieldUnit[], establishmentId: string) {
