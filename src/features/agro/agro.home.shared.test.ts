@@ -144,7 +144,7 @@ describe("normalization helpers", () => {
     expect(normalizeRainfallRecord(record, fields)).toEqual(record);
   });
 
-  it("defaults a sanitary record's species to vacunos when missing", () => {
+  it("defaults a sanitary record's species and category when missing", () => {
     const normalized = normalizeSanitaryRecord(
       {
         id: "san-1",
@@ -152,6 +152,7 @@ describe("normalization helpers", () => {
         establishmentId: "",
         fieldId: "field-1",
         species: undefined as unknown as "vacunos",
+        categoryCode: undefined as unknown as string,
         quantity: 10,
         treatment: "Vacuna aftosa",
         notes: ""
@@ -160,6 +161,7 @@ describe("normalization helpers", () => {
     );
     expect(normalized.species).toBe("vacunos");
     expect(normalized.establishmentId).toBe("est-1");
+    expect(normalized.categoryCode).toBeTruthy();
   });
 });
 

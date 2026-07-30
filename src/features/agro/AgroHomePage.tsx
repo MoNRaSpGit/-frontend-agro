@@ -13,6 +13,7 @@ import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./ag
 import { AgroApiError } from "../../shared/errors/agroApiError";
 import { calculateAnimalTotal, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
+  computeFieldAvailability,
   describeAnimalMovementDetail,
   formatCategoryLabel,
   expenseConceptLabels,
@@ -193,6 +194,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     establishmentId: "",
     fieldId: "",
     species: "vacunos" as AgroSpecies,
+    categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     quantity: "",
     treatment: "",
     notes: ""
@@ -418,6 +420,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       establishmentId: preserveContext ? current.establishmentId : activeEstablishmentId,
       fieldId: preserveContext ? current.fieldId : activeFieldId,
       species: preserveContext ? current.species : ("vacunos" as AgroSpecies),
+      categoryCode: preserveContext ? current.categoryCode : categoryCatalog.vacunos[0]?.code ?? "",
       quantity: "",
       treatment: "",
       notes: ""
@@ -794,6 +797,28 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       transferAvailableCategories.find((item) => item.categoryCode === animalForm.categoryCode)?.quantity ?? 0,
     [animalForm.categoryCode, transferAvailableCategories]
   );
+
+  // Igual que el traslado, pero solo informativo: en sanidad no se mueve
+  // stock, asi que no filtramos ni bloqueamos nada, solo mostramos cuantos
+  // animales de cada categoria hay en el potrero elegido para facilitar la
+  // carga del tratamiento.
+  const sanitaryFieldAvailability = useMemo(
+    () => computeFieldAvailability(stockBalanceMap, sanitaryForm.fieldId),
+    [sanitaryForm.fieldId, stockBalanceMap]
+  );
+
+  const sanitaryAvailableCategories = useMemo(
+    () => sanitaryFieldAvailability.get(sanitaryForm.species) ?? [],
+    [sanitaryFieldAvailability, sanitaryForm.species]
+  );
+
+  const sanitarySpeciesAvailableQuantity = useMemo(() => {
+    const totals: Record<AgroSpecies, number> = { vacunos: 0, ovinos: 0, equinos: 0 };
+    for (const [species, rows] of sanitaryFieldAvailability.entries()) {
+      totals[species] = rows.reduce((sum, row) => sum + row.quantity, 0);
+    }
+    return totals;
+  }, [sanitaryFieldAvailability]);
 
   const accountingTotals = useMemo(() => {
     return accountingEntries
@@ -1350,7 +1375,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
         const field = fields.find((item) => item.id === record.fieldId);
         const establishment = establishments.find((item) => item.id === record.establishmentId);
-        const searchBase = [record.date, establishment?.name ?? "", field?.name ?? "", speciesLabels[record.species], record.treatment, record.notes, `${record.quantity}`]
+        const category = categoryCatalog[record.species]?.find((item) => item.code === record.categoryCode);
+        const searchBase = [
+          record.date,
+          establishment?.name ?? "",
+          field?.name ?? "",
+          speciesLabels[record.species],
+          category ? formatCategoryLabel(category.label) : "",
+          record.treatment,
+          record.notes,
+          `${record.quantity}`
+        ]
           .join(" ")
           .toLowerCase();
 
@@ -2440,6 +2475,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       establishmentId: sanitaryForm.establishmentId,
       fieldId: sanitaryForm.fieldId,
       species: sanitaryForm.species,
+      categoryCode: sanitaryForm.categoryCode,
       quantity,
       treatment: sanitaryForm.treatment.trim(),
       notes: sanitaryForm.notes.trim()
@@ -2639,6 +2675,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       establishmentId: record.establishmentId,
       fieldId: record.fieldId,
       species: record.species,
+      categoryCode: record.categoryCode,
       quantity: `${record.quantity}`,
       treatment: record.treatment,
       notes: record.notes
@@ -2958,6 +2995,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             fields={fields}
             editingSanitaryRecordId={editingSanitaryRecordId}
             sanitaryForm={sanitaryForm}
+            sanitaryAvailableCategories={sanitaryAvailableCategories}
+            sanitarySpeciesAvailableQuantity={sanitarySpeciesAvailableQuantity}
             sanitaryRows={sanitaryRows}
             sanitarySearchTerm={sanitarySearchTerm}
             resetSanitaryForm={resetSanitaryForm}

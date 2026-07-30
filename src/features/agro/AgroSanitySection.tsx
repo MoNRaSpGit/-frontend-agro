@@ -1,5 +1,5 @@
-import { formatShortDate } from "./agro.home.shared";
-import { speciesLabels } from "./agro.demo.data";
+import { categoryCatalog, speciesLabels } from "./agro.demo.data";
+import { formatCategoryLabel, formatNumber, formatShortDate } from "./agro.home.shared";
 import { Establishment, FieldUnit } from "./agro.types";
 import type { AgroSpecies } from "./agro.types";
 
@@ -12,16 +12,20 @@ interface AgroSanitySectionProps {
     establishmentId: string;
     fieldId: string;
     species: AgroSpecies;
+    categoryCode: string;
     quantity: string;
     treatment: string;
     notes: string;
   };
+  sanitaryAvailableCategories: Array<{ categoryCode: string; quantity: number }>;
+  sanitarySpeciesAvailableQuantity: Record<AgroSpecies, number>;
   sanitaryRows: Array<{
     id: string;
     date: string;
     establishmentId: string;
     fieldId: string;
     species: AgroSpecies;
+    categoryCode: string;
     quantity: number;
     treatment: string;
     notes: string;
@@ -35,6 +39,7 @@ interface AgroSanitySectionProps {
       establishmentId: string;
       fieldId: string;
       species: AgroSpecies;
+      categoryCode: string;
       quantity: string;
       treatment: string;
       notes: string;
@@ -50,6 +55,8 @@ export function AgroSanitySection({
   fields,
   editingSanitaryRecordId,
   sanitaryForm,
+  sanitaryAvailableCategories,
+  sanitarySpeciesAvailableQuantity,
   sanitaryRows,
   sanitarySearchTerm,
   resetSanitaryForm,
@@ -101,13 +108,36 @@ export function AgroSanitySection({
             <span>Especie</span>
             <select
               value={sanitaryForm.species}
-              onChange={(event) => setSanitaryForm((current) => ({ ...current, species: event.target.value as AgroSpecies }))}
+              onChange={(event) => {
+                const nextSpecies = event.target.value as AgroSpecies;
+                setSanitaryForm((current) => ({
+                  ...current,
+                  species: nextSpecies,
+                  categoryCode: categoryCatalog[nextSpecies][0]?.code ?? ""
+                }));
+              }}
             >
               {Object.entries(speciesLabels).map(([value, label]) => (
                 <option key={value} value={value}>
-                  {label}
+                  {`${label} (${formatNumber(sanitarySpeciesAvailableQuantity[value as AgroSpecies] ?? 0, 0)} en el potrero)`}
                 </option>
               ))}
+            </select>
+          </label>
+          <label>
+            <span>Categoria</span>
+            <select
+              value={sanitaryForm.categoryCode}
+              onChange={(event) => setSanitaryForm((current) => ({ ...current, categoryCode: event.target.value }))}
+            >
+              {categoryCatalog[sanitaryForm.species].map((category) => {
+                const available = sanitaryAvailableCategories.find((item) => item.categoryCode === category.code)?.quantity ?? 0;
+                return (
+                  <option key={category.code} value={category.code}>
+                    {`${formatCategoryLabel(category.label)} (${formatNumber(available, 0)} en el potrero)`}
+                  </option>
+                );
+              })}
             </select>
           </label>
           <label>
@@ -172,6 +202,7 @@ export function AgroSanitySection({
                 <th>Campo</th>
                 <th>Potrero</th>
                 <th>Especie</th>
+                <th>Categoria</th>
                 <th>Cantidad</th>
                 <th>Tratamiento</th>
                 <th>Observaciones</th>
@@ -182,12 +213,14 @@ export function AgroSanitySection({
               {sanitaryRows.map((record) => {
                 const field = fields.find((item) => item.id === record.fieldId);
                 const establishment = establishments.find((item) => item.id === record.establishmentId);
+                const category = categoryCatalog[record.species]?.find((item) => item.code === record.categoryCode);
                 return (
                   <tr key={record.id}>
                     <td>{formatShortDate(record.date)}</td>
                     <td>{establishment?.name ?? "-"}</td>
                     <td>{field?.name ?? "-"}</td>
                     <td>{speciesLabels[record.species]}</td>
+                    <td>{category ? formatCategoryLabel(category.label) : record.categoryCode || "-"}</td>
                     <td>{record.quantity}</td>
                     <td>{record.treatment}</td>
                     <td>{record.notes || "-"}</td>

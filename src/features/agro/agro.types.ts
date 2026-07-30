@@ -122,6 +122,7 @@ export interface SanitaryRecord {
   establishmentId: string;
   fieldId: string;
   species: AgroSpecies;
+  categoryCode: string;
   quantity: number;
   treatment: string;
   notes: string;

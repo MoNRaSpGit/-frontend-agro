@@ -1,8 +1,9 @@
 import { deriveMovementDirection } from "./agro.domain";
-import { getEstablishmentIdFromFieldId as getLegacyEstablishmentIdFromFieldId } from "./agro.demo.data";
+import { categoryCatalog, getEstablishmentIdFromFieldId as getLegacyEstablishmentIdFromFieldId } from "./agro.demo.data";
 import {
   AccountingEntry,
   AccountingEntryType,
+  AgroSpecies,
   AnimalMovementKind,
   AnimalMovementRecord,
   Establishment,
@@ -333,12 +334,14 @@ export function normalizeSanitaryRecord(record: SanitaryRecord, fieldsSource: Fi
     fieldsSource.find((field) => field.id === record.fieldId)?.establishmentId ||
     getLegacyEstablishmentIdFromFieldId(record.fieldId);
   const fieldId = resolveNormalizedFieldId(fieldsSource, establishmentId, record.fieldId);
+  const species = record.species ?? "vacunos";
 
   return {
     ...record,
     establishmentId,
     fieldId,
-    species: record.species ?? "vacunos"
+    species,
+    categoryCode: record.categoryCode || categoryCatalog[species]?.[0]?.code || ""
   };
 }
 
@@ -432,6 +435,28 @@ export function sumFieldHectares(fields: FieldUnit[], establishmentId: string, e
   return fields
     .filter((field) => field.establishmentId === establishmentId && field.id !== excludeFieldId)
     .reduce((sum, field) => sum + field.hectares, 0);
+}
+
+// Stock por especie/categoria de un potrero puntual, leido del mapa de
+// saldos (claves "fieldId:species:categoryCode" -> cantidad). Se usa para
+// mostrarle al usuario cuantos animales de cada tipo hay en el potrero
+// elegido, sin bloquear nada (a diferencia del traslado, acá no se mueve
+// stock, solo se informa).
+export function computeFieldAvailability(stockBalanceMap: Map<string, number>, fieldId: string) {
+  const availability = new Map<AgroSpecies, Array<{ categoryCode: string; quantity: number }>>();
+
+  for (const [key, quantity] of stockBalanceMap.entries()) {
+    const [entryFieldId, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
+    if (entryFieldId !== fieldId || quantity <= 0) {
+      continue;
+    }
+
+    const rows = availability.get(species) ?? [];
+    rows.push({ categoryCode, quantity });
+    availability.set(species, rows);
+  }
+
+  return availability;
 }
 
 export function isTransferMovementKind(kind: AnimalMovementKind) {
