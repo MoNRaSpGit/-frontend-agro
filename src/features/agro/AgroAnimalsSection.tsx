@@ -46,14 +46,13 @@ interface AgroAnimalsSectionProps {
   editingAnimalMovementId: string | null;
   handleAnimalKindChange: (kind: AnimalMovementKind) => void;
   handleAnimalSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
-  isBirthOrDeathAnimalMovement: boolean;
   isCattleDeathWithEarTag: boolean;
   isCommercialAnimalMovement: boolean;
-  isAdjustmentAnimalMovement: boolean;
+  isCorrectionAnimalMovement: boolean;
+  correctionCurrentQuantity: number;
   projectedAnimalTotal: number;
   transferAvailableSpecies: AgroSpecies[];
   transferAvailableCategories: Array<{ categoryCode: string; quantity: number }>;
-  transferAvailableQuantity: number;
   registerAnimalFieldRef: (fieldName: string) => (element: HTMLInputElement | HTMLSelectElement | null) => void;
   requestDeleteAnimalMovement: (movementId: string) => void;
   resetAnimalForm: () => void;
@@ -102,14 +101,13 @@ export function AgroAnimalsSection({
   editingAnimalMovementId,
   handleAnimalKindChange,
   handleAnimalSubmit,
-  isBirthOrDeathAnimalMovement,
   isCattleDeathWithEarTag,
   isCommercialAnimalMovement,
-  isAdjustmentAnimalMovement,
+  isCorrectionAnimalMovement,
+  correctionCurrentQuantity,
   projectedAnimalTotal,
   transferAvailableSpecies,
   transferAvailableCategories,
-  transferAvailableQuantity,
   registerAnimalFieldRef,
   requestDeleteAnimalMovement,
   resetAnimalForm,
@@ -163,7 +161,7 @@ export function AgroAnimalsSection({
         <div className="panel-header">
           <div>
             <h2>Cargar movimiento de animales</h2>
-            <p>Alta de compras, ventas, nacimientos, muertes, traslados, faltantes o ajustes.</p>
+            <p>Alta de compras, ventas, nacimientos, muertes, traslados, faltantes, ajustes o correcciones de stock.</p>
           </div>
         </div>
         <form className="form-grid" onSubmit={handleAnimalSubmit}>
@@ -368,18 +366,23 @@ export function AgroAnimalsSection({
             </select>
           </label>
           <label className={animalFormErrors.quantity ? "field-error" : undefined}>
-            <span>Cantidad</span>
+            <span>{isCorrectionAnimalMovement ? "Cantidad correcta (total real)" : "Cantidad"}</span>
             <input
               ref={registerAnimalFieldRef("quantity")}
               type="text"
               inputMode="numeric"
-              min="1"
+              min="0"
               value={animalForm.quantity}
               onChange={(event) => {
                 clearAnimalFieldError("quantity");
                 setAnimalForm((current) => ({ ...current, quantity: event.target.value }));
               }}
             />
+            {isCorrectionAnimalMovement ? (
+              <small>
+                {`El sistema muestra ${formatNumber(correctionCurrentQuantity, 0)} en este potrero para esta especie y categoria. Al guardar, se ajusta sola la diferencia.`}
+              </small>
+            ) : null}
           </label>
           {isCattleDeathWithEarTag ? (
             <label className={animalFormErrors.earTag ? "field-error" : undefined}>

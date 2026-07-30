@@ -1,7 +1,9 @@
 import { AgroSpecies, AnimalMovementKind, IncomeConcept } from "./agro.types";
 
 export function deriveMovementDirection(kind: AnimalMovementKind) {
-  return kind === "purchase" || kind === "birth" || kind === "transfer_in" ? "entry" : "exit";
+  return kind === "purchase" || kind === "birth" || kind === "transfer_in" || kind === "correction_in"
+    ? "entry"
+    : "exit";
 }
 
 export function calculateAnimalTotal(

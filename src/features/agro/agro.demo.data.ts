@@ -26,7 +26,10 @@ export const movementKindLabels = {
   transfer_in: "Traslado ingreso",
   transfer_out: "Traslado egreso",
   shortage: "Faltante",
-  adjustment: "Ajuste"
+  adjustment: "Ajuste",
+  correction: "Correccion de stock",
+  correction_in: "Correccion de stock",
+  correction_out: "Correccion de stock"
 } as const;
 
 export const animalMovementFormKinds = [
@@ -36,7 +39,8 @@ export const animalMovementFormKinds = [
   "death",
   "transfer",
   "shortage",
-  "adjustment"
+  "adjustment",
+  "correction"
 ] as const;
 
 export const currencyLabels = {

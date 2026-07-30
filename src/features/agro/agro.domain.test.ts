@@ -20,6 +20,8 @@ describe("agro functional round", () => {
     expect(deriveMovementDirection("death")).toBe("exit");
     expect(deriveMovementDirection("transfer_out")).toBe("exit");
     expect(deriveMovementDirection("shortage")).toBe("exit");
+    expect(deriveMovementDirection("correction_in")).toBe("entry");
+    expect(deriveMovementDirection("correction_out")).toBe("exit");
   });
 
   it("requires ear tag only for cattle deaths", () => {

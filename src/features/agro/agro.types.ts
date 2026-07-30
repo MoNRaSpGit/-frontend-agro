@@ -12,7 +12,10 @@ export type AnimalMovementKind =
   | "transfer_in"
   | "transfer_out"
   | "shortage"
-  | "adjustment";
+  | "adjustment"
+  | "correction"
+  | "correction_in"
+  | "correction_out";
 
 export type AccountingEntryType = "income" | "expense";
 

@@ -792,11 +792,42 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     [animalForm.species, transferOriginAvailability]
   );
 
-  const transferAvailableQuantity = useMemo(
-    () =>
-      transferAvailableCategories.find((item) => item.categoryCode === animalForm.categoryCode)?.quantity ?? 0,
-    [animalForm.categoryCode, transferAvailableCategories]
-  );
+  const currentEditingCorrectionMovement = useMemo(() => {
+    if (!editingAnimalMovementId) {
+      return null;
+    }
+
+    const movement = animalMovements.find((item) => item.id === editingAnimalMovementId);
+    return movement && (movement.kind === "correction_in" || movement.kind === "correction_out") ? movement : null;
+  }, [animalMovements, editingAnimalMovementId]);
+
+  // Stock actual para el potrero/especie/categoria elegidos en el formulario
+  // de correccion. Si se esta editando una correccion ya existente, se le
+  // resta su propio efecto para obtener el "stock base" (el que habia antes
+  // de esa correccion), asi el nuevo delta se calcula contra ese base y no
+  // se cuenta dos veces la misma correccion.
+  const correctionCurrentQuantity = useMemo(() => {
+    const key = `${animalForm.fieldId}:${animalForm.species}:${animalForm.categoryCode}`;
+    let quantity = stockBalanceMap.get(key) ?? 0;
+
+    if (
+      currentEditingCorrectionMovement &&
+      currentEditingCorrectionMovement.fieldId === animalForm.fieldId &&
+      currentEditingCorrectionMovement.species === animalForm.species &&
+      currentEditingCorrectionMovement.categoryCode === animalForm.categoryCode
+    ) {
+      const sign = currentEditingCorrectionMovement.kind === "correction_in" ? 1 : -1;
+      quantity -= sign * currentEditingCorrectionMovement.quantity;
+    }
+
+    return quantity;
+  }, [
+    animalForm.categoryCode,
+    animalForm.fieldId,
+    animalForm.species,
+    currentEditingCorrectionMovement,
+    stockBalanceMap
+  ]);
 
   // Igual que el traslado, pero solo informativo: en sanidad no se mueve
   // stock, asi que no filtramos ni bloqueamos nada, solo mostramos cuantos
@@ -1324,7 +1355,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       sales: animalLedgerRows.filter((movement) => movement.kind === "sale").length,
       stockInternalMoves: transferRows.length,
       stockIncidents: animalLedgerRows.filter(
-        (movement) => movement.kind === "birth" || movement.kind === "death" || movement.kind === "shortage"
+        (movement) =>
+          movement.kind === "birth" ||
+          movement.kind === "death" ||
+          movement.kind === "shortage" ||
+          movement.kind === "correction_in" ||
+          movement.kind === "correction_out"
       ).length,
       linkedCommercialRows: animalLedgerRows.filter((movement) => Boolean(movement.linkedAccountingEntryId)).length
     };
@@ -1702,12 +1738,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }, []);
 
   const isCommercialAnimalMovement = animalForm.kind === "purchase" || animalForm.kind === "sale";
-  const isBirthOrDeathAnimalMovement =
-    animalForm.kind === "birth" ||
-    animalForm.kind === "death" ||
-    animalForm.kind === "transfer" ||
-    animalForm.kind === "shortage";
-  const isAdjustmentAnimalMovement = animalForm.kind === "adjustment";
+  const isCorrectionAnimalMovement = animalForm.kind === "correction";
   const isCattleDeathWithEarTag = requiresEarTag(animalForm.kind, animalForm.species);
 
   const establishmentSummary = establishments
@@ -2148,9 +2179,25 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     const isTransferMovement = animalForm.kind === "transfer";
     const isInternalTransferMovement =
       isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
+    const isCorrectionMovement = animalForm.kind === "correction";
     const nextErrors: Record<string, string> = {};
 
-    if (!Number.isFinite(quantity) || quantity <= 0) {
+    // En una correccion, "quantity" es el total correcto que el usuario
+    // quiere que quede, no una cantidad a sumar/restar. La diferencia con
+    // el stock actual (correctionCurrentQuantity) se calcula sola y se
+    // guarda como un movimiento de entrada o salida segun corresponda.
+    let correctionDelta = 0;
+
+    if (isCorrectionMovement) {
+      if (!Number.isFinite(quantity) || quantity < 0) {
+        nextErrors.quantity = "La cantidad correcta debe ser un numero mayor o igual a 0.";
+      } else {
+        correctionDelta = quantity - correctionCurrentQuantity;
+        if (correctionDelta === 0) {
+          nextErrors.quantity = "Ese valor ya es el que muestra el sistema. No hay nada para corregir.";
+        }
+      }
+    } else if (!Number.isFinite(quantity) || quantity <= 0) {
       nextErrors.quantity = "La cantidad debe ser mayor a 0.";
     }
 
@@ -2262,6 +2309,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       ? existingMovement?.linkedAccountingEntryId ?? `acc-${Date.now()}`
       : undefined;
 
+    const correctionKind: AnimalMovementKind = correctionDelta >= 0 ? "correction_in" : "correction_out";
+    const correctionQuantity = Math.abs(correctionDelta);
+    const correctionAutoNote = isCorrectionMovement
+      ? `Correccion manual: de ${formatNumber(correctionCurrentQuantity, 0)} a ${formatNumber(quantity, 0)} animales.`
+      : "";
+
     const movement: AnimalMovementRecord = {
       id: nextMovementId,
       date: animalForm.date,
@@ -2269,8 +2322,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       fieldId: animalForm.fieldId,
       species: animalForm.species,
       categoryCode: animalForm.categoryCode,
-      kind: animalForm.kind,
-      quantity,
+      kind: isCorrectionMovement ? correctionKind : animalForm.kind,
+      quantity: isCorrectionMovement ? correctionQuantity : quantity,
       earTag: isCattleDeathWithEarTag ? animalForm.earTag.trim() : undefined,
       weightKg: commercialMovement ? weightKg : undefined,
       unitPrice: commercialMovement ? unitPrice : undefined,
@@ -2281,7 +2334,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       currency: commercialMovement ? animalForm.currency : undefined,
       linkedAccountingEntryId: nextAccountingId,
       pairedTransferMovementId: nextPairedTransferMovementId,
-      notes: animalForm.notes.trim()
+      notes: isCorrectionMovement
+        ? [correctionAutoNote, animalForm.notes.trim()].filter(Boolean).join(" ")
+        : animalForm.notes.trim()
     };
 
     const nextMovements = isTransferMovement
@@ -2574,6 +2629,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     const linkedEntry = movement.linkedAccountingEntryId
       ? accountingEntries.find((item) => item.id === movement.linkedAccountingEntryId)
       : undefined;
+    const isCorrectionRecord = movement.kind === "correction_in" || movement.kind === "correction_out";
 
     setEditingAnimalMovementId(movementId);
     setSelectedEstablishmentId(movement.establishmentId);
@@ -2595,8 +2651,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       taxAmount: movement.taxAmount !== undefined ? `${movement.taxAmount}` : "",
       collectedAmount: movement.kind === "sale" ? `${linkedEntry && linkedEntry.type === "income" ? getIncomeCollectedAmount(linkedEntry) : 0}` : "",
       currency: movement.currency ?? "USD",
-      notes: movement.notes
+      notes: isCorrectionRecord ? movement.notes.replace(/^Correccion manual: de .* a .* animales\.\s*/, "") : movement.notes
     });
+    if (isCorrectionRecord) {
+      const key = `${movement.fieldId}:${movement.species}:${movement.categoryCode}`;
+      const totalAtEditTime = stockBalanceMap.get(key) ?? 0;
+      setAnimalForm((current) => ({
+        ...current,
+        kind: "correction",
+        quantity: `${totalAtEditTime}`
+      }));
+    }
     if (isTransferMovementKind(movement.kind) && movement.pairedTransferMovementId) {
       const pairedMovement = animalMovements.find((item) => item.id === movement.pairedTransferMovementId);
       if (pairedMovement) {
@@ -2923,14 +2988,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             editingAnimalMovementId={editingAnimalMovementId}
             handleAnimalKindChange={handleAnimalKindChange}
             handleAnimalSubmit={handleAnimalSubmit}
-            isBirthOrDeathAnimalMovement={isBirthOrDeathAnimalMovement}
             isCattleDeathWithEarTag={isCattleDeathWithEarTag}
             isCommercialAnimalMovement={isCommercialAnimalMovement}
-            isAdjustmentAnimalMovement={isAdjustmentAnimalMovement}
+            isCorrectionAnimalMovement={isCorrectionAnimalMovement}
+            correctionCurrentQuantity={correctionCurrentQuantity}
             projectedAnimalTotal={projectedAnimalTotal}
             transferAvailableSpecies={transferAvailableSpecies}
             transferAvailableCategories={transferAvailableCategories}
-            transferAvailableQuantity={transferAvailableQuantity}
             registerAnimalFieldRef={registerAnimalFieldRef}
             requestDeleteAnimalMovement={requestDeleteAnimalMovement}
             resetAnimalForm={resetAnimalForm}
