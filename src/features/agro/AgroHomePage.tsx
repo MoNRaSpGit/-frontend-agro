@@ -12,7 +12,7 @@ import { AgroSetupSection } from "./AgroSetupSection";
 import { AgroStockCorrectionSection } from "./AgroStockCorrectionSection";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { AgroApiError } from "../../shared/errors/agroApiError";
-import { calculateAnimalTotal, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
+import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
   buildStockCorrectionMovement,
   computeFieldAvailability,
@@ -833,42 +833,37 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     [animalForm.species, transferOriginAvailability]
   );
 
-  const currentEditingCorrectionMovement = useMemo(() => {
+  const editingAnimalMovement = useMemo(() => {
     if (!editingAnimalMovementId) {
       return null;
     }
 
-    const movement = animalMovements.find((item) => item.id === editingAnimalMovementId);
-    return movement && (movement.kind === "correction_in" || movement.kind === "correction_out") ? movement : null;
+    return animalMovements.find((item) => item.id === editingAnimalMovementId) ?? null;
   }, [animalMovements, editingAnimalMovementId]);
 
-  // Stock actual para el potrero/especie/categoria elegidos en el formulario
-  // de correccion. Si se esta editando una correccion ya existente, se le
-  // resta su propio efecto para obtener el "stock base" (el que habia antes
-  // de esa correccion), asi el nuevo delta se calcula contra ese base y no
-  // se cuenta dos veces la misma correccion.
-  const correctionCurrentQuantity = useMemo(() => {
+  // Stock actual para el potrero/especie/categoria elegidos en el formulario,
+  // "base" (sin contar el movimiento que se esta editando, si hay uno para
+  // esa misma combinacion). Sirve para dos cosas: el hint de "cuanto muestra
+  // el sistema" en una correccion, y para bloquear ventas/muertes/faltantes/
+  // ajustes que dejarian una categoria en negativo (los traslados ya se
+  // validan aparte, con transferOriginAvailability).
+  const animalFormBaselineQuantity = useMemo(() => {
     const key = `${animalForm.fieldId}:${animalForm.species}:${animalForm.categoryCode}`;
     let quantity = stockBalanceMap.get(key) ?? 0;
 
     if (
-      currentEditingCorrectionMovement &&
-      currentEditingCorrectionMovement.fieldId === animalForm.fieldId &&
-      currentEditingCorrectionMovement.species === animalForm.species &&
-      currentEditingCorrectionMovement.categoryCode === animalForm.categoryCode
+      editingAnimalMovement &&
+      !isTransferMovementKind(editingAnimalMovement.kind) &&
+      editingAnimalMovement.fieldId === animalForm.fieldId &&
+      editingAnimalMovement.species === animalForm.species &&
+      editingAnimalMovement.categoryCode === animalForm.categoryCode
     ) {
-      const sign = currentEditingCorrectionMovement.kind === "correction_in" ? 1 : -1;
-      quantity -= sign * currentEditingCorrectionMovement.quantity;
+      const sign = getMovementDirection(editingAnimalMovement) === "entry" ? 1 : -1;
+      quantity -= sign * editingAnimalMovement.quantity;
     }
 
     return quantity;
-  }, [
-    animalForm.categoryCode,
-    animalForm.fieldId,
-    animalForm.species,
-    currentEditingCorrectionMovement,
-    stockBalanceMap
-  ]);
+  }, [animalForm.categoryCode, animalForm.fieldId, animalForm.species, editingAnimalMovement, stockBalanceMap]);
 
   const correctionFieldStock = useMemo(
     () => computeFullFieldStock(stockBalanceMap, correctionFieldId),
@@ -2253,21 +2248,43 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     // En una correccion, "quantity" es el total correcto que el usuario
     // quiere que quede, no una cantidad a sumar/restar. La diferencia con
-    // el stock actual (correctionCurrentQuantity) se calcula sola y se
-    // guarda como un movimiento de entrada o salida segun corresponda.
+    // el stock actual (animalFormBaselineQuantity) se calcula sola y se
+    // guarda como un movimiento de entrada o salida segun corresponda. Como
+    // el total no puede ser negativo, una correccion nunca puede dejar la
+    // categoria en negativo.
     let correctionDelta = 0;
 
     if (isCorrectionMovement) {
       if (!Number.isFinite(quantity) || quantity < 0) {
         nextErrors.quantity = "La cantidad correcta debe ser un numero mayor o igual a 0.";
       } else {
-        correctionDelta = quantity - correctionCurrentQuantity;
+        correctionDelta = quantity - animalFormBaselineQuantity;
         if (correctionDelta === 0) {
           nextErrors.quantity = "Ese valor ya es el que muestra el sistema. No hay nada para corregir.";
         }
       }
     } else if (!Number.isFinite(quantity) || quantity <= 0) {
       nextErrors.quantity = "La cantidad debe ser mayor a 0.";
+    }
+
+    // Ventas, muertes, faltantes y ajustes manuales restan animales del
+    // potrero: no pueden dejar una categoria en negativo (a diferencia de
+    // la contabilidad, donde estar en rojo es valido). Los traslados ya se
+    // validan aparte (transferOriginAvailability) y las correcciones no
+    // pueden dar negativo por construccion (el total minimo es 0).
+    const isExitMovementRequiringStockCheck =
+      !isTransferMovement &&
+      !isCorrectionMovement &&
+      deriveMovementDirection(animalForm.kind) === "exit" &&
+      !(animalForm.kind === "adjustment" && animalForm.notes.trim().startsWith("Carga inicial:"));
+
+    if (
+      isExitMovementRequiringStockCheck &&
+      Number.isFinite(quantity) &&
+      quantity > 0 &&
+      quantity > animalFormBaselineQuantity
+    ) {
+      nextErrors.quantity = `Solo hay ${formatNumber(animalFormBaselineQuantity, 0)} disponibles en este potrero para esa especie y categoria.`;
     }
 
     if (isCattleDeathWithEarTag && !animalForm.earTag.trim()) {
@@ -2386,7 +2403,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           fieldId: animalForm.fieldId,
           species: animalForm.species,
           categoryCode: animalForm.categoryCode,
-          currentQuantity: correctionCurrentQuantity,
+          currentQuantity: animalFormBaselineQuantity,
           targetQuantity: quantity,
           notes: animalForm.notes
         })
@@ -3114,7 +3131,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             isCattleDeathWithEarTag={isCattleDeathWithEarTag}
             isCommercialAnimalMovement={isCommercialAnimalMovement}
             isCorrectionAnimalMovement={isCorrectionAnimalMovement}
-            correctionCurrentQuantity={correctionCurrentQuantity}
+            correctionCurrentQuantity={animalFormBaselineQuantity}
             projectedAnimalTotal={projectedAnimalTotal}
             transferAvailableSpecies={transferAvailableSpecies}
             transferAvailableCategories={transferAvailableCategories}
