@@ -966,10 +966,6 @@ table {
   min-width: 1380px;
 }
 
-.stock-correction-table {
-  min-width: 0;
-}
-
 th,
 td {
   text-align: left;
@@ -984,10 +980,6 @@ td {
 
 tbody tr:hover {
   background: rgba(255, 252, 245, 0.6);
-}
-
-tbody tr.is-selected-row {
-  background: rgba(73, 107, 58, 0.14);
 }
 
 th {

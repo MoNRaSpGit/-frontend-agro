@@ -9,14 +9,12 @@ import { AgroOverviewSection } from "./AgroOverviewSection";
 import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
-import { AgroStockCorrectionSection } from "./AgroStockCorrectionSection";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { AgroApiError } from "../../shared/errors/agroApiError";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
 import {
   buildStockCorrectionMovement,
   computeFieldAvailability,
-  computeFullFieldStock,
   describeAnimalMovementDetail,
   formatCategoryLabel,
   expenseConceptLabels,
@@ -228,24 +226,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     quantity: "",
     notes: ""
   });
-  const [correctionEstablishmentId, setCorrectionEstablishmentId] = useState("");
-  const [correctionFieldId, setCorrectionFieldId] = useState("");
-  const [correctionSelectedRow, setCorrectionSelectedRow] = useState<{ species: AgroSpecies; categoryCode: string } | null>(
-    null
-  );
-  const [correctionTargetQuantity, setCorrectionTargetQuantity] = useState("");
-  const [correctionNotes, setCorrectionNotes] = useState("");
-
   const activeEstablishmentId = selectedEstablishmentId || establishments[0]?.id || "";
   const activeFieldId = getFieldIdForEstablishmentFrom(fields, activeEstablishmentId);
   const activeTransferDestinationId = activeEstablishmentId;
   const setupFields = useMemo(
     () => fields.filter((field) => field.establishmentId === setupEstablishmentId),
     [fields, setupEstablishmentId]
-  );
-  const correctionFields = useMemo(
-    () => fields.filter((field) => field.establishmentId === correctionEstablishmentId),
-    [fields, correctionEstablishmentId]
   );
 
   function resetAnimalForm(preserveContext = false) {
@@ -615,33 +601,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setSetupFieldId((current) => (setupFields.some((field) => field.id === current) ? current : setupFields[0].id));
   }, [setupFields]);
 
-  // El establecimiento y el potrero de esta pantalla los elige el cliente
-  // directamente (a diferencia de otras secciones que siguen el "Campo
-  // activo" global), asi puede corregir cualquier potrero sin cambiar de
-  // contexto en el resto de la app. Solo se les pone un valor inicial.
-  useEffect(() => {
-    if (correctionEstablishmentId && establishments.some((item) => item.id === correctionEstablishmentId)) {
-      return;
-    }
-
-    setCorrectionEstablishmentId(establishments[0]?.id ?? "");
-  }, [establishments, correctionEstablishmentId]);
-
-  useEffect(() => {
-    if (correctionFields.length === 0) {
-      setCorrectionFieldId("");
-      return;
-    }
-
-    setCorrectionFieldId((current) => (correctionFields.some((field) => field.id === current) ? current : correctionFields[0].id));
-  }, [correctionFields]);
-
-  useEffect(() => {
-    setCorrectionSelectedRow(null);
-    setCorrectionTargetQuantity("");
-    setCorrectionNotes("");
-  }, [correctionFieldId]);
-
   const selectedFieldIds = useMemo(() => visibleFields.map((field) => field.id), [visibleFields]);
   const selectedFieldIdSet = useMemo(() => new Set(selectedFieldIds), [selectedFieldIds]);
   const establishmentFieldIds = useMemo(() => establishmentFields.map((field) => field.id), [establishmentFields]);
@@ -864,34 +823,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     return quantity;
   }, [animalForm.categoryCode, animalForm.fieldId, animalForm.species, editingAnimalMovement, stockBalanceMap]);
-
-  const correctionFieldStock = useMemo(
-    () => computeFullFieldStock(stockBalanceMap, correctionFieldId),
-    [correctionFieldId, stockBalanceMap]
-  );
-
-  const correctionSelectedCurrentQuantity = useMemo(() => {
-    if (!correctionSelectedRow) {
-      return 0;
-    }
-
-    return stockBalanceMap.get(`${correctionFieldId}:${correctionSelectedRow.species}:${correctionSelectedRow.categoryCode}`) ?? 0;
-  }, [correctionFieldId, correctionSelectedRow, stockBalanceMap]);
-
-  const correctionSelectedHistory = useMemo(() => {
-    if (!correctionSelectedRow) {
-      return [];
-    }
-
-    return animalMovements
-      .filter(
-        (movement) =>
-          movement.fieldId === correctionFieldId &&
-          movement.species === correctionSelectedRow.species &&
-          movement.categoryCode === correctionSelectedRow.categoryCode
-      )
-      .sort((left, right) => right.date.localeCompare(left.date));
-  }, [animalMovements, correctionFieldId, correctionSelectedRow]);
 
   // Igual que el traslado, pero solo informativo: en sanidad no se mueve
   // stock, asi que no filtramos ni bloqueamos nada, solo mostramos cuantos
@@ -2496,54 +2427,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     showSuccess(editingAnimalMovementId ? "Movimiento de animales actualizado." : "Movimiento de animales guardado.");
   }
 
-  function handleSelectCorrectionRow(species: AgroSpecies, categoryCode: string) {
-    setCorrectionSelectedRow({ species, categoryCode });
-    setCorrectionTargetQuantity("");
-    setCorrectionNotes("");
-  }
-
-  function clearCorrectionSelection() {
-    setCorrectionSelectedRow(null);
-    setCorrectionTargetQuantity("");
-    setCorrectionNotes("");
-  }
-
-  function handleStockCorrectionSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!correctionSelectedRow) {
-      return;
-    }
-
-    const targetQuantity = parseDecimalInput(correctionTargetQuantity);
-    if (!Number.isFinite(targetQuantity) || targetQuantity < 0) {
-      showError("La cantidad correcta debe ser un numero mayor o igual a 0.");
-      return;
-    }
-
-    const correctionMovement = buildStockCorrectionMovement({
-      id: `anm-${Date.now()}`,
-      date: today,
-      establishmentId: correctionEstablishmentId,
-      fieldId: correctionFieldId,
-      species: correctionSelectedRow.species,
-      categoryCode: correctionSelectedRow.categoryCode,
-      currentQuantity: correctionSelectedCurrentQuantity,
-      targetQuantity,
-      notes: correctionNotes
-    });
-
-    if (!correctionMovement) {
-      showError("Ese valor ya es el que muestra el sistema. No hay nada para corregir.");
-      return;
-    }
-
-    setAnimalMovements((current) => [correctionMovement, ...current]);
-    setCorrectionTargetQuantity("");
-    setCorrectionNotes("");
-    showSuccess("Stock corregido.");
-  }
-
   function handleAccountingSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -3142,28 +3025,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             setAnimalSearchTerm={setAnimalSearchTerm}
             showAnimalFloatingScrollbar={showAnimalFloatingScrollbar}
             onEditMovement={handleEditAnimalMovement}
-          />
-        ) : null}
-
-        {activeView === "stockCorrection" ? (
-          <AgroStockCorrectionSection
-            establishments={establishments}
-            correctionFields={correctionFields}
-            correctionEstablishmentId={correctionEstablishmentId}
-            correctionFieldId={correctionFieldId}
-            onChangeEstablishment={setCorrectionEstablishmentId}
-            onChangeField={setCorrectionFieldId}
-            correctionFieldStock={correctionFieldStock}
-            correctionSelectedRow={correctionSelectedRow}
-            correctionSelectedCurrentQuantity={correctionSelectedCurrentQuantity}
-            correctionSelectedHistory={correctionSelectedHistory}
-            correctionTargetQuantity={correctionTargetQuantity}
-            correctionNotes={correctionNotes}
-            onSelectRow={handleSelectCorrectionRow}
-            onCancelSelection={clearCorrectionSelection}
-            onChangeTargetQuantity={setCorrectionTargetQuantity}
-            onChangeNotes={setCorrectionNotes}
-            onSubmit={handleStockCorrectionSubmit}
           />
         ) : null}
 

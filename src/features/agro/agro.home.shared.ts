@@ -459,26 +459,6 @@ export function computeFieldAvailability(stockBalanceMap: Map<string, number>, f
   return availability;
 }
 
-// Igual que computeFieldAvailability, pero sin filtrar las categorias en 0:
-// se usa en la pantalla de Correccion de stock, donde el cliente tiene que
-// poder ver y corregir tambien una categoria que hoy no tiene nada cargado.
-export function computeFullFieldStock(stockBalanceMap: Map<string, number>, fieldId: string) {
-  const breakdown: Record<AgroSpecies, Array<{ categoryCode: string; quantity: number }>> = {
-    vacunos: [],
-    ovinos: [],
-    equinos: []
-  };
-
-  for (const species of Object.keys(categoryCatalog) as AgroSpecies[]) {
-    breakdown[species] = categoryCatalog[species].map((category) => ({
-      categoryCode: category.code,
-      quantity: stockBalanceMap.get(`${fieldId}:${species}:${category.code}`) ?? 0
-    }));
-  }
-
-  return breakdown;
-}
-
 // Arma el movimiento de correccion que hay que guardar para que el stock de
 // un potrero/especie/categoria pase de currentQuantity a targetQuantity.
 // Devuelve null cuando no hay diferencia (nada para corregir). No se guarda
