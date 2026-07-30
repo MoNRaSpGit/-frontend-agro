@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AccountingEntry, AnimalMovementRecord, FieldUnit, RainfallRecord } from "./agro.types";
 import {
+  buildStockCorrectionMovement,
   formatCategoryLabel,
   formatMoney,
   formatShortDate,
@@ -215,6 +216,44 @@ describe("movement direction helpers", () => {
     expect(isTransferMovementKind("transfer_in")).toBe(true);
     expect(isTransferMovementKind("transfer_out")).toBe(true);
     expect(isTransferMovementKind("purchase")).toBe(false);
+  });
+});
+
+describe("buildStockCorrectionMovement", () => {
+  const baseParams = {
+    id: "anm-correction-1",
+    date: "2024-03-10",
+    establishmentId: "est-1",
+    fieldId: "field-1",
+    species: "vacunos" as const,
+    categoryCode: "1",
+    notes: ""
+  };
+
+  it("builds an entry correction when the target is higher than the current stock", () => {
+    const movement = buildStockCorrectionMovement({ ...baseParams, currentQuantity: 10, targetQuantity: 15 });
+    expect(movement).toMatchObject({ kind: "correction_in", quantity: 5 });
+    expect(movement?.notes).toBe("Correccion manual: de 10 a 15 animales.");
+  });
+
+  it("builds an exit correction when the target is lower than the current stock", () => {
+    const movement = buildStockCorrectionMovement({ ...baseParams, currentQuantity: 10, targetQuantity: 7 });
+    expect(movement).toMatchObject({ kind: "correction_out", quantity: 3 });
+    expect(movement?.notes).toBe("Correccion manual: de 10 a 7 animales.");
+  });
+
+  it("returns null when the target equals the current stock, since there is nothing to correct", () => {
+    expect(buildStockCorrectionMovement({ ...baseParams, currentQuantity: 10, targetQuantity: 10 })).toBeNull();
+  });
+
+  it("appends the user's own notes after the auto-generated correction note", () => {
+    const movement = buildStockCorrectionMovement({
+      ...baseParams,
+      currentQuantity: 10,
+      targetQuantity: 8,
+      notes: "Recuento fisico en el potrero."
+    });
+    expect(movement?.notes).toBe("Correccion manual: de 10 a 8 animales. Recuento fisico en el potrero.");
   });
 });
 

@@ -27,6 +27,12 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     persistence: "local"
   },
   {
+    key: "stockCorrection",
+    label: "Corregir stock",
+    description: "Ver y editar el stock actual por potrero, con el historial que lo arma",
+    persistence: "local"
+  },
+  {
     key: "accounting",
     label: "Contabilidad",
     description: "Caja por moneda, rubro y establecimiento",

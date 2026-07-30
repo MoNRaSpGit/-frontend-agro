@@ -459,6 +459,62 @@ export function computeFieldAvailability(stockBalanceMap: Map<string, number>, f
   return availability;
 }
 
+// Igual que computeFieldAvailability, pero sin filtrar las categorias en 0:
+// se usa en la pantalla de Correccion de stock, donde el cliente tiene que
+// poder ver y corregir tambien una categoria que hoy no tiene nada cargado.
+export function computeFullFieldStock(stockBalanceMap: Map<string, number>, fieldId: string) {
+  const breakdown: Record<AgroSpecies, Array<{ categoryCode: string; quantity: number }>> = {
+    vacunos: [],
+    ovinos: [],
+    equinos: []
+  };
+
+  for (const species of Object.keys(categoryCatalog) as AgroSpecies[]) {
+    breakdown[species] = categoryCatalog[species].map((category) => ({
+      categoryCode: category.code,
+      quantity: stockBalanceMap.get(`${fieldId}:${species}:${category.code}`) ?? 0
+    }));
+  }
+
+  return breakdown;
+}
+
+// Arma el movimiento de correccion que hay que guardar para que el stock de
+// un potrero/especie/categoria pase de currentQuantity a targetQuantity.
+// Devuelve null cuando no hay diferencia (nada para corregir). No se guarda
+// un total: se guarda la diferencia como entrada o salida, igual que
+// cualquier otro movimiento, para que el stock se seguir recalculando solo.
+export function buildStockCorrectionMovement(params: {
+  id: string;
+  date: string;
+  establishmentId: string;
+  fieldId: string;
+  species: AgroSpecies;
+  categoryCode: string;
+  currentQuantity: number;
+  targetQuantity: number;
+  notes: string;
+}): AnimalMovementRecord | null {
+  const delta = params.targetQuantity - params.currentQuantity;
+  if (delta === 0) {
+    return null;
+  }
+
+  const autoNote = `Correccion manual: de ${formatNumber(params.currentQuantity, 0)} a ${formatNumber(params.targetQuantity, 0)} animales.`;
+
+  return {
+    id: params.id,
+    date: params.date,
+    establishmentId: params.establishmentId,
+    fieldId: params.fieldId,
+    species: params.species,
+    categoryCode: params.categoryCode,
+    kind: delta > 0 ? "correction_in" : "correction_out",
+    quantity: Math.abs(delta),
+    notes: [autoNote, params.notes.trim()].filter(Boolean).join(" ")
+  };
+}
+
 export function isTransferMovementKind(kind: AnimalMovementKind) {
   return kind === "transfer" || kind === "transfer_internal" || kind === "transfer_in" || kind === "transfer_out";
 }
