@@ -25,7 +25,6 @@ import {
   getAlternativeFieldId,
   getFieldIdForEstablishmentFrom,
   getFirstFieldIdForEstablishment,
-  getFiscalYearToDateRange,
   getIncomeCollectedAmount,
   getIncomeCollectionStatus,
   getIncomeExpectedAmount,
@@ -113,6 +112,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const enqueueWorkspaceSaveRef = useRef(enqueueWorkspaceSave);
   enqueueWorkspaceSaveRef.current = enqueueWorkspaceSave;
   const [activeView, setActiveView] = useState<AgroView | null>(null);
+  const [summarySubView, setSummarySubView] = useState<"establishment" | "global">("establishment");
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
   const [selectedEstablishmentId, setSelectedEstablishmentId] = useState("");
@@ -616,10 +616,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }, [accountingEntries, animalMovements, rainfallRecords, today]);
 
   const visibleMonthRange = useMemo(() => getVisibleMonthRange(selectedYear, selectedMonth), [selectedMonth, selectedYear]);
-  const accumulatedFiscalRange = useMemo(
-    () => getFiscalYearToDateRange(selectedYear, selectedMonth),
-    [selectedMonth, selectedYear]
-  );
 
   const stockBalanceMap = useMemo(() => {
     const balanceMap = new Map<string, number>();
@@ -1278,24 +1274,119 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     visibleFields
   ]);
 
-  const periodSummary = useMemo(() => {
-    return summarizeRangeData(
-      animalMovements,
-      accountingEntries,
-      rainfallRecords,
-      exchangeRateByMonth,
-      visibleMonthRange.startDate,
-      visibleMonthRange.endDate,
-      selectedFieldIdSet
-    );
+  // Mismo calculo que summaryByField pero agrupado un nivel mas arriba: por
+  // establecimiento (sumando todos sus potreros), no por potrero suelto, y
+  // sin depender del establecimiento seleccionado (siempre los 6). Es lo
+  // que pidio el cliente: ver el total de cada establecimiento sin tener
+  // que sumar potrero por potrero a mano.
+  const summaryByEstablishment = useMemo(() => {
+    return establishments.map((establishment) => {
+      const establishmentFieldIds = fields.filter((field) => field.establishmentId === establishment.id).map((field) => field.id);
+      const establishmentFieldIdSet = new Set(establishmentFieldIds);
+
+      const stockRows = Array.from(summaryStockBalanceMap.entries())
+        .filter(([key]) => establishmentFieldIdSet.has(key.split(":")[0]))
+        .map(([key, quantity]) => {
+          const [, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
+          const category = categoryCatalog[species].find((item) => item.code === categoryCode);
+          return {
+            species,
+            categoryCode,
+            categoryLabel: category ? formatCategoryLabel(category.label) : categoryCode,
+            quantity
+          };
+        })
+        .filter((row) => row.quantity !== 0);
+
+      const movementRows = animalMovements.filter((movement) => {
+        if (!establishmentFieldIdSet.has(movement.fieldId)) {
+          return false;
+        }
+
+        return isDateWithinRange(movement.date, visibleMonthRange.startDate, visibleMonthRange.endDate);
+      });
+      const accountingRows = accountingEntries.filter((entry) => {
+        if (!establishmentFieldIdSet.has(entry.fieldId)) {
+          return false;
+        }
+
+        return isDateWithinRange(entry.date, visibleMonthRange.startDate, visibleMonthRange.endDate);
+      });
+      const expenseSummary = summarizeExpenses(accountingRows, exchangeRateByMonth);
+      const rainfallTotal = rainfallRecords
+        .filter((record) => {
+          if (!establishmentFieldIdSet.has(record.fieldId)) {
+            return false;
+          }
+
+          return isDateWithinRange(record.date, visibleMonthRange.startDate, visibleMonthRange.endDate);
+        })
+        .reduce((sum, record) => sum + record.millimeters, 0);
+
+      const speciesTotals = (Object.keys(speciesLabels) as AgroSpecies[]).reduce(
+        (totals, species) => {
+          totals[species] = stockRows
+            .filter((row) => row.species === species)
+            .reduce((sum, row) => sum + row.quantity, 0);
+          return totals;
+        },
+        { vacunos: 0, ovinos: 0, equinos: 0 } as Record<AgroSpecies, number>
+      );
+
+      return {
+        establishment,
+        fieldCount: establishmentFieldIds.length,
+        stockRows,
+        speciesTotals,
+        purchases: movementRows
+          .filter((movement) => movement.kind === "purchase")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        sales: movementRows
+          .filter((movement) => movement.kind === "sale")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        incomeUsd: accountingRows
+          .filter((entry) => entry.type === "income" && entry.currency === "USD")
+          .reduce((sum, entry) => sum + getIncomeCollectedAmount(entry), 0),
+        pendingIncomeUsd: accountingRows
+          .filter((entry) => entry.type === "income" && entry.currency === "USD")
+          .reduce((sum, entry) => sum + getIncomePendingAmount(entry), 0),
+        livestockPurchaseExpenseUsd: expenseSummary.livestockPurchase.usd,
+        livestockPurchaseExpenseUyu: expenseSummary.livestockPurchase.uyu,
+        livestockPurchaseExpenseUyuDollarized: expenseSummary.livestockPurchase.uyuDollarized,
+        totalLivestockPurchaseExpenseUsdEquivalent:
+          expenseSummary.livestockPurchase.usd + expenseSummary.livestockPurchase.uyuDollarized,
+        operationalExpenseUsd: expenseSummary.operational.usd,
+        operationalExpenseUyu: expenseSummary.operational.uyu,
+        operationalExpenseUyuDollarized: expenseSummary.operational.uyuDollarized,
+        totalOperationalExpenseUsdEquivalent: expenseSummary.operational.usd + expenseSummary.operational.uyuDollarized,
+        rainfallTotal,
+        adjustments: movementRows
+          .filter((movement) => movement.kind === "adjustment")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        transfersIn: movementRows
+          .filter((movement) => movement.kind === "transfer_in")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        transfersOut: movementRows
+          .filter((movement) => movement.kind === "transfer_out")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        deaths: movementRows
+          .filter((movement) => movement.kind === "death")
+          .reduce((sum, movement) => sum + movement.quantity, 0),
+        shortages: movementRows
+          .filter((movement) => movement.kind === "shortage")
+          .reduce((sum, movement) => sum + movement.quantity, 0)
+      };
+    });
   }, [
     accountingEntries,
     animalMovements,
+    establishments,
     exchangeRateByMonth,
+    fields,
     rainfallRecords,
-    selectedFieldIdSet,
     visibleMonthRange.endDate,
-    visibleMonthRange.startDate
+    visibleMonthRange.startDate,
+    summaryStockBalanceMap
   ]);
 
   const globalPeriodSummary = useMemo(() => {
@@ -1322,26 +1413,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     rainfallRecords,
     visibleMonthRange.endDate,
     visibleMonthRange.startDate
-  ]);
-
-  const accumulatedSummary = useMemo(() => {
-    return summarizeRangeData(
-      animalMovements,
-      accountingEntries,
-      rainfallRecords,
-      exchangeRateByMonth,
-      accumulatedFiscalRange.startDate,
-      accumulatedFiscalRange.endDate,
-      selectedFieldIdSet
-    );
-  }, [
-    accountingEntries,
-    accumulatedFiscalRange.endDate,
-    accumulatedFiscalRange.startDate,
-    animalMovements,
-    exchangeRateByMonth,
-    rainfallRecords,
-    selectedFieldIdSet
   ]);
 
   const animalLedgerSummary = useMemo(() => {
@@ -1587,34 +1658,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       }),
     [setupFields, getFieldDeleteBlockReason]
   );
-
-  const initialLoadRows = useMemo(() => {
-    return animalMovements
-      .filter(
-        (movement) =>
-          selectedFieldIdSet.has(movement.fieldId) &&
-          movement.kind === "adjustment" &&
-          movement.notes.startsWith("Carga inicial:") &&
-          isDateOnOrBefore(movement.date, visibleMonthRange.endDate)
-      )
-      .map((movement) => {
-        const establishment = establishments.find((item) => item.id === movement.establishmentId);
-        const field = fields.find((item) => item.id === movement.fieldId);
-        const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
-
-        return {
-          id: movement.id,
-          date: movement.date,
-          establishmentName: establishment?.name ?? "-",
-          fieldName: field?.name ?? "-",
-          speciesLabel: speciesLabels[movement.species],
-          categoryLabel: category ? formatCategoryLabel(category.label) : movement.categoryCode,
-          quantity: movement.quantity,
-          notes: movement.notes.replace(/^Carga inicial:\s*/, "").trim() || "-"
-        };
-      })
-      .sort((left, right) => right.date.localeCompare(left.date));
-  }, [animalMovements, establishments, fields, selectedFieldIdSet, visibleMonthRange.endDate]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -3097,388 +3140,232 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
         {activeView === "summary" ? (
           <section className="content-grid">
-            <article className="panel">
-              <div className="panel-header">
-                <div>
-                  <h2>Planilla del mes</h2>
-                  <p>Movimientos visibles de {visibleMonthRange.label}.</p>
-                </div>
-              </div>
-              <div className="list-stack">
-                <div className="list-row">
-                  <span>Entradas animales</span>
-                  <strong>{periodSummary.entries}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Salidas animales</span>
-                  <strong>{periodSummary.exits}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Ingresos cobrados</span>
-                  <strong>{formatMoney(periodSummary.incomeUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Valor pendiente de cobro</span>
-                  <strong>{formatMoney(periodSummary.pendingIncomeUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado USD</span>
-                  <strong>{formatMoney(periodSummary.livestockPurchaseExpenseUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado UYU</span>
-                  <strong>{formatMoney(periodSummary.livestockPurchaseExpenseUyu, "UYU")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado UYU a USD</span>
-                  <strong>{formatMoney(periodSummary.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado total USD eq.</span>
-                  <strong>{formatMoney(periodSummary.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos USD</span>
-                  <strong>{formatMoney(periodSummary.operationalExpenseUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos UYU</span>
-                  <strong>{formatMoney(periodSummary.operationalExpenseUyu, "UYU")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos UYU a USD</span>
-                  <strong>{formatMoney(periodSummary.operationalExpenseUyuDollarized, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos total USD eq.</span>
-                  <strong>{formatMoney(periodSummary.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
-                </div>
-              </div>
-            </article>
-
-            <article className="panel">
-              <div className="panel-header">
-                <div>
-                  <h2>Acumulado del ejercicio</h2>
-                  <p>{accumulatedFiscalRange.label}</p>
-                </div>
-              </div>
-              <div className="list-stack">
-                <div className="list-row">
-                  <span>Entradas animales</span>
-                  <strong>{accumulatedSummary.entries}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Salidas animales</span>
-                  <strong>{accumulatedSummary.exits}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Ingresos cobrados</span>
-                  <strong>{formatMoney(accumulatedSummary.incomeUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Valor pendiente de cobro</span>
-                  <strong>{formatMoney(accumulatedSummary.pendingIncomeUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado USD</span>
-                  <strong>{formatMoney(accumulatedSummary.livestockPurchaseExpenseUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado UYU</span>
-                  <strong>{formatMoney(accumulatedSummary.livestockPurchaseExpenseUyu, "UYU")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado UYU a USD</span>
-                  <strong>{formatMoney(accumulatedSummary.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado total USD eq.</span>
-                  <strong>{formatMoney(accumulatedSummary.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos USD</span>
-                  <strong>{formatMoney(accumulatedSummary.operationalExpenseUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos UYU</span>
-                  <strong>{formatMoney(accumulatedSummary.operationalExpenseUyu, "UYU")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos UYU a USD</span>
-                  <strong>{formatMoney(accumulatedSummary.operationalExpenseUyuDollarized, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos total USD eq.</span>
-                  <strong>{formatMoney(accumulatedSummary.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
-                </div>
-              </div>
-            </article>
-
             <article className="panel wide">
               <div className="panel-header">
                 <div>
-                  <h2>Planilla de carga inicial</h2>
-                  <p>Base cargada del campo o potrero visible hasta {visibleMonthRange.label}.</p>
-                </div>
-              </div>
-              <div className="inline-metrics">
-                <span className="data-badge accent">Registros de carga inicial {initialLoadRows.length}</span>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Fecha</th>
-                      <th>Campo</th>
-                      <th>Potrero</th>
-                      <th>Especie</th>
-                      <th>Categoria</th>
-                      <th>Cantidad</th>
-                      <th>Observaciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {initialLoadRows.length > 0 ? (
-                      initialLoadRows.map((row) => (
-                        <tr key={row.id}>
-                          <td>{formatShortDate(row.date)}</td>
-                          <td>{row.establishmentName}</td>
-                          <td>{row.fieldName}</td>
-                          <td>{row.speciesLabel}</td>
-                          <td>{row.categoryLabel}</td>
-                          <td>{row.quantity}</td>
-                          <td>{row.notes}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7}>Todavia no hay carga inicial guardada para el campo o potrero visible.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </article>
-
-            <article className="panel wide">
-              <div className="panel-header">
-                <div>
-                  <h2>Resumen global</h2>
+                  <h2>Resumen</h2>
                   <p>Sumatoria del mes visible: {visibleMonthRange.label}.</p>
                 </div>
               </div>
-              <div className="list-stack">
-                <div className="list-row">
-                  <span>Establecimientos</span>
-                  <strong>{globalPeriodSummary.establishmentCount}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Campos</span>
-                  <strong>{globalPeriodSummary.fieldCount}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Total vacunos</span>
-                  <strong>{globalStockBySpecies.vacunos}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Total ovinos</span>
-                  <strong>{globalStockBySpecies.ovinos}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Total equinos</span>
-                  <strong>{globalStockBySpecies.equinos}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Entradas animales</span>
-                  <strong>{globalPeriodSummary.entries}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Salidas animales</span>
-                  <strong>{globalPeriodSummary.exits}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Ingresos cobrados</span>
-                  <strong>{formatMoney(globalPeriodSummary.incomeUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Valor pendiente de cobro</span>
-                  <strong>{formatMoney(globalPeriodSummary.pendingIncomeUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado USD</span>
-                  <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado UYU</span>
-                  <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUyu, "UYU")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado UYU a USD</span>
-                  <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Compra ganado total USD eq.</span>
-                  <strong>{formatMoney(globalPeriodSummary.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos USD</span>
-                  <strong>{formatMoney(globalPeriodSummary.operationalExpenseUsd, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos UYU</span>
-                  <strong>{formatMoney(globalPeriodSummary.operationalExpenseUyu, "UYU")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos UYU a USD</span>
-                  <strong>{formatMoney(globalPeriodSummary.operationalExpenseUyuDollarized, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Gastos operativos total USD eq.</span>
-                  <strong>{formatMoney(globalPeriodSummary.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
-                </div>
-                <div className="list-row">
-                  <span>Lluvia acumulada</span>
-                  <strong>{globalPeriodSummary.rainfallTotal} mm</strong>
-                </div>
+              <div className="product-shell-nav" role="tablist" aria-label="Tipo de resumen">
+                <button
+                  type="button"
+                  className={summarySubView === "establishment" ? "shell-nav-pill active" : "shell-nav-pill"}
+                  onClick={() => setSummarySubView("establishment")}
+                >
+                  <strong>Por establecimiento</strong>
+                </button>
+                <button
+                  type="button"
+                  className={summarySubView === "global" ? "shell-nav-pill active" : "shell-nav-pill"}
+                  onClick={() => setSummarySubView("global")}
+                >
+                  <strong>Global</strong>
+                </button>
               </div>
             </article>
 
-            <article className="panel wide">
-              <div className="panel-header">
-                <div>
-                  <h2>Resumen por establecimiento</h2>
-                  <p>Lectura corta de animales, caja y lluvia solo para {visibleMonthRange.label}.</p>
+            {summarySubView === "establishment" ? (
+              <article className="panel wide">
+                <div className="panel-header">
+                  <div>
+                    <h2>Resumen por establecimiento</h2>
+                    <p>Total de cada establecimiento (suma de todos sus potreros) para {visibleMonthRange.label}.</p>
+                  </div>
                 </div>
-              </div>
-              <div className="report-stack">
-                {summaryByField.map((item) => (
-                  <article key={item.field.id} className="report-row-card">
-                    <div className="report-row-head">
-                      <strong>{item.field.name}</strong>
-                      <span>{formatNumber(item.field.hectares)} ha</span>
-                    </div>
-                    <div className="list-stack">
-                      <div className="list-row">
-                        <span>Hectareas</span>
-                        <strong>{formatNumber(item.field.hectares)} ha</strong>
+                <div className="report-stack">
+                  {summaryByEstablishment.map((item) => (
+                    <article key={item.establishment.id} className="report-row-card">
+                      <div className="report-row-head">
+                        <strong>{item.establishment.name}</strong>
+                        <span>
+                          {formatNumber(item.establishment.hectares)} ha | {item.fieldCount} potrero
+                          {item.fieldCount === 1 ? "" : "s"}
+                        </span>
                       </div>
-                      <div className="list-row">
-                        <span>Vacunos</span>
-                        <strong>{item.speciesTotals.vacunos}</strong>
+                      <div className="list-stack">
+                        <div className="list-row">
+                          <span>Vacunos</span>
+                          <strong>{item.speciesTotals.vacunos}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Ovinos</span>
+                          <strong>{item.speciesTotals.ovinos}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Equinos</span>
+                          <strong>{item.speciesTotals.equinos}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Compras</span>
+                          <strong>{item.purchases}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Ventas</span>
+                          <strong>{item.sales}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Traslados ingreso</span>
+                          <strong>{item.transfersIn}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Traslados egreso</span>
+                          <strong>{item.transfersOut}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Faltantes</span>
+                          <strong>{item.shortages}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Lluvia acumulada</span>
+                          <strong>{formatNumber(item.rainfallTotal)} mm</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Ingresos cobrados</span>
+                          <strong>{formatMoney(item.incomeUsd, "USD")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Valor pendiente de cobro</span>
+                          <strong>{formatMoney(item.pendingIncomeUsd, "USD")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Compra ganado USD</span>
+                          <strong>{formatMoney(item.livestockPurchaseExpenseUsd, "USD")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Compra ganado UYU</span>
+                          <strong>{formatMoney(item.livestockPurchaseExpenseUyu, "UYU")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Compra ganado UYU a USD</span>
+                          <strong>{formatMoney(item.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Compra ganado total USD eq.</span>
+                          <strong>{formatMoney(item.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Gastos operativos USD</span>
+                          <strong>{formatMoney(item.operationalExpenseUsd, "USD")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Gastos operativos UYU</span>
+                          <strong>{formatMoney(item.operationalExpenseUyu, "UYU")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Gastos operativos UYU a USD</span>
+                          <strong>{formatMoney(item.operationalExpenseUyuDollarized, "USD")}</strong>
+                        </div>
+                        <div className="list-row">
+                          <span>Gastos operativos total USD eq.</span>
+                          <strong>{formatMoney(item.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
+                        </div>
                       </div>
-                      <div className="list-row">
-                        <span>Ovinos</span>
-                        <strong>{item.speciesTotals.ovinos}</strong>
+                      <div className="inline-metrics">
+                        {item.adjustments > 0 ? (
+                          <span className="data-badge warning">Ajustes pendientes de revisar: {item.adjustments}</span>
+                        ) : null}
+                        {item.deaths > 0 ? (
+                          <span className="data-badge warning">Muertes registradas: {item.deaths}</span>
+                        ) : null}
+                        {item.shortages > 0 ? (
+                          <span className="data-badge warning">Faltantes registrados: {item.shortages}</span>
+                        ) : null}
+                        {item.transfersIn > 0 || item.transfersOut > 0 ? (
+                          <span className="data-badge compact">Traslados {item.transfersIn} / {item.transfersOut}</span>
+                        ) : null}
+                        {item.stockRows.length === 0 ? (
+                          <span className="data-badge warning">Sin existencias visibles</span>
+                        ) : null}
                       </div>
-                      <div className="list-row">
-                        <span>Equinos</span>
-                        <strong>{item.speciesTotals.equinos}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Compras</span>
-                        <strong>{item.purchases}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Ventas</span>
-                        <strong>{item.sales}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Traslados ingreso</span>
-                        <strong>{item.transfersIn}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Traslados egreso</span>
-                        <strong>{item.transfersOut}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Faltantes</span>
-                        <strong>{item.shortages}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Lluvia acumulada</span>
-                        <strong>{formatNumber(item.rainfallTotal)} mm</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Ingresos cobrados</span>
-                        <strong>{formatMoney(item.incomeUsd, "USD")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Valor pendiente de cobro</span>
-                        <strong>{formatMoney(item.pendingIncomeUsd, "USD")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Compra ganado USD</span>
-                        <strong>{formatMoney(item.livestockPurchaseExpenseUsd, "USD")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Compra ganado UYU</span>
-                        <strong>{formatMoney(item.livestockPurchaseExpenseUyu, "UYU")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Compra ganado UYU a USD</span>
-                        <strong>{formatMoney(item.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Compra ganado total USD eq.</span>
-                        <strong>{formatMoney(item.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Gastos operativos USD</span>
-                        <strong>{formatMoney(item.operationalExpenseUsd, "USD")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Gastos operativos UYU</span>
-                        <strong>{formatMoney(item.operationalExpenseUyu, "UYU")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Gastos operativos UYU a USD</span>
-                        <strong>{formatMoney(item.operationalExpenseUyuDollarized, "USD")}</strong>
-                      </div>
-                      <div className="list-row">
-                        <span>Gastos operativos total USD eq.</span>
-                        <strong>{formatMoney(item.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
-                      </div>
-                    </div>
-                    <div className="inline-metrics">
-                      {item.adjustments > 0 ? (
-                        <span className="data-badge warning">Ajustes pendientes de revisar: {item.adjustments}</span>
-                      ) : null}
-                      {item.deaths > 0 ? (
-                        <span className="data-badge warning">Muertes registradas: {item.deaths}</span>
-                      ) : null}
-                      {item.shortages > 0 ? (
-                        <span className="data-badge warning">Faltantes registrados: {item.shortages}</span>
-                      ) : null}
-                      {item.transfersIn > 0 || item.transfersOut > 0 ? (
-                        <span className="data-badge compact">Traslados {item.transfersIn} / {item.transfersOut}</span>
-                      ) : null}
-                      {item.lastRainfallDate ? (
-                        <span className="data-badge compact">Ultima lluvia {item.lastRainfallDate}</span>
-                      ) : (
-                        <span className="data-badge warning">Sin lluvia cargada</span>
-                      )}
-                      {item.stockRows.length === 0 ? (
-                        <span className="data-badge warning">Sin existencias visibles</span>
-                      ) : null}
-                    </div>
-                    {item.specialMovementRows.length > 0 ? (
-                      <div className="report-note-list">
-                        {item.specialMovementRows.map((movement) => (
-                          <div key={movement.id} className="report-note-row">
-                            <strong>
-                              {formatShortDate(movement.date)} | {movement.kind === "shortage" ? "Faltante" : "Traslado"} x{" "}
-                              {movement.quantity} | {movement.categoryLabel}
-                            </strong>
-                            <span>{movement.detail ?? "-"}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            </article>
+                    </article>
+                  ))}
+                </div>
+              </article>
+            ) : (
+              <article className="panel wide">
+                <div className="panel-header">
+                  <div>
+                    <h2>Resumen global</h2>
+                    <p>Sumatoria del mes visible: {visibleMonthRange.label}.</p>
+                  </div>
+                </div>
+                <div className="list-stack">
+                  <div className="list-row">
+                    <span>Establecimientos</span>
+                    <strong>{globalPeriodSummary.establishmentCount}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Campos</span>
+                    <strong>{globalPeriodSummary.fieldCount}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Total vacunos</span>
+                    <strong>{globalStockBySpecies.vacunos}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Total ovinos</span>
+                    <strong>{globalStockBySpecies.ovinos}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Total equinos</span>
+                    <strong>{globalStockBySpecies.equinos}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Entradas animales</span>
+                    <strong>{globalPeriodSummary.entries}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Salidas animales</span>
+                    <strong>{globalPeriodSummary.exits}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Ingresos cobrados</span>
+                    <strong>{formatMoney(globalPeriodSummary.incomeUsd, "USD")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Valor pendiente de cobro</span>
+                    <strong>{formatMoney(globalPeriodSummary.pendingIncomeUsd, "USD")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Compra ganado USD</span>
+                    <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUsd, "USD")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Compra ganado UYU</span>
+                    <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUyu, "UYU")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Compra ganado UYU a USD</span>
+                    <strong>{formatMoney(globalPeriodSummary.livestockPurchaseExpenseUyuDollarized, "USD")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Compra ganado total USD eq.</span>
+                    <strong>{formatMoney(globalPeriodSummary.totalLivestockPurchaseExpenseUsdEquivalent, "USD")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Gastos operativos USD</span>
+                    <strong>{formatMoney(globalPeriodSummary.operationalExpenseUsd, "USD")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Gastos operativos UYU</span>
+                    <strong>{formatMoney(globalPeriodSummary.operationalExpenseUyu, "UYU")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Gastos operativos UYU a USD</span>
+                    <strong>{formatMoney(globalPeriodSummary.operationalExpenseUyuDollarized, "USD")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Gastos operativos total USD eq.</span>
+                    <strong>{formatMoney(globalPeriodSummary.totalOperationalExpenseUsdEquivalent, "USD")}</strong>
+                  </div>
+                  <div className="list-row">
+                    <span>Lluvia acumulada</span>
+                    <strong>{globalPeriodSummary.rainfallTotal} mm</strong>
+                  </div>
+                </div>
+              </article>
+            )}
 
             <article className="panel wide">
               <div className="panel-header">
