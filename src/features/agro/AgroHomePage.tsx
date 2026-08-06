@@ -113,6 +113,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   enqueueWorkspaceSaveRef.current = enqueueWorkspaceSave;
   const [activeView, setActiveView] = useState<AgroView | null>(null);
   const [summarySubView, setSummarySubView] = useState<"establishment" | "global">("establishment");
+  // Selector propio de la sub-pestana "Por establecimiento" de Resumen,
+  // separado del selector de arriba (que usan Animales/Contabilidad/etc y
+  // necesita siempre un establecimiento puntual). Vacio = "Todos".
+  const [summaryEstablishmentFilter, setSummaryEstablishmentFilter] = useState("");
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
   const [selectedEstablishmentId, setSelectedEstablishmentId] = useState("");
@@ -3173,8 +3177,24 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                     <p>Total de cada establecimiento (suma de todos sus potreros) para {visibleMonthRange.label}.</p>
                   </div>
                 </div>
+                <label className="period-picker">
+                  <span>Establecimiento</span>
+                  <select
+                    value={summaryEstablishmentFilter}
+                    onChange={(event) => setSummaryEstablishmentFilter(event.target.value)}
+                  >
+                    <option value="">Todos</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="report-stack">
-                  {summaryByEstablishment.map((item) => (
+                  {summaryByEstablishment
+                    .filter((item) => !summaryEstablishmentFilter || item.establishment.id === summaryEstablishmentFilter)
+                    .map((item) => (
                     <article key={item.establishment.id} className="report-row-card">
                       <div className="report-row-head">
                         <strong>{item.establishment.name}</strong>
