@@ -1076,6 +1076,12 @@ th {
   font-size: 1.6rem;
 }
 
+.projection-formula {
+  opacity: 0.75;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 .compact-card strong {
   font-size: 1.05rem;
   line-height: 1.35;

@@ -93,6 +93,50 @@ interface AgroAnimalsSectionProps {
   onEditMovement: (movementId: string) => void;
 }
 
+// Desglosa el calculo del monto neto en texto (ej: "10 Vacunos x 200kg x
+// $4,50 - $100 comision - $50 IVA = $8.850"), para que quede claro de donde
+// sale el numero sin tener que adivinar la formula.
+function buildAnimalTotalFormula(
+  animalForm: {
+    kind: AnimalMovementKind;
+    species: AgroSpecies;
+    pricingMode: AnimalPricingMode;
+    quantity: string;
+    weightKg: string;
+    unitPrice: string;
+    commissionAmount: string;
+    taxAmount: string;
+    freightAmount: string;
+    currency: MoneyCurrency;
+  },
+  total: number
+) {
+  const quantity = parseDecimalInput(animalForm.quantity) || 0;
+  const weight = parseDecimalInput(animalForm.weightKg) || 0;
+  const price = parseDecimalInput(animalForm.unitPrice) || 0;
+  const commission = parseDecimalInput(animalForm.commissionAmount) || 0;
+  const tax = parseDecimalInput(animalForm.taxAmount) || 0;
+  const freight = parseDecimalInput(animalForm.freightAmount) || 0;
+  const speciesLabel = speciesLabels[animalForm.species];
+
+  const grossFormula =
+    animalForm.pricingMode === "kilo"
+      ? `${formatNumber(quantity, 0)} ${speciesLabel} x ${formatNumber(weight, 0)}kg x ${formatMoney(price, animalForm.currency)}`
+      : `${formatNumber(quantity, 0)} ${speciesLabel} x ${formatMoney(price, animalForm.currency)}`;
+
+  const adjustments: string[] = [];
+  if (animalForm.kind === "sale") {
+    if (commission) adjustments.push(`- ${formatMoney(commission, animalForm.currency)} comision`);
+    if (tax) adjustments.push(`- ${formatMoney(tax, animalForm.currency)} IVA`);
+  } else {
+    if (commission) adjustments.push(`+ ${formatMoney(commission, animalForm.currency)} comision`);
+    if (tax) adjustments.push(`+ ${formatMoney(tax, animalForm.currency)} IVA`);
+    if (freight) adjustments.push(`+ ${formatMoney(freight, animalForm.currency)} flete`);
+  }
+
+  return `${grossFormula}${adjustments.length ? ` ${adjustments.join(" ")}` : ""} = ${formatMoney(total, animalForm.currency)}`;
+}
+
 export function AgroAnimalsSection({
   establishments,
   fields,
@@ -532,6 +576,7 @@ export function AgroAnimalsSection({
             <div className="projection-card span-2">
               <span>Monto neto proyectado</span>
               <strong>{formatMoney(projectedAnimalTotal, animalForm.currency)}</strong>
+              <small className="projection-formula">{buildAnimalTotalFormula(animalForm, projectedAnimalTotal)}</small>
               {animalForm.kind === "sale" ? (
                 <small>
                   Pendiente de cobro{" "}
