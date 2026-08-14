@@ -1,6 +1,14 @@
 import { animalMovementFormKinds, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
 import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate, parseDecimalInput } from "./agro.home.shared";
-import { AgroSpecies, AnimalMovementKind, AnimalMovementRecord, Establishment, FieldUnit, MoneyCurrency } from "./agro.types";
+import {
+  AgroSpecies,
+  AnimalMovementKind,
+  AnimalMovementRecord,
+  AnimalPricingMode,
+  Establishment,
+  FieldUnit,
+  MoneyCurrency
+} from "./agro.types";
 
 interface AgroAnimalsSectionProps {
   establishments: Establishment[];
@@ -17,6 +25,7 @@ interface AgroAnimalsSectionProps {
     kind: AnimalMovementKind;
     quantity: string;
     earTag: string;
+    pricingMode: AnimalPricingMode;
     weightKg: string;
     unitPrice: string;
     freightAmount: string;
@@ -68,6 +77,7 @@ interface AgroAnimalsSectionProps {
       kind: AnimalMovementKind;
       quantity: string;
       earTag: string;
+      pricingMode: AnimalPricingMode;
       weightKg: string;
       unitPrice: string;
       freightAmount: string;
@@ -401,21 +411,37 @@ export function AgroAnimalsSection({
           ) : null}
           {isCommercialAnimalMovement ? (
             <>
-              <label className={animalFormErrors.weightKg ? "field-error" : undefined}>
-                <span>Peso</span>
-                <input
-                  ref={registerAnimalFieldRef("weightKg")}
-                  type="text"
-                  inputMode="decimal"
-                  value={animalForm.weightKg}
+              <label>
+                <span>Modalidad de venta</span>
+                <select
+                  value={animalForm.pricingMode}
                   onChange={(event) => {
                     clearAnimalFieldError("weightKg");
-                    setAnimalForm((current) => ({ ...current, weightKg: event.target.value }));
+                    setAnimalForm((current) => ({ ...current, pricingMode: event.target.value as AnimalPricingMode }));
                   }}
-                />
+                >
+                  <option value="kilo">Por kilo</option>
+                  <option value="unidad">Por unidad</option>
+                </select>
               </label>
+              {animalForm.pricingMode === "kilo" ? (
+                <label className={animalFormErrors.weightKg ? "field-error" : undefined}>
+                  <span>Peso individual (kg)</span>
+                  <input
+                    ref={registerAnimalFieldRef("weightKg")}
+                    type="text"
+                    inputMode="decimal"
+                    value={animalForm.weightKg}
+                    onChange={(event) => {
+                      clearAnimalFieldError("weightKg");
+                      setAnimalForm((current) => ({ ...current, weightKg: event.target.value }));
+                    }}
+                  />
+                  <small>Se multiplica por la cantidad para obtener el peso total.</small>
+                </label>
+              ) : null}
               <label className={animalFormErrors.unitPrice ? "field-error" : undefined}>
-                <span>Precio</span>
+                <span>{animalForm.pricingMode === "kilo" ? "Precio por kilo" : "Precio por unidad"}</span>
                 <input
                   ref={registerAnimalFieldRef("unitPrice")}
                   type="text"
@@ -504,11 +530,12 @@ export function AgroAnimalsSection({
           </label>
           {isCommercialAnimalMovement ? (
             <div className="projection-card span-2">
-              <span>Monto total proyectado</span>
+              <span>Monto neto proyectado</span>
               <strong>{formatMoney(projectedAnimalTotal, animalForm.currency)}</strong>
               {animalForm.kind === "sale" ? (
                 <small>
-                  Pendiente {formatMoney(Math.max(0, projectedAnimalTotal - (parseDecimalInput(animalForm.collectedAmount) || 0)), animalForm.currency)}
+                  Pendiente de cobro{" "}
+                  {formatMoney(Math.max(0, projectedAnimalTotal - (parseDecimalInput(animalForm.collectedAmount) || 0)), animalForm.currency)}
                 </small>
               ) : null}
             </div>

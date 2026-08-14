@@ -65,6 +65,7 @@ import {
   AgroView,
   AnimalMovementKind,
   AnimalMovementRecord,
+  AnimalPricingMode,
   Establishment,
   ExpenseConcept,
   FieldUnit,
@@ -163,6 +164,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     kind: "purchase" as AnimalMovementKind,
     quantity: "10",
     earTag: "",
+    pricingMode: "kilo" as AnimalPricingMode,
     weightKg: "",
     unitPrice: "",
     freightAmount: "",
@@ -281,6 +283,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       kind: preserveContext ? current.kind : ("purchase" as AnimalMovementKind),
       quantity: preserveContext ? "" : "10",
       earTag: "",
+      pricingMode: preserveContext ? current.pricingMode : ("kilo" as AnimalPricingMode),
       weightKg: "",
       unitPrice: "",
       freightAmount: "",
@@ -379,6 +382,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                   : getFirstFieldIdForEstablishment(fields, destinationEstablishmentId);
               })()
             : "",
+        pricingMode: "kilo",
         weightKg: "",
         unitPrice: "",
         freightAmount: "",
@@ -2304,7 +2308,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     }
 
     if (commercialMovement) {
-      if (!Number.isFinite(weightKg) || weightKg < 0) {
+      if (animalForm.pricingMode === "kilo" && (!Number.isFinite(weightKg) || weightKg < 0)) {
         nextErrors.weightKg = "Falta agregar peso.";
       }
 
@@ -2355,7 +2359,16 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     const normalizedCommission = commercialMovement && Number.isFinite(commissionAmount) ? commissionAmount : 0;
     const normalizedTax = commercialMovement && Number.isFinite(taxAmount) ? taxAmount : 0;
     const totalAmount = commercialMovement
-      ? calculateAnimalTotal(quantity, unitPrice, normalizedCommission, normalizedTax, normalizedFreight)
+      ? calculateAnimalTotal(
+          animalForm.kind,
+          animalForm.pricingMode,
+          quantity,
+          animalForm.pricingMode === "kilo" ? weightKg : 0,
+          unitPrice,
+          normalizedCommission,
+          normalizedTax,
+          normalizedFreight
+        )
       : undefined;
 
     if (animalForm.kind === "sale") {
@@ -2397,7 +2410,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       kind: correctionMovement?.kind ?? animalForm.kind,
       quantity: correctionMovement?.quantity ?? quantity,
       earTag: isCattleDeathWithEarTag ? animalForm.earTag.trim() : undefined,
-      weightKg: commercialMovement ? weightKg : undefined,
+      pricingMode: commercialMovement ? animalForm.pricingMode : undefined,
+      weightKg: commercialMovement && animalForm.pricingMode === "kilo" ? weightKg : undefined,
       unitPrice: commercialMovement ? unitPrice : undefined,
       freightAmount: animalForm.kind === "purchase" ? normalizedFreight : undefined,
       commissionAmount: commercialMovement ? normalizedCommission : undefined,
@@ -2714,6 +2728,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       kind: movement.kind,
       quantity: `${movement.quantity}`,
       earTag: movement.earTag ?? "",
+      pricingMode: movement.pricingMode ?? "kilo",
       weightKg: movement.weightKg !== undefined ? `${movement.weightKg}` : "",
       unitPrice: movement.unitPrice !== undefined ? `${movement.unitPrice}` : "",
       freightAmount: movement.freightAmount !== undefined ? `${movement.freightAmount}` : "",
@@ -2944,7 +2959,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   );
 
   const projectedAnimalTotal = calculateAnimalTotal(
+    animalForm.kind,
+    animalForm.pricingMode,
     parseDecimalInput(animalForm.quantity) || 0,
+    animalForm.pricingMode === "kilo" ? parseDecimalInput(animalForm.weightKg) || 0 : 0,
     parseDecimalInput(animalForm.unitPrice) || 0,
     parseDecimalInput(animalForm.commissionAmount) || 0,
     parseDecimalInput(animalForm.taxAmount) || 0,

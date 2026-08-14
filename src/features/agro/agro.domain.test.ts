@@ -8,8 +8,17 @@ describe("agro functional round", () => {
     expect(getIncomeConceptForSpecies("equinos")).toBe("venta_equinos");
   });
 
-  it("calculates animal totals with freight, commission and iva", () => {
-    expect(calculateAnimalTotal(10, 4.5, 100, 50, 25)).toBe(220);
+  it("calculates sale totals by kilo, subtracting commission and iva", () => {
+    // 10 cabezas x 200kg c/u x $4.5/kg = 9000 bruto, -100 comision -50 iva
+    expect(calculateAnimalTotal("sale", "kilo", 10, 200, 4.5, 100, 50, 25)).toBe(8850);
+  });
+
+  it("calculates sale totals by unidad (no peso), subtracting commission and iva", () => {
+    expect(calculateAnimalTotal("sale", "unidad", 10, 0, 450, 100, 50, 25)).toBe(4350);
+  });
+
+  it("calculates purchase totals adding freight, commission and iva", () => {
+    expect(calculateAnimalTotal("purchase", "kilo", 10, 200, 4.5, 100, 50, 25)).toBe(9175);
   });
 
   it("derives stock direction from movement kind", () => {

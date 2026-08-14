@@ -1,4 +1,4 @@
-import { AgroSpecies, AnimalMovementKind, IncomeConcept } from "./agro.types";
+import { AgroSpecies, AnimalMovementKind, AnimalPricingMode, IncomeConcept } from "./agro.types";
 
 export function deriveMovementDirection(kind: AnimalMovementKind) {
   return kind === "purchase" || kind === "birth" || kind === "transfer_in" || kind === "correction_in"
@@ -6,14 +6,27 @@ export function deriveMovementDirection(kind: AnimalMovementKind) {
     : "exit";
 }
 
+// "kilo": el bruto es peso individual x cantidad x precio (precio por
+// kilo). "unidad": el bruto es cantidad x precio (precio por cabeza), el
+// peso no interviene. En una venta, comision e IVA se restan del bruto
+// (nunca se suman); en una compra se suman junto con el flete.
 export function calculateAnimalTotal(
+  kind: AnimalMovementKind,
+  pricingMode: AnimalPricingMode,
   quantity: number,
+  weightKg: number,
   unitPrice: number,
   commissionAmount: number,
   taxAmount: number,
   freightAmount: number
 ) {
-  return quantity * unitPrice + commissionAmount + taxAmount + freightAmount;
+  const grossAmount = pricingMode === "kilo" ? weightKg * quantity * unitPrice : quantity * unitPrice;
+
+  if (kind === "sale") {
+    return grossAmount - commissionAmount - taxAmount;
+  }
+
+  return grossAmount + commissionAmount + taxAmount + freightAmount;
 }
 
 export function getIncomeConceptForSpecies(species: AgroSpecies): IncomeConcept {

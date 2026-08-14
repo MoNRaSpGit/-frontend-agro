@@ -17,6 +17,11 @@ export type AnimalMovementKind =
   | "correction_in"
   | "correction_out";
 
+// "kilo": el total sale de peso individual x cantidad x precio (precio por
+// kilo). "unidad": el total sale de cantidad x precio (precio por cabeza),
+// sin pedir peso.
+export type AnimalPricingMode = "kilo" | "unidad";
+
 export type AccountingEntryType = "income" | "expense";
 
 export type MoneyCurrency = "USD" | "UYU";
@@ -75,6 +80,7 @@ export interface AnimalMovementRecord {
   kind: AnimalMovementKind;
   quantity: number;
   earTag?: string;
+  pricingMode?: AnimalPricingMode;
   weightKg?: number;
   unitPrice?: number;
   freightAmount?: number;
