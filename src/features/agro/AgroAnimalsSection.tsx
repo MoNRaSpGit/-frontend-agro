@@ -195,9 +195,16 @@ export function AgroAnimalsSection({
       (!isInternalTransfer || item.id !== animalForm.fieldId)
   );
 
+  // Antes las dos mitades de un traslado decian "Traslado" sin distincion,
+  // asi que la fila de llegada (con su propio campo/potrero = destino)
+  // podia confundirse con un origen nuevo. Ahora queda explicito cual de
+  // las dos filas es cual, sin tener que interpretar la columna Destino.
   function getMovementLabel(movement: AnimalMovementRecord) {
-    if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
-      return "Traslado";
+    if (movement.kind === "transfer_out") {
+      return "Traslado (salida)";
+    }
+    if (movement.kind === "transfer_in") {
+      return "Traslado (llegada)";
     }
 
     return movementKindLabels[movement.kind as keyof typeof movementKindLabels];
