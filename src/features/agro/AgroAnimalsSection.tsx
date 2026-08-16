@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { animalMovementFormKinds, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
 import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate, parseDecimalInput } from "./agro.home.shared";
 import {
@@ -39,6 +40,12 @@ interface AgroAnimalsSectionProps {
   animalFormPanelRef: React.RefObject<HTMLElement | null>;
   animalMovements: AnimalMovementRecord[];
   animalLedgerRows: AnimalMovementRecord[];
+  // Igual que animalLedgerRows pero sin el filtro de campo seleccionado --
+  // se usa para la tabla "Movimientos recientes" (ver mas abajo), que
+  // muestra los ultimos movimientos de cualquier campo/establecimiento sin
+  // que el cliente tenga que ir cambiando el filtro para ver ambas puntas
+  // de un traslado entre establecimientos distintos.
+  globalAnimalLedgerRows: AnimalMovementRecord[];
   animalLedgerSummary: {
     purchases: number;
     sales: number;
@@ -145,6 +152,7 @@ export function AgroAnimalsSection({
   animalFormPanelRef,
   animalMovements,
   animalLedgerRows,
+  globalAnimalLedgerRows,
   animalLedgerSummary,
   animalSearchTerm,
   animalTableRef,
@@ -170,6 +178,12 @@ export function AgroAnimalsSection({
   showAnimalFloatingScrollbar,
   onEditMovement
 }: AgroAnimalsSectionProps) {
+  const [showAllRecentMovements, setShowAllRecentMovements] = useState(false);
+  const RECENT_MOVEMENTS_PREVIEW_COUNT = 5;
+  const visibleRecentMovements = showAllRecentMovements
+    ? globalAnimalLedgerRows
+    : globalAnimalLedgerRows.slice(0, RECENT_MOVEMENTS_PREVIEW_COUNT);
+
   const isTransferMovement = animalForm.kind === "transfer";
   const isInternalTransfer = isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
   const selectedEstablishment = establishments.find((item) => item.id === animalForm.establishmentId);
@@ -225,6 +239,61 @@ export function AgroAnimalsSection({
     }
 
     return "-";
+  }
+
+  // Reusada por la tabla "Movimientos recientes" (sin filtro de campo) y
+  // por la "Planilla de animales" (filtrada) para que ambas muestren
+  // exactamente lo mismo por fila -- una sola fuente de verdad para el
+  // origen/destino y el resto de las columnas.
+  function renderLedgerRow(movement: AnimalMovementRecord) {
+    const establishment = establishments.find((item) => item.id === movement.establishmentId);
+    const field = fields.find((item) => item.id === movement.fieldId);
+    const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+    const movementDestinationLabel = getMovementDestinationLabel(movement);
+    return (
+      <tr key={movement.id}>
+        <td className="cell-date">{formatShortDate(movement.date)}</td>
+        <td className="cell-field">{establishment?.name ?? "-"}</td>
+        <td className="cell-field">{field?.name ?? "-"}</td>
+        <td className="cell-kind">{getMovementLabel(movement)}</td>
+        <td className="cell-detail">{movementDestinationLabel}</td>
+        <td className="cell-description">{movement.notes.trim() || "-"}</td>
+        <td className="cell-number">{movement.quantity}</td>
+        <td className="cell-category">{category ? formatCategoryLabel(category.label) : movement.categoryCode}</td>
+        <td className="cell-tag">{movement.earTag ?? "-"}</td>
+        <td className="cell-number">{formatNumber(movement.weightKg)}</td>
+        <td className="cell-money">
+          {movement.unitPrice !== undefined ? formatMoney(movement.unitPrice, movement.currency ?? "USD") : "-"}
+        </td>
+        <td className="cell-money">
+          {movement.freightAmount !== undefined ? formatMoney(movement.freightAmount, movement.currency ?? "USD") : "-"}
+        </td>
+        <td className="cell-money">
+          {movement.commissionAmount !== undefined ? formatMoney(movement.commissionAmount, movement.currency ?? "USD") : "-"}
+        </td>
+        <td className="cell-money">
+          {movement.taxAmount !== undefined ? formatMoney(movement.taxAmount, movement.currency ?? "USD") : "-"}
+        </td>
+        <td className="cell-money">
+          {movement.totalAmount !== undefined ? formatMoney(movement.totalAmount, movement.currency ?? "USD") : "-"}
+        </td>
+        <td className="cell-link">
+          <span className={movement.linkedAccountingEntryId ? "data-badge accent compact" : "data-badge compact"}>
+            {movement.linkedAccountingEntryId ? "Si" : "No"}
+          </span>
+        </td>
+        <td className="cell-actions">
+          <div className="table-actions">
+            <button type="button" className="ghost-button" onClick={() => onEditMovement(movement.id)}>
+              Editar
+            </button>
+            <button type="button" className="ghost-button danger" onClick={() => requestDeleteAnimalMovement(movement.id)}>
+              Eliminar
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
   }
 
   return (
@@ -619,6 +688,58 @@ export function AgroAnimalsSection({
       <article className="panel wide">
         <div className="panel-header">
           <div>
+            <h2>Movimientos recientes</h2>
+            <p>Todos los movimientos (compras, ventas, traslados, etc.), sin importar el campo filtrado abajo -- para ver ambas puntas de un traslado entre establecimientos sin tener que cambiar el filtro.</p>
+          </div>
+        </div>
+        <div className="table-wrap floating-scroll-host">
+          <table className="animal-ledger-table">
+            <thead>
+              <tr>
+                <th className="cell-date">Fecha</th>
+                <th className="cell-field">Campo</th>
+                <th className="cell-field">Potrero</th>
+                <th className="cell-kind">Movimiento</th>
+                <th className="cell-detail">Destino</th>
+                <th className="cell-description">Descripcion</th>
+                <th className="cell-number">Cantidad</th>
+                <th className="cell-category">Categoria</th>
+                <th className="cell-tag">Caravana</th>
+                <th className="cell-number">Peso</th>
+                <th className="cell-money">Precio</th>
+                <th className="cell-money">Flete</th>
+                <th className="cell-money">Comision</th>
+                <th className="cell-money">IVA</th>
+                <th className="cell-money">Monto total</th>
+                <th className="cell-link">Relacion contable</th>
+                <th className="cell-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRecentMovements.length ? (
+                visibleRecentMovements.map((movement) => renderLedgerRow(movement))
+              ) : (
+                <tr>
+                  <td className="cell-empty" colSpan={17}>
+                    No hay movimientos en el rango de fechas visible.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {globalAnimalLedgerRows.length > RECENT_MOVEMENTS_PREVIEW_COUNT ? (
+          <div className="action-row">
+            <button type="button" className="ghost-button" onClick={() => setShowAllRecentMovements((current) => !current)}>
+              {showAllRecentMovements ? "Ver menos" : `Ver todos (${globalAnimalLedgerRows.length})`}
+            </button>
+          </div>
+        ) : null}
+      </article>
+
+      <article className="panel wide">
+        <div className="panel-header">
+          <div>
             <h2>Planilla de animales</h2>
             <p>Vista de trabajo para revisar compras, ventas y movimientos del rodeo.</p>
           </div>
@@ -662,62 +783,7 @@ export function AgroAnimalsSection({
                 <th className="cell-actions">Acciones</th>
               </tr>
             </thead>
-            <tbody>
-              {animalLedgerRows.map((movement) => {
-                const establishment = establishments.find((item) => item.id === movement.establishmentId);
-                const field = fields.find((item) => item.id === movement.fieldId);
-                const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
-                const movementDestinationLabel = getMovementDestinationLabel(movement);
-                return (
-                  <tr key={movement.id}>
-                    <td className="cell-date">{formatShortDate(movement.date)}</td>
-                    <td className="cell-field">{establishment?.name ?? "-"}</td>
-                    <td className="cell-field">{field?.name ?? "-"}</td>
-                    <td className="cell-kind">{getMovementLabel(movement)}</td>
-                    <td className="cell-detail">{movementDestinationLabel}</td>
-                    <td className="cell-description">{movement.notes.trim() || "-"}</td>
-                    <td className="cell-number">{movement.quantity}</td>
-                    <td className="cell-category">{category ? formatCategoryLabel(category.label) : movement.categoryCode}</td>
-                    <td className="cell-tag">{movement.earTag ?? "-"}</td>
-                    <td className="cell-number">{formatNumber(movement.weightKg)}</td>
-                    <td className="cell-money">
-                      {movement.unitPrice !== undefined ? formatMoney(movement.unitPrice, movement.currency ?? "USD") : "-"}
-                    </td>
-                    <td className="cell-money">
-                      {movement.freightAmount !== undefined ? formatMoney(movement.freightAmount, movement.currency ?? "USD") : "-"}
-                    </td>
-                    <td className="cell-money">
-                      {movement.commissionAmount !== undefined ? formatMoney(movement.commissionAmount, movement.currency ?? "USD") : "-"}
-                    </td>
-                    <td className="cell-money">
-                      {movement.taxAmount !== undefined ? formatMoney(movement.taxAmount, movement.currency ?? "USD") : "-"}
-                    </td>
-                    <td className="cell-money">
-                      {movement.totalAmount !== undefined ? formatMoney(movement.totalAmount, movement.currency ?? "USD") : "-"}
-                    </td>
-                    <td className="cell-link">
-                      <span className={movement.linkedAccountingEntryId ? "data-badge accent compact" : "data-badge compact"}>
-                        {movement.linkedAccountingEntryId ? "Si" : "No"}
-                      </span>
-                    </td>
-                    <td className="cell-actions">
-                      <div className="table-actions">
-                        <button type="button" className="ghost-button" onClick={() => onEditMovement(movement.id)}>
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button danger"
-                          onClick={() => requestDeleteAnimalMovement(movement.id)}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
+            <tbody>{animalLedgerRows.map((movement) => renderLedgerRow(movement))}</tbody>
           </table>
         </div>
         <div

@@ -936,6 +936,18 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       .sort((left, right) => right.date.localeCompare(left.date));
   }, [animalMovements, animalSearchTerm, establishments, fields, selectedFieldIdSet, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
+  // A diferencia de animalLedgerRows (filtrada por el campo seleccionado,
+  // igual que el resto de la pantalla), esta lista es deliberadamente
+  // global: el cliente pidio ver sus ultimos movimientos (de cualquier
+  // tipo, no solo traslados) sin tener que cambiar el filtro de campo
+  // para ver ambas puntas de un traslado entre establecimientos. Solo
+  // respeta el rango de fechas visible, no el campo ni la busqueda.
+  const globalAnimalLedgerRows = useMemo(() => {
+    return [...animalMovements]
+      .filter((movement) => isDateWithinRange(movement.date, visibleMonthRange.startDate, visibleMonthRange.endDate))
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [animalMovements, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+
   const transferRows = useMemo(() => {
     const seenIds = new Set<string>();
 
@@ -3066,6 +3078,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             animalFormPanelRef={animalFormPanelRef}
             animalMovements={animalMovements}
             animalLedgerRows={animalLedgerRows}
+            globalAnimalLedgerRows={globalAnimalLedgerRows}
             animalLedgerSummary={animalLedgerSummary}
             animalSearchTerm={animalSearchTerm}
             animalTableRef={animalTableRef}
