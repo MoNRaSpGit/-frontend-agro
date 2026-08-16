@@ -195,10 +195,12 @@ export function AgroAnimalsSection({
       (!isInternalTransfer || item.id !== animalForm.fieldId)
   );
 
-  // Antes las dos mitades de un traslado decian "Traslado" sin distincion,
-  // asi que la fila de llegada (con su propio campo/potrero = destino)
-  // podia confundirse con un origen nuevo. Ahora queda explicito cual de
-  // las dos filas es cual, sin tener que interpretar la columna Destino.
+  // "Movimientos recientes" (tabla global, sin filtro de campo) solo
+  // muestra la salida de cada traslado -- se filtra en
+  // globalAnimalLedgerRows (AgroHomePage.tsx), a pedido del cliente. La
+  // "Planilla de animales" (filtrada por campo) sigue mostrando las dos
+  // mitades como siempre, asi que aca se distingue cual es cual para que
+  // no se confunda la fila de llegada con un origen nuevo.
   function getMovementLabel(movement: AnimalMovementRecord) {
     if (movement.kind === "transfer_out") {
       return "Traslado (salida)";

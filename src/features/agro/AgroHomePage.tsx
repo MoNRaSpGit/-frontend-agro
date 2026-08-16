@@ -944,7 +944,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // respeta el rango de fechas visible, no el campo ni la busqueda.
   const globalAnimalLedgerRows = useMemo(() => {
     return [...animalMovements]
-      .filter((movement) => isDateWithinRange(movement.date, visibleMonthRange.startDate, visibleMonthRange.endDate))
+      .filter(
+        (movement) =>
+          movement.kind !== "transfer_in" && isDateWithinRange(movement.date, visibleMonthRange.startDate, visibleMonthRange.endDate)
+      )
       .sort((left, right) => right.date.localeCompare(left.date));
   }, [animalMovements, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
