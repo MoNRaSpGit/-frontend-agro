@@ -195,18 +195,9 @@ export function AgroAnimalsSection({
       (!isInternalTransfer || item.id !== animalForm.fieldId)
   );
 
-  // "Movimientos recientes" (tabla global, sin filtro de campo) solo
-  // muestra la salida de cada traslado -- se filtra en
-  // globalAnimalLedgerRows (AgroHomePage.tsx), a pedido del cliente. La
-  // "Planilla de animales" (filtrada por campo) sigue mostrando las dos
-  // mitades como siempre, asi que aca se distingue cual es cual para que
-  // no se confunda la fila de llegada con un origen nuevo.
   function getMovementLabel(movement: AnimalMovementRecord) {
-    if (movement.kind === "transfer_out") {
-      return "Traslado (salida)";
-    }
-    if (movement.kind === "transfer_in") {
-      return "Traslado (llegada)";
+    if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
+      return "Traslado";
     }
 
     return movementKindLabels[movement.kind as keyof typeof movementKindLabels];
