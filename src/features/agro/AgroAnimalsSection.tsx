@@ -189,8 +189,26 @@ export function AgroAnimalsSection({
     return movementKindLabels[movement.kind as keyof typeof movementKindLabels];
   }
 
+  // La fila "transfer_in" YA es la llegada (su propio establishmentId/fieldId
+  // es el destino real, ver AgroHomePage.tsx donde se crea el par), asi que
+  // ahi el destino se lee de la propia fila. La fila "transfer_out" todavia
+  // no llego a ningun lado -- ahi el destino hay que sacarlo de la fila
+  // emparejada (la transfer_in). Antes esto no distinguia el caso y siempre
+  // miraba la fila emparejada, mostrando el ORIGEN como "Destino" en la fila
+  // de llegada.
   function getMovementDestinationLabel(movement: AnimalMovementRecord) {
-    if (movement.kind === "transfer_out" || movement.kind === "transfer_in") {
+    if (movement.kind === "transfer_in") {
+      const ownEstablishment = establishments.find((item) => item.id === movement.establishmentId);
+      const ownField = fields.find((item) => item.id === movement.fieldId);
+
+      if (!ownEstablishment) {
+        return "-";
+      }
+
+      return ownField ? `${ownEstablishment.name} / ${ownField.name}` : ownEstablishment.name;
+    }
+
+    if (movement.kind === "transfer_out") {
       const pairedMovement = movement.pairedTransferMovementId
         ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
         : undefined;
