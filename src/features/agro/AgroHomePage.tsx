@@ -907,6 +907,21 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           return false;
         }
 
+        // Traslado interno visible por completo: si las dos puntas del
+        // mismo traslado caen dentro de lo que se esta mirando ahora (ej:
+        // "todo el campo" con un traslado entre dos potreros de ese mismo
+        // campo), no repetir el mismo movimiento dos veces -- se deja solo
+        // la fila de salida (Traslado), igual que ya hace
+        // globalAnimalLedgerRows. Si solo una punta esta a la vista (un
+        // potrero puntual, o un traslado entre campos distintos), la fila
+        // de llegada (Ingreso) se sigue mostrando normal.
+        if (movement.kind === "transfer_in" && movement.pairedTransferMovementId) {
+          const pairedMovement = animalMovements.find((item) => item.id === movement.pairedTransferMovementId);
+          if (pairedMovement && selectedFieldIdSet.has(pairedMovement.fieldId)) {
+            return false;
+          }
+        }
+
         if (!isDateWithinRange(movement.date, visibleMonthRange.startDate, visibleMonthRange.endDate)) {
           return false;
         }
