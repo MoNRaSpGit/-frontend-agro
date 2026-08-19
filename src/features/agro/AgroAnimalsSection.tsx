@@ -204,40 +204,72 @@ export function AgroAnimalsSection({
       (!isInternalTransfer || item.id !== animalForm.fieldId)
   );
 
+  // "Traslado" es la fila de salida (transfer_out) y "Ingreso" es la fila
+  // de llegada (transfer_in) del mismo movimiento -- antes las dos decian
+  // "Traslado" a secas, y sin mirar la fecha no se sabia si esa fila era
+  // la salida o la llegada.
   function getMovementLabel(movement: AnimalMovementRecord) {
-    if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
+    if (movement.kind === "transfer_out" || movement.kind === "transfer_internal") {
       return "Traslado";
+    }
+    if (movement.kind === "transfer_in") {
+      return "Ingreso";
     }
 
     return movementKindLabels[movement.kind as keyof typeof movementKindLabels];
   }
 
-  // Muestra siempre la CONTRAPARTE del traslado (la otra punta), nunca el
-  // propio campo/potrero de la fila -- si no, al mirar la planilla de un
-  // potrero especifico, una llegada (transfer_in) mostraba su propio
-  // potrero como "destino", que es inutil (es el mismo que ya se esta
-  // mirando) y no dice de donde vinieron los animales. Con esto, mirando
-  // un potrero, cada fila funciona como un renglon de cuenta corriente:
-  // las llegadas muestran "Desde [origen]" y las salidas "Hacia [destino]".
-  function getMovementDestinationLabel(movement: AnimalMovementRecord) {
-    if (movement.kind !== "transfer_in" && movement.kind !== "transfer_out") {
-      return "-";
+  type LugarOrigenDestino = {
+    campoOrigen: string;
+    potreroOrigen: string;
+    campoDestino: string;
+    potreroDestino: string;
+  };
+
+  // Arma las 4 columnas de origen/destino para que cada fila se lea como
+  // un renglon de cuenta corriente, sin tener que adivinar que campo es
+  // el propio y cual es "el otro" (antes una sola columna mezclaba campo
+  // y potrero en un mismo texto -- ej: "Personal / Bermuda" -- y se leia
+  // como si hubiera 3 potreros en vez de 2).
+  function getOrigenDestino(movement: AnimalMovementRecord): LugarOrigenDestino {
+    const ownEstablishment = establishments.find((item) => item.id === movement.establishmentId);
+    const ownField = fields.find((item) => item.id === movement.fieldId);
+    const propio = { campo: ownEstablishment?.name ?? "-", potrero: ownField?.name ?? "-" };
+
+    const vacio: LugarOrigenDestino = { campoOrigen: "-", potreroOrigen: "-", campoDestino: "-", potreroDestino: "-" };
+
+    // Traslados: el origen/destino real es SIEMPRE la otra punta del par,
+    // nunca el propio campo/potrero de la fila.
+    if (movement.kind === "transfer_out" || movement.kind === "transfer_in" || movement.kind === "transfer_internal") {
+      const pairedMovement = movement.pairedTransferMovementId
+        ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
+        : undefined;
+      const pairedEstablishment = pairedMovement ? establishments.find((item) => item.id === pairedMovement.establishmentId) : undefined;
+      const pairedField = pairedMovement ? fields.find((item) => item.id === pairedMovement.fieldId) : undefined;
+      const contraparte = { campo: pairedEstablishment?.name ?? "-", potrero: pairedField?.name ?? "-" };
+
+      return movement.kind === "transfer_in"
+        ? { campoOrigen: contraparte.campo, potreroOrigen: contraparte.potrero, campoDestino: propio.campo, potreroDestino: propio.potrero }
+        : { campoOrigen: propio.campo, potreroOrigen: propio.potrero, campoDestino: contraparte.campo, potreroDestino: contraparte.potrero };
     }
 
-    const pairedMovement = movement.pairedTransferMovementId
-      ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
-      : undefined;
-    const pairedEstablishment = pairedMovement
-      ? establishments.find((item) => item.id === pairedMovement.establishmentId)
-      : undefined;
-    const pairedField = pairedMovement ? fields.find((item) => item.id === pairedMovement.fieldId) : undefined;
-
-    if (!pairedEstablishment) {
-      return "-";
+    // Movimientos que suman animales al potrero (entran): compra,
+    // nacimiento, correccion hacia arriba -- el potrero propio es el
+    // destino, no hay origen (viene de afuera del sistema).
+    if (movement.kind === "purchase" || movement.kind === "birth" || movement.kind === "correction_in") {
+      return { ...vacio, campoDestino: propio.campo, potreroDestino: propio.potrero };
     }
 
-    const lugar = pairedField ? `${pairedEstablishment.name} / ${pairedField.name}` : pairedEstablishment.name;
-    return movement.kind === "transfer_in" ? `Desde ${lugar}` : `Hacia ${lugar}`;
+    // Movimientos que restan animales del potrero (salen): venta, muerte,
+    // faltante, correccion hacia abajo -- el potrero propio es el origen,
+    // no hay destino (se va afuera del sistema).
+    if (movement.kind === "sale" || movement.kind === "death" || movement.kind === "shortage" || movement.kind === "correction_out") {
+      return { ...vacio, campoOrigen: propio.campo, potreroOrigen: propio.potrero };
+    }
+
+    // Ajuste / correccion generica: no tienen una direccion fija (pueden
+    // sumar o restar), asi que no se fuerza un origen/destino inventado.
+    return vacio;
   }
 
   // Reusada por la tabla "Movimientos recientes" (sin filtro de campo) y
@@ -245,17 +277,16 @@ export function AgroAnimalsSection({
   // exactamente lo mismo por fila -- una sola fuente de verdad para el
   // origen/destino y el resto de las columnas.
   function renderLedgerRow(movement: AnimalMovementRecord) {
-    const establishment = establishments.find((item) => item.id === movement.establishmentId);
-    const field = fields.find((item) => item.id === movement.fieldId);
     const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
-    const movementDestinationLabel = getMovementDestinationLabel(movement);
+    const lugar = getOrigenDestino(movement);
     return (
       <tr key={movement.id}>
         <td className="cell-date">{formatShortDate(movement.date)}</td>
-        <td className="cell-field">{establishment?.name ?? "-"}</td>
-        <td className="cell-field">{field?.name ?? "-"}</td>
         <td className="cell-kind">{getMovementLabel(movement)}</td>
-        <td className="cell-detail">{movementDestinationLabel}</td>
+        <td className="cell-field">{lugar.campoOrigen}</td>
+        <td className="cell-field">{lugar.potreroOrigen}</td>
+        <td className="cell-field">{lugar.campoDestino}</td>
+        <td className="cell-field">{lugar.potreroDestino}</td>
         <td className="cell-description">{movement.notes.trim() || "-"}</td>
         <td className="cell-number">{movement.quantity}</td>
         <td className="cell-category">{category ? formatCategoryLabel(category.label) : movement.categoryCode}</td>
@@ -712,10 +743,11 @@ export function AgroAnimalsSection({
             <thead>
               <tr>
                 <th className="cell-date">Fecha</th>
-                <th className="cell-field">Campo</th>
-                <th className="cell-field">Potrero</th>
                 <th className="cell-kind">Movimiento</th>
-                <th className="cell-detail">Origen / Destino</th>
+                <th className="cell-field">Campo origen</th>
+                <th className="cell-field">Potrero origen</th>
+                <th className="cell-field">Campo destino</th>
+                <th className="cell-field">Potrero destino</th>
                 <th className="cell-description">Descripcion</th>
                 <th className="cell-number">Cantidad</th>
                 <th className="cell-category">Categoria</th>
@@ -789,10 +821,11 @@ export function AgroAnimalsSection({
             <thead>
               <tr>
                 <th className="cell-date">Fecha</th>
-                <th className="cell-field">Campo</th>
-                <th className="cell-field">Potrero</th>
                 <th className="cell-kind">Movimiento</th>
-                <th className="cell-detail">Origen / Destino</th>
+                <th className="cell-field">Campo origen</th>
+                <th className="cell-field">Potrero origen</th>
+                <th className="cell-field">Campo destino</th>
+                <th className="cell-field">Potrero destino</th>
                 <th className="cell-description">Descripcion</th>
                 <th className="cell-number">Cantidad</th>
                 <th className="cell-category">Categoria</th>

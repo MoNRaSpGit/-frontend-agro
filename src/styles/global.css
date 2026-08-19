@@ -1014,11 +1014,6 @@ th {
   min-width: 110px;
 }
 
-.animal-ledger-table .cell-detail {
-  min-width: 180px;
-  line-height: 1.4;
-}
-
 .animal-ledger-table .cell-description {
   min-width: 180px;
   line-height: 1.4;
