@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { animalMovementFormKinds, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
 import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate, parseDecimalInput } from "./agro.home.shared";
 import {
@@ -178,11 +178,20 @@ export function AgroAnimalsSection({
   showAnimalFloatingScrollbar,
   onEditMovement
 }: AgroAnimalsSectionProps) {
-  const [showAllRecentMovements, setShowAllRecentMovements] = useState(false);
-  const RECENT_MOVEMENTS_PREVIEW_COUNT = 5;
-  const visibleRecentMovements = showAllRecentMovements
-    ? globalAnimalLedgerRows
-    : globalAnimalLedgerRows.slice(0, RECENT_MOVEMENTS_PREVIEW_COUNT);
+  const LEDGER_PREVIEW_COUNT = 5;
+  const LEDGER_PREVIEW_STEP = 5;
+  const [visibleFilteredCount, setVisibleFilteredCount] = useState(LEDGER_PREVIEW_COUNT);
+  const [visibleRecentCount, setVisibleRecentCount] = useState(LEDGER_PREVIEW_COUNT);
+
+  const visibleFilteredMovements = animalLedgerRows.slice(0, visibleFilteredCount);
+  const visibleRecentMovements = globalAnimalLedgerRows.slice(0, visibleRecentCount);
+
+  // Vuelve a la vista compacta cuando cambia la busqueda -- si no, el
+  // usuario podia quedar viendo "todos" de una busqueda vieja mezclado con
+  // los resultados nuevos.
+  useEffect(() => {
+    setVisibleFilteredCount(LEDGER_PREVIEW_COUNT);
+  }, [animalSearchTerm]);
 
   const isTransferMovement = animalForm.kind === "transfer";
   const isInternalTransfer = isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
@@ -688,60 +697,8 @@ export function AgroAnimalsSection({
       <article className="panel wide">
         <div className="panel-header">
           <div>
-            <h2>Movimientos recientes</h2>
-            <p>Todos los movimientos (compras, ventas, traslados, etc.), sin importar el campo filtrado abajo -- para ver ambas puntas de un traslado entre establecimientos sin tener que cambiar el filtro.</p>
-          </div>
-        </div>
-        <div className="table-wrap floating-scroll-host">
-          <table className="animal-ledger-table">
-            <thead>
-              <tr>
-                <th className="cell-date">Fecha</th>
-                <th className="cell-field">Campo</th>
-                <th className="cell-field">Potrero</th>
-                <th className="cell-kind">Movimiento</th>
-                <th className="cell-detail">Destino</th>
-                <th className="cell-description">Descripcion</th>
-                <th className="cell-number">Cantidad</th>
-                <th className="cell-category">Categoria</th>
-                <th className="cell-tag">Caravana</th>
-                <th className="cell-number">Peso</th>
-                <th className="cell-money">Precio</th>
-                <th className="cell-money">Flete</th>
-                <th className="cell-money">Comision</th>
-                <th className="cell-money">IVA</th>
-                <th className="cell-money">Monto total</th>
-                <th className="cell-link">Relacion contable</th>
-                <th className="cell-actions">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRecentMovements.length ? (
-                visibleRecentMovements.map((movement) => renderLedgerRow(movement))
-              ) : (
-                <tr>
-                  <td className="cell-empty" colSpan={17}>
-                    No hay movimientos en el rango de fechas visible.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {globalAnimalLedgerRows.length > RECENT_MOVEMENTS_PREVIEW_COUNT ? (
-          <div className="action-row">
-            <button type="button" className="ghost-button" onClick={() => setShowAllRecentMovements((current) => !current)}>
-              {showAllRecentMovements ? "Ver menos" : `Ver todos (${globalAnimalLedgerRows.length})`}
-            </button>
-          </div>
-        ) : null}
-      </article>
-
-      <article className="panel wide">
-        <div className="panel-header">
-          <div>
             <h2>Planilla de animales</h2>
-            <p>Vista de trabajo para revisar compras, ventas y movimientos del rodeo.</p>
+            <p>Vista de trabajo para revisar compras, ventas y movimientos del rodeo, filtrada por el campo/potrero seleccionado.</p>
           </div>
         </div>
         <div className="inline-metrics">
@@ -783,7 +740,17 @@ export function AgroAnimalsSection({
                 <th className="cell-actions">Acciones</th>
               </tr>
             </thead>
-            <tbody>{animalLedgerRows.map((movement) => renderLedgerRow(movement))}</tbody>
+            <tbody>
+              {visibleFilteredMovements.length ? (
+                visibleFilteredMovements.map((movement) => renderLedgerRow(movement))
+              ) : (
+                <tr>
+                  <td className="cell-empty" colSpan={17}>
+                    No hay movimientos para este filtro.
+                  </td>
+                </tr>
+              )}
+            </tbody>
           </table>
         </div>
         <div
@@ -792,6 +759,103 @@ export function AgroAnimalsSection({
         >
           <div ref={animalTableScrollbarInnerRef} className="floating-table-scrollbar-inner" />
         </div>
+        {animalLedgerRows.length > LEDGER_PREVIEW_COUNT ? (
+          <div className="action-row">
+            {visibleFilteredCount < animalLedgerRows.length ? (
+              <>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setVisibleFilteredCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, animalLedgerRows.length))}
+                >
+                  Ver 5 más
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setVisibleFilteredCount(animalLedgerRows.length)}
+                >
+                  Ver todos ({animalLedgerRows.length})
+                </button>
+              </>
+            ) : (
+              <button type="button" className="ghost-button" onClick={() => setVisibleFilteredCount(LEDGER_PREVIEW_COUNT)}>
+                Ver menos
+              </button>
+            )}
+          </div>
+        ) : null}
+      </article>
+
+      <article className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Movimientos recientes</h2>
+            <p>Todos los movimientos (compras, ventas, traslados, etc.), sin importar el campo filtrado arriba -- para ver ambas puntas de un traslado entre establecimientos sin tener que cambiar el filtro.</p>
+          </div>
+        </div>
+        <div className="table-wrap floating-scroll-host">
+          <table className="animal-ledger-table">
+            <thead>
+              <tr>
+                <th className="cell-date">Fecha</th>
+                <th className="cell-field">Campo</th>
+                <th className="cell-field">Potrero</th>
+                <th className="cell-kind">Movimiento</th>
+                <th className="cell-detail">Destino</th>
+                <th className="cell-description">Descripcion</th>
+                <th className="cell-number">Cantidad</th>
+                <th className="cell-category">Categoria</th>
+                <th className="cell-tag">Caravana</th>
+                <th className="cell-number">Peso</th>
+                <th className="cell-money">Precio</th>
+                <th className="cell-money">Flete</th>
+                <th className="cell-money">Comision</th>
+                <th className="cell-money">IVA</th>
+                <th className="cell-money">Monto total</th>
+                <th className="cell-link">Relacion contable</th>
+                <th className="cell-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRecentMovements.length ? (
+                visibleRecentMovements.map((movement) => renderLedgerRow(movement))
+              ) : (
+                <tr>
+                  <td className="cell-empty" colSpan={17}>
+                    No hay movimientos en el rango de fechas visible.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {globalAnimalLedgerRows.length > LEDGER_PREVIEW_COUNT ? (
+          <div className="action-row">
+            {visibleRecentCount < globalAnimalLedgerRows.length ? (
+              <>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setVisibleRecentCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, globalAnimalLedgerRows.length))}
+                >
+                  Ver 5 más
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setVisibleRecentCount(globalAnimalLedgerRows.length)}
+                >
+                  Ver todos ({globalAnimalLedgerRows.length})
+                </button>
+              </>
+            ) : (
+              <button type="button" className="ghost-button" onClick={() => setVisibleRecentCount(LEDGER_PREVIEW_COUNT)}>
+                Ver menos
+              </button>
+            )}
+          </div>
+        ) : null}
       </article>
     </section>
   );
