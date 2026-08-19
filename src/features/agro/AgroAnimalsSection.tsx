@@ -212,42 +212,32 @@ export function AgroAnimalsSection({
     return movementKindLabels[movement.kind as keyof typeof movementKindLabels];
   }
 
-  // La fila "transfer_in" YA es la llegada (su propio establishmentId/fieldId
-  // es el destino real, ver AgroHomePage.tsx donde se crea el par), asi que
-  // ahi el destino se lee de la propia fila. La fila "transfer_out" todavia
-  // no llego a ningun lado -- ahi el destino hay que sacarlo de la fila
-  // emparejada (la transfer_in). Antes esto no distinguia el caso y siempre
-  // miraba la fila emparejada, mostrando el ORIGEN como "Destino" en la fila
-  // de llegada.
+  // Muestra siempre la CONTRAPARTE del traslado (la otra punta), nunca el
+  // propio campo/potrero de la fila -- si no, al mirar la planilla de un
+  // potrero especifico, una llegada (transfer_in) mostraba su propio
+  // potrero como "destino", que es inutil (es el mismo que ya se esta
+  // mirando) y no dice de donde vinieron los animales. Con esto, mirando
+  // un potrero, cada fila funciona como un renglon de cuenta corriente:
+  // las llegadas muestran "Desde [origen]" y las salidas "Hacia [destino]".
   function getMovementDestinationLabel(movement: AnimalMovementRecord) {
-    if (movement.kind === "transfer_in") {
-      const ownEstablishment = establishments.find((item) => item.id === movement.establishmentId);
-      const ownField = fields.find((item) => item.id === movement.fieldId);
-
-      if (!ownEstablishment) {
-        return "-";
-      }
-
-      return ownField ? `${ownEstablishment.name} / ${ownField.name}` : ownEstablishment.name;
+    if (movement.kind !== "transfer_in" && movement.kind !== "transfer_out") {
+      return "-";
     }
 
-    if (movement.kind === "transfer_out") {
-      const pairedMovement = movement.pairedTransferMovementId
-        ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
-        : undefined;
-      const pairedEstablishment = pairedMovement
-        ? establishments.find((item) => item.id === pairedMovement.establishmentId)
-        : undefined;
-      const pairedField = pairedMovement ? fields.find((item) => item.id === pairedMovement.fieldId) : undefined;
+    const pairedMovement = movement.pairedTransferMovementId
+      ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
+      : undefined;
+    const pairedEstablishment = pairedMovement
+      ? establishments.find((item) => item.id === pairedMovement.establishmentId)
+      : undefined;
+    const pairedField = pairedMovement ? fields.find((item) => item.id === pairedMovement.fieldId) : undefined;
 
-      if (!pairedEstablishment) {
-        return "-";
-      }
-
-      return pairedField ? `${pairedEstablishment.name} / ${pairedField.name}` : pairedEstablishment.name;
+    if (!pairedEstablishment) {
+      return "-";
     }
 
-    return "-";
+    const lugar = pairedField ? `${pairedEstablishment.name} / ${pairedField.name}` : pairedEstablishment.name;
+    return movement.kind === "transfer_in" ? `Desde ${lugar}` : `Hacia ${lugar}`;
   }
 
   // Reusada por la tabla "Movimientos recientes" (sin filtro de campo) y
@@ -725,7 +715,7 @@ export function AgroAnimalsSection({
                 <th className="cell-field">Campo</th>
                 <th className="cell-field">Potrero</th>
                 <th className="cell-kind">Movimiento</th>
-                <th className="cell-detail">Destino</th>
+                <th className="cell-detail">Origen / Destino</th>
                 <th className="cell-description">Descripcion</th>
                 <th className="cell-number">Cantidad</th>
                 <th className="cell-category">Categoria</th>
@@ -802,7 +792,7 @@ export function AgroAnimalsSection({
                 <th className="cell-field">Campo</th>
                 <th className="cell-field">Potrero</th>
                 <th className="cell-kind">Movimiento</th>
-                <th className="cell-detail">Destino</th>
+                <th className="cell-detail">Origen / Destino</th>
                 <th className="cell-description">Descripcion</th>
                 <th className="cell-number">Cantidad</th>
                 <th className="cell-category">Categoria</th>
