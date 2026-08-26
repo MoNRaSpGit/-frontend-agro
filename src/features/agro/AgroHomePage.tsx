@@ -81,6 +81,32 @@ interface AgroHomePageProps {
   onSignOut: () => void;
 }
 
+// Opciones simplificadas para el filtro de movimientos de "Resumen por
+// establecimiento": agrupa los "kind" internos (transfer_out/transfer_internal,
+// correction_in/correction_out/adjustment) en una sola opcion cada uno, para
+// no marear al usuario con la granularidad interna del ledger de Animales.
+type SummaryMovementFilterKind = "purchase" | "sale" | "birth" | "death" | "transfer" | "shortage" | "correction";
+
+const SUMMARY_MOVEMENT_FILTER_LABELS: Record<SummaryMovementFilterKind, string> = {
+  purchase: "Compras",
+  sale: "Ventas",
+  birth: "Nacimientos",
+  death: "Muertes",
+  transfer: "Traslados",
+  shortage: "Faltantes",
+  correction: "Ajustes / correcciones"
+};
+
+function matchesSummaryMovementFilterKind(kind: AnimalMovementKind, filterKind: SummaryMovementFilterKind) {
+  if (filterKind === "transfer") {
+    return kind === "transfer_out" || kind === "transfer_internal";
+  }
+  if (filterKind === "correction") {
+    return kind === "correction_in" || kind === "correction_out" || kind === "adjustment";
+  }
+  return kind === filterKind;
+}
+
 export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) {
   const today = getTodayDate();
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
@@ -118,6 +144,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // separado del selector de arriba (que usan Animales/Contabilidad/etc y
   // necesita siempre un establecimiento puntual). Vacio = "Todos".
   const [summaryEstablishmentFilter, setSummaryEstablishmentFilter] = useState("");
+  // Filtro de tipo de movimiento para la planilla de "Resumen por
+  // establecimiento". A diferencia del de establecimiento, este es
+  // obligatorio: vacio = no mostrar filas (evita tirar todo el historial de
+  // una) hasta que el usuario elija que quiere ver.
+  const [summaryMovementKindFilter, setSummaryMovementKindFilter] = useState<SummaryMovementFilterKind | "">("");
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
   const [selectedEstablishmentId, setSelectedEstablishmentId] = useState("");
@@ -965,6 +996,23 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       )
       .sort((left, right) => right.date.localeCompare(left.date));
   }, [animalMovements, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+
+  // Planilla de "Resumen por establecimiento": mismos datos que el ledger de
+  // Animales (globalAnimalLedgerRows, ya acotado al mes visible), filtrados
+  // por establecimiento y tipo de movimiento. El tipo es obligatorio: sin
+  // eleccion no se muestra nada, para no tirar de entrada todo el historial.
+  const summaryMovementRows = useMemo(() => {
+    if (!summaryMovementKindFilter) {
+      return [];
+    }
+
+    return globalAnimalLedgerRows.filter((movement) => {
+      if (summaryEstablishmentFilter && movement.establishmentId !== summaryEstablishmentFilter) {
+        return false;
+      }
+      return matchesSummaryMovementFilterKind(movement.kind, summaryMovementKindFilter);
+    });
+  }, [globalAnimalLedgerRows, summaryEstablishmentFilter, summaryMovementKindFilter]);
 
   const transferRows = useMemo(() => {
     const seenIds = new Set<string>();
@@ -3240,6 +3288,72 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                     ))}
                   </select>
                 </label>
+
+                <label className="period-picker">
+                  <span>Movimiento</span>
+                  <select
+                    value={summaryMovementKindFilter}
+                    onChange={(event) => setSummaryMovementKindFilter(event.target.value as SummaryMovementFilterKind | "")}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {(Object.entries(SUMMARY_MOVEMENT_FILTER_LABELS) as Array<[SummaryMovementFilterKind, string]>).map(
+                      ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
+
+                {summaryMovementKindFilter ? (
+                  <div className="table-wrap">
+                    <table className="animal-ledger-table">
+                      <thead>
+                        <tr>
+                          <th className="cell-date">Fecha</th>
+                          <th className="cell-field">Establecimiento</th>
+                          <th className="cell-field">Potrero</th>
+                          <th className="cell-category">Categoria</th>
+                          <th className="cell-number">Cantidad</th>
+                          <th className="cell-description">Detalle</th>
+                          <th className="cell-money">Monto total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summaryMovementRows.length ? (
+                          summaryMovementRows.map((movement) => {
+                            const field = fields.find((item) => item.id === movement.fieldId);
+                            const establishment = establishments.find((item) => item.id === movement.establishmentId);
+                            const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+                            const detail = describeAnimalMovementDetail(movement, animalMovements, fields);
+
+                            return (
+                              <tr key={movement.id}>
+                                <td className="cell-date">{formatShortDate(movement.date)}</td>
+                                <td className="cell-field">{establishment?.name ?? "-"}</td>
+                                <td className="cell-field">{field?.name ?? "-"}</td>
+                                <td className="cell-category">{category ? formatCategoryLabel(category.label) : movement.categoryCode}</td>
+                                <td className="cell-number">{movement.quantity}</td>
+                                <td className="cell-description">{detail ?? (movement.notes.trim() || "-")}</td>
+                                <td className="cell-money">
+                                  {movement.totalAmount !== undefined ? formatMoney(movement.totalAmount, movement.currency ?? "USD") : "-"}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td className="cell-empty" colSpan={7}>
+                              No hay {SUMMARY_MOVEMENT_FILTER_LABELS[summaryMovementKindFilter].toLowerCase()} para este filtro.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+
                 <div className="report-stack">
                   {summaryByEstablishment
                     .filter((item) => !summaryEstablishmentFilter || item.establishment.id === summaryEstablishmentFilter)
