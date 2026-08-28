@@ -34,6 +34,7 @@ import {
   getTodayDate,
   getVisibleMonthRange,
   getYearMonth,
+  formatYearMonth,
   isDateOnOrBefore,
   isDateWithinRange,
   isLivestockPurchaseEntry,
@@ -1062,30 +1063,60 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     });
   }, [globalAnimalLedgerRows, summaryEstablishmentFilter, summaryMovementKindFilter]);
 
-  // Mismo criterio que globalAnimalLedgerRows, pero para movimientos de
-  // caja: todos los establecimientos, solo acotado al mes visible.
-  const globalAccountingLedgerRows = useMemo(() => {
-    return [...accountingEntries]
-      .filter((entry) => isDateWithinRange(entry.date, visibleMonthRange.startDate, visibleMonthRange.endDate))
-      .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, visibleMonthRange.endDate, visibleMonthRange.startDate]);
-
-  // Igual que summaryMovementRows, pero para el select "Contabilidad": el
-  // cliente pedia poder ver cuanto se gasto/cobro en un rubro puntual
-  // (sanidad, sueldos, etc.) y no lo encontraba en ningun lado -- reusa el
+  // Para el select "Contabilidad": el cliente pedia poder ver cuanto se
+  // gasto/cobro en un rubro puntual (sanidad, sueldos, etc.) por mes y en
+  // el año completo, y no lo encontraba en ningun lado -- a diferencia de
+  // "Movimiento" (acotado al mes visible), esto va por el "Año visible"
+  // completo para poder armar el resumen mes a mes + total anual. Reusa el
   // mismo summaryEstablishmentFilter de arriba, sin selector propio.
-  const summaryAccountingRows = useMemo(() => {
+  const summaryAccountingYearRows = useMemo(() => {
     if (!summaryAccountingConceptFilter) {
       return [];
     }
 
-    return globalAccountingLedgerRows.filter((entry) => {
-      if (summaryEstablishmentFilter && entry.establishmentId !== summaryEstablishmentFilter) {
-        return false;
-      }
-      return entry.concept === summaryAccountingConceptFilter;
-    });
-  }, [globalAccountingLedgerRows, summaryEstablishmentFilter, summaryAccountingConceptFilter]);
+    return accountingEntries
+      .filter((entry) => {
+        if (entry.date.slice(0, 4) !== selectedYear) {
+          return false;
+        }
+        if (summaryEstablishmentFilter && entry.establishmentId !== summaryEstablishmentFilter) {
+          return false;
+        }
+        return entry.concept === summaryAccountingConceptFilter;
+      })
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [accountingEntries, selectedYear, summaryEstablishmentFilter, summaryAccountingConceptFilter]);
+
+  // Resumen mes a mes del rubro elegido, cada mes con su total separado por
+  // moneda (un rubro nunca mezcla ingreso y egreso, pero si puede tener
+  // renglones en pesos y en dolares). Solo lista los meses que tienen algun
+  // movimiento, para no mostrar 12 filas en $0.
+  const summaryAccountingMonthlyTotals = useMemo(() => {
+    const totalsByMonth = new Map<string, { UYU: number; USD: number }>();
+
+    for (const entry of summaryAccountingYearRows) {
+      const yearMonth = getYearMonth(entry.date);
+      const current = totalsByMonth.get(yearMonth) ?? { UYU: 0, USD: 0 };
+      current[entry.currency] += entry.netAmount;
+      totalsByMonth.set(yearMonth, current);
+    }
+
+    return [...totalsByMonth.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([yearMonth, totals]) => ({ yearMonth, label: formatYearMonth(yearMonth), totals }));
+  }, [summaryAccountingYearRows]);
+
+  // Total del año completo (suma de los totales mensuales), separado por
+  // moneda igual que arriba.
+  const summaryAccountingYearTotal = useMemo(() => {
+    return summaryAccountingMonthlyTotals.reduce(
+      (accumulated, month) => ({
+        UYU: accumulated.UYU + month.totals.UYU,
+        USD: accumulated.USD + month.totals.USD
+      }),
+      { UYU: 0, USD: 0 }
+    );
+  }, [summaryAccountingMonthlyTotals]);
 
   const transferRows = useMemo(() => {
     const seenIds = new Set<string>();
@@ -3471,49 +3502,87 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                 </label>
 
                 {summaryAccountingConceptFilter ? (
-                  <div className="table-wrap">
-                    <table className="animal-ledger-table">
-                      <thead>
-                        <tr>
-                          <th className="cell-date">Fecha</th>
-                          <th className="cell-field">Establecimiento</th>
-                          <th className="cell-category">Rubro</th>
-                          <th className="cell-description">Observaciones</th>
-                          <th className="cell-money">Monto</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {summaryAccountingRows.length ? (
-                          summaryAccountingRows.map((entry) => {
-                            const establishment = establishments.find((item) => item.id === entry.establishmentId);
-                            const conceptLabel =
-                              entry.type === "income"
-                                ? incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels]
-                                : expenseConceptLabels[entry.concept as keyof typeof expenseConceptLabels];
-
-                            return (
-                              <tr key={entry.id}>
-                                <td className="cell-date">{formatShortDate(entry.date)}</td>
-                                <td className="cell-field">{establishment?.name ?? "-"}</td>
-                                <td className="cell-category">{conceptLabel ?? entry.concept}</td>
-                                <td className="cell-description">{entry.notes.trim() || "-"}</td>
-                                <td className={`cell-money ${entry.type === "income" ? "tone-positive" : "tone-negative"}`}>
-                                  {entry.type === "income" ? "+" : "-"}
-                                  {formatMoney(entry.netAmount, entry.currency)}
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
+                  <>
+                    <div className="table-wrap">
+                      <table className="animal-ledger-table">
+                        <thead>
                           <tr>
-                            <td className="cell-empty" colSpan={5}>
-                              No hay movimientos de contabilidad para este filtro.
-                            </td>
+                            <th className="cell-field">Mes</th>
+                            <th className="cell-money">Total UYU</th>
+                            <th className="cell-money">Total USD</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {summaryAccountingMonthlyTotals.length ? (
+                            summaryAccountingMonthlyTotals.map((month) => (
+                              <tr key={month.yearMonth}>
+                                <td className="cell-field">{month.label}</td>
+                                <td className="cell-money">{month.totals.UYU ? formatMoney(month.totals.UYU, "UYU") : "-"}</td>
+                                <td className="cell-money">{month.totals.USD ? formatMoney(month.totals.USD, "USD") : "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td className="cell-empty" colSpan={3}>
+                                No hay movimientos de contabilidad para este filtro en {selectedYear}.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                        {summaryAccountingMonthlyTotals.length ? (
+                          <tfoot>
+                            <tr className="animal-ledger-table-total-row">
+                              <td className="cell-field">Total {selectedYear}</td>
+                              <td className="cell-money">
+                                {summaryAccountingYearTotal.UYU ? formatMoney(summaryAccountingYearTotal.UYU, "UYU") : "-"}
+                              </td>
+                              <td className="cell-money">
+                                {summaryAccountingYearTotal.USD ? formatMoney(summaryAccountingYearTotal.USD, "USD") : "-"}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        ) : null}
+                      </table>
+                    </div>
+
+                    {summaryAccountingYearRows.length ? (
+                      <div className="table-wrap">
+                        <table className="animal-ledger-table">
+                          <thead>
+                            <tr>
+                              <th className="cell-date">Fecha</th>
+                              <th className="cell-field">Establecimiento</th>
+                              <th className="cell-category">Rubro</th>
+                              <th className="cell-description">Observaciones</th>
+                              <th className="cell-money">Monto</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {summaryAccountingYearRows.map((entry) => {
+                              const establishment = establishments.find((item) => item.id === entry.establishmentId);
+                              const conceptLabel =
+                                entry.type === "income"
+                                  ? incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels]
+                                  : expenseConceptLabels[entry.concept as keyof typeof expenseConceptLabels];
+
+                              return (
+                                <tr key={entry.id}>
+                                  <td className="cell-date">{formatShortDate(entry.date)}</td>
+                                  <td className="cell-field">{establishment?.name ?? "-"}</td>
+                                  <td className="cell-category">{conceptLabel ?? entry.concept}</td>
+                                  <td className="cell-description">{entry.notes.trim() || "-"}</td>
+                                  <td className={`cell-money ${entry.type === "income" ? "tone-positive" : "tone-negative"}`}>
+                                    {entry.type === "income" ? "+" : "-"}
+                                    {formatMoney(entry.netAmount, entry.currency)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
 
                 <div className="report-stack">

@@ -972,6 +972,12 @@ table {
   min-width: 1380px;
 }
 
+.animal-ledger-table-total-row td {
+  font-weight: 700;
+  background: rgba(73, 87, 66, 0.06);
+  border-top: 2px solid rgba(73, 87, 66, 0.2);
+}
+
 th,
 td {
   text-align: left;
