@@ -459,7 +459,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       establishmentId: preserveContext ? current.establishmentId : activeEstablishmentId,
       fieldId: preserveContext ? current.fieldId : activeFieldId,
       species: preserveContext ? current.species : ("vacunos" as AgroSpecies),
-      categoryCode: preserveContext ? current.categoryCode : categoryCatalog.vacunos[0]?.code ?? "",
+      // "" en vez de la primera categoria del catalogo fijo: el efecto que
+      // sincroniza sanitaryForm.categoryCode con sanitaryAvailableCategories
+      // la completa sola con la primera que realmente tenga stock en el
+      // potrero, o la deja vacia si no hay ninguna.
+      categoryCode: preserveContext ? current.categoryCode : "",
       quantity: "",
       treatment: "",
       notes: ""
@@ -859,10 +863,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     return quantity;
   }, [animalForm.categoryCode, animalForm.fieldId, animalForm.species, editingAnimalMovement, stockBalanceMap]);
 
-  // Igual que el traslado, pero solo informativo: en sanidad no se mueve
-  // stock, asi que no filtramos ni bloqueamos nada, solo mostramos cuantos
-  // animales de cada categoria hay en el potrero elegido para facilitar la
-  // carga del tratamiento.
+  // En sanidad no se mueve stock, pero igual se filtra y se bloquea con la
+  // misma logica que el traslado: antes el combo de categoria mostraba el
+  // catalogo fijo completo (con "(0 en el potrero)" al lado, pero
+  // seleccionable igual), asi que si no se elegia a mano quedaba
+  // seleccionada por defecto la primera categoria del catalogo aunque no
+  // hubiera ni un animal de esa categoria en el potrero -- la sanidad
+  // quedaba registrada con una categoria inventada.
   const sanitaryFieldAvailability = useMemo(
     () => computeFieldAvailability(stockBalanceMap, sanitaryForm.fieldId),
     [sanitaryForm.fieldId, stockBalanceMap]
@@ -872,6 +879,43 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     () => sanitaryFieldAvailability.get(sanitaryForm.species) ?? [],
     [sanitaryFieldAvailability, sanitaryForm.species]
   );
+
+  // Si se esta editando un registro ya guardado, su categoria puede ya no
+  // tener stock hoy en el potrero (ej: se vendieron esos animales despues
+  // de aplicarle el tratamiento) -- se agrega igual al combo para no
+  // esconder la opcion que ese registro realmente tiene, pero no se usa
+  // para el autocompletado ni para la validacion de un registro nuevo.
+  const sanitaryCategoryOptions = useMemo(() => {
+    if (
+      editingSanitaryRecordId &&
+      sanitaryForm.categoryCode &&
+      !sanitaryAvailableCategories.some((item) => item.categoryCode === sanitaryForm.categoryCode)
+    ) {
+      return [...sanitaryAvailableCategories, { categoryCode: sanitaryForm.categoryCode, quantity: 0 }];
+    }
+    return sanitaryAvailableCategories;
+  }, [sanitaryAvailableCategories, editingSanitaryRecordId, sanitaryForm.categoryCode]);
+
+  // Autocompleta sanitaryForm.categoryCode con la primera categoria que
+  // realmente tenga stock en el potrero/especie elegidos (o la deja vacia
+  // si no hay ninguna), cada vez que cambia el potrero, la especie, o el
+  // stock disponible deja invalida la categoria actual. No se toca
+  // mientras se edita un registro existente (ver sanitaryCategoryOptions).
+  useEffect(() => {
+    if (editingSanitaryRecordId) return;
+
+    setSanitaryForm((current) => {
+      const nextCategoryCode = sanitaryAvailableCategories.some((item) => item.categoryCode === current.categoryCode)
+        ? current.categoryCode
+        : sanitaryAvailableCategories[0]?.categoryCode ?? "";
+
+      if (nextCategoryCode === current.categoryCode) {
+        return current;
+      }
+
+      return { ...current, categoryCode: nextCategoryCode };
+    });
+  }, [sanitaryAvailableCategories, editingSanitaryRecordId]);
 
   const sanitarySpeciesAvailableQuantity = useMemo(() => {
     const totals: Record<AgroSpecies, number> = { vacunos: 0, ovinos: 0, equinos: 0 };
@@ -2681,6 +2725,25 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       return;
     }
 
+    // Solo se valida contra el stock real al cargar un tratamiento nuevo.
+    // Un registro que se esta editando puede referirse a una categoria que
+    // hoy ya no tiene stock en el potrero (se vendieron esos animales
+    // despues), y no tiene sentido bloquear la correccion de un dato viejo
+    // por eso -- la sanidad es un registro historico, no mueve stock.
+    if (!editingSanitaryRecordId) {
+      const availableCategory = sanitaryAvailableCategories.find(
+        (item) => item.categoryCode === sanitaryForm.categoryCode
+      );
+      if (!availableCategory) {
+        showError("Esa categoria no tiene stock disponible en este potrero.");
+        return;
+      }
+      if (quantity > availableCategory.quantity) {
+        showError(`Solo hay ${formatNumber(availableCategory.quantity, 0)} disponibles en este potrero para esa categoria.`);
+        return;
+      }
+    }
+
     if (!sanitaryForm.treatment.trim()) {
       showError("Falta agregar el tratamiento sanitario.");
       return;
@@ -3226,7 +3289,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             fields={fields}
             editingSanitaryRecordId={editingSanitaryRecordId}
             sanitaryForm={sanitaryForm}
-            sanitaryAvailableCategories={sanitaryAvailableCategories}
+            sanitaryCategoryOptions={sanitaryCategoryOptions}
             sanitarySpeciesAvailableQuantity={sanitarySpeciesAvailableQuantity}
             sanitaryRows={sanitaryRows}
             sanitarySearchTerm={sanitarySearchTerm}

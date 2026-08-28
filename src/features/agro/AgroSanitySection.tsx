@@ -17,7 +17,7 @@ interface AgroSanitySectionProps {
     treatment: string;
     notes: string;
   };
-  sanitaryAvailableCategories: Array<{ categoryCode: string; quantity: number }>;
+  sanitaryCategoryOptions: Array<{ categoryCode: string; quantity: number }>;
   sanitarySpeciesAvailableQuantity: Record<AgroSpecies, number>;
   sanitaryRows: Array<{
     id: string;
@@ -55,7 +55,7 @@ export function AgroSanitySection({
   fields,
   editingSanitaryRecordId,
   sanitaryForm,
-  sanitaryAvailableCategories,
+  sanitaryCategoryOptions,
   sanitarySpeciesAvailableQuantity,
   sanitaryRows,
   sanitarySearchTerm,
@@ -110,11 +110,11 @@ export function AgroSanitySection({
               value={sanitaryForm.species}
               onChange={(event) => {
                 const nextSpecies = event.target.value as AgroSpecies;
-                setSanitaryForm((current) => ({
-                  ...current,
-                  species: nextSpecies,
-                  categoryCode: categoryCatalog[nextSpecies][0]?.code ?? ""
-                }));
+                // La categoria la recalcula sola AgroHomePage (efecto de
+                // autocompletado) segun lo que realmente haya en el
+                // potrero para la especie nueva -- aca no se toca, para no
+                // dejarla un instante en la primera del catalogo fijo.
+                setSanitaryForm((current) => ({ ...current, species: nextSpecies }));
               }}
             >
               {Object.entries(speciesLabels).map(([value, label]) => (
@@ -126,19 +126,23 @@ export function AgroSanitySection({
           </label>
           <label>
             <span>Categoria</span>
-            <select
-              value={sanitaryForm.categoryCode}
-              onChange={(event) => setSanitaryForm((current) => ({ ...current, categoryCode: event.target.value }))}
-            >
-              {categoryCatalog[sanitaryForm.species].map((category) => {
-                const available = sanitaryAvailableCategories.find((item) => item.categoryCode === category.code)?.quantity ?? 0;
-                return (
-                  <option key={category.code} value={category.code}>
-                    {`${formatCategoryLabel(category.label)} (${formatNumber(available, 0)} en el potrero)`}
-                  </option>
-                );
-              })}
-            </select>
+            {sanitaryCategoryOptions.length ? (
+              <select
+                value={sanitaryForm.categoryCode}
+                onChange={(event) => setSanitaryForm((current) => ({ ...current, categoryCode: event.target.value }))}
+              >
+                {sanitaryCategoryOptions.map(({ categoryCode, quantity }) => {
+                  const category = categoryCatalog[sanitaryForm.species].find((item) => item.code === categoryCode);
+                  return (
+                    <option key={categoryCode} value={categoryCode}>
+                      {`${formatCategoryLabel(category?.label ?? categoryCode)} (${formatNumber(quantity, 0)} en el potrero)`}
+                    </option>
+                  );
+                })}
+              </select>
+            ) : (
+              <div className="readonly-field">No hay animales de esta especie en este potrero.</div>
+            )}
           </label>
           <label>
             <span>Cantidad de animales</span>
