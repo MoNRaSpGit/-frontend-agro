@@ -3446,7 +3446,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                   </div>
                 ) : null}
 
-                <label className="period-picker">
+                <label className="period-picker summary-filter-divider">
                   <span>Contabilidad</span>
                   <select
                     value={summaryAccountingConceptFilter}

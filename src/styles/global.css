@@ -493,6 +493,12 @@ button {
   min-width: 170px;
 }
 
+.summary-filter-divider {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(60, 77, 49, 0.16);
+}
+
 .establishment-picker span,
 .period-picker span,
 .form-grid label span {
