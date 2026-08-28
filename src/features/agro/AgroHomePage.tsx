@@ -149,6 +149,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // obligatorio: vacio = no mostrar filas (evita tirar todo el historial de
   // una) hasta que el usuario elija que quiere ver.
   const [summaryMovementKindFilter, setSummaryMovementKindFilter] = useState<SummaryMovementFilterKind | "">("");
+  // Mismo patron que summaryMovementKindFilter, pero para movimientos de
+  // caja: "" = no mostrar filas. Usa el mismo summaryEstablishmentFilter
+  // de arriba (no tiene un selector de establecimiento propio).
+  const [summaryAccountingConceptFilter, setSummaryAccountingConceptFilter] = useState<string>("");
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
   const [selectedEstablishmentId, setSelectedEstablishmentId] = useState("");
@@ -158,11 +162,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const [animalSearchTerm, setAnimalSearchTerm] = useState("");
   const [accountingSearchTerm, setAccountingSearchTerm] = useState("");
   const [accountingStatusFilter, setAccountingStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
-  // "" = todos los rubros. Filtro por rubro (sanidad, sueldos, etc.) para
-  // la planilla contable, igual que el filtro de estado de cobro que ya
-  // esta al lado -- para poder ver de un vistazo cuanto se gasto/cobro en
-  // un rubro puntual en el campo/periodo visible.
-  const [accountingConceptFilter, setAccountingConceptFilter] = useState<string>("");
   const [linkedOperationsStatusFilter, setLinkedOperationsStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
   const [rainfallSearchTerm, setRainfallSearchTerm] = useState("");
   const [sanitarySearchTerm, setSanitarySearchTerm] = useState("");
@@ -1063,6 +1062,31 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     });
   }, [globalAnimalLedgerRows, summaryEstablishmentFilter, summaryMovementKindFilter]);
 
+  // Mismo criterio que globalAnimalLedgerRows, pero para movimientos de
+  // caja: todos los establecimientos, solo acotado al mes visible.
+  const globalAccountingLedgerRows = useMemo(() => {
+    return [...accountingEntries]
+      .filter((entry) => isDateWithinRange(entry.date, visibleMonthRange.startDate, visibleMonthRange.endDate))
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [accountingEntries, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+
+  // Igual que summaryMovementRows, pero para el select "Contabilidad": el
+  // cliente pedia poder ver cuanto se gasto/cobro en un rubro puntual
+  // (sanidad, sueldos, etc.) y no lo encontraba en ningun lado -- reusa el
+  // mismo summaryEstablishmentFilter de arriba, sin selector propio.
+  const summaryAccountingRows = useMemo(() => {
+    if (!summaryAccountingConceptFilter) {
+      return [];
+    }
+
+    return globalAccountingLedgerRows.filter((entry) => {
+      if (summaryEstablishmentFilter && entry.establishmentId !== summaryEstablishmentFilter) {
+        return false;
+      }
+      return entry.concept === summaryAccountingConceptFilter;
+    });
+  }, [globalAccountingLedgerRows, summaryEstablishmentFilter, summaryAccountingConceptFilter]);
+
   const transferRows = useMemo(() => {
     const seenIds = new Set<string>();
 
@@ -1252,17 +1276,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }, [accountingLedgerRows, exchangeRateByMonth]);
 
   const visibleAccountingLedgerWithConversions = useMemo(() => {
-    let rows = accountingLedgerWithConversions;
-
-    if (accountingConceptFilter) {
-      rows = rows.filter((entry) => entry.concept === accountingConceptFilter);
-    }
-
     if (accountingStatusFilter === "all") {
-      return rows;
+      return accountingLedgerWithConversions;
     }
 
-    return rows.filter((entry) => {
+    return accountingLedgerWithConversions.filter((entry) => {
       if (entry.type !== "income") {
         return false;
       }
@@ -1277,7 +1295,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
       return entry.collectionStatus === "Cobrado";
     });
-  }, [accountingLedgerWithConversions, accountingConceptFilter, accountingStatusFilter]);
+  }, [accountingLedgerWithConversions, accountingStatusFilter]);
 
   const summaryByField = useMemo(() => {
     return visibleFields.map((field) => {
@@ -3252,7 +3270,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             fields={fields}
             visibleMonthLabel={visibleMonthRange.label}
             accountingStatusFilter={accountingStatusFilter}
-            accountingConceptFilter={accountingConceptFilter}
             accountingFormPanelRef={accountingFormPanelRef}
             accountingForm={accountingForm}
             exchangeRateForm={exchangeRateForm}
@@ -3269,7 +3286,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             setExchangeRateForm={setExchangeRateForm}
             setAccountingForm={setAccountingForm}
             setAccountingStatusFilter={setAccountingStatusFilter}
-            setAccountingConceptFilter={setAccountingConceptFilter}
             setAccountingSearchTerm={setAccountingSearchTerm}
             onEditEntry={handleEditAccountingEntry}
             onEditExchangeRate={handleEditExchangeRate}
@@ -3422,6 +3438,76 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                           <tr>
                             <td className="cell-empty" colSpan={7}>
                               No hay {SUMMARY_MOVEMENT_FILTER_LABELS[summaryMovementKindFilter].toLowerCase()} para este filtro.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+
+                <label className="period-picker">
+                  <span>Contabilidad</span>
+                  <select
+                    value={summaryAccountingConceptFilter}
+                    onChange={(event) => setSummaryAccountingConceptFilter(event.target.value)}
+                  >
+                    <option value="">Seleccionar...</option>
+                    <optgroup label="Ingresos">
+                      {Object.entries(incomeConceptLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Gastos">
+                      {Object.entries(expenseConceptLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </label>
+
+                {summaryAccountingConceptFilter ? (
+                  <div className="table-wrap">
+                    <table className="animal-ledger-table">
+                      <thead>
+                        <tr>
+                          <th className="cell-date">Fecha</th>
+                          <th className="cell-field">Establecimiento</th>
+                          <th className="cell-category">Rubro</th>
+                          <th className="cell-description">Observaciones</th>
+                          <th className="cell-money">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summaryAccountingRows.length ? (
+                          summaryAccountingRows.map((entry) => {
+                            const establishment = establishments.find((item) => item.id === entry.establishmentId);
+                            const conceptLabel =
+                              entry.type === "income"
+                                ? incomeConceptLabels[entry.concept as keyof typeof incomeConceptLabels]
+                                : expenseConceptLabels[entry.concept as keyof typeof expenseConceptLabels];
+
+                            return (
+                              <tr key={entry.id}>
+                                <td className="cell-date">{formatShortDate(entry.date)}</td>
+                                <td className="cell-field">{establishment?.name ?? "-"}</td>
+                                <td className="cell-category">{conceptLabel ?? entry.concept}</td>
+                                <td className="cell-description">{entry.notes.trim() || "-"}</td>
+                                <td className={`cell-money ${entry.type === "income" ? "tone-positive" : "tone-negative"}`}>
+                                  {entry.type === "income" ? "+" : "-"}
+                                  {formatMoney(entry.netAmount, entry.currency)}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td className="cell-empty" colSpan={5}>
+                              No hay movimientos de contabilidad para este filtro.
                             </td>
                           </tr>
                         )}
