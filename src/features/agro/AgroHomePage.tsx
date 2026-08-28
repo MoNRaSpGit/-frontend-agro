@@ -3095,7 +3095,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
                 {summaryMovementKindFilter ? (
                   <div className="table-wrap">
-                    <table className="animal-ledger-table">
+                    <table className="animal-ledger-table animal-ledger-table--movement">
                       <thead>
                         <tr>
                           <th className="cell-date">Fecha</th>
@@ -3168,7 +3168,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                 {summaryAccountingConceptFilter ? (
                   <>
                     <div className="table-wrap">
-                      <table className="animal-ledger-table">
+                      <table className="animal-ledger-table animal-ledger-table--accounting">
                         <thead>
                           <tr>
                             <th className="cell-field">Mes</th>
@@ -3211,7 +3211,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
                     {summaryAccountingYearRows.length ? (
                       <div className="table-wrap">
-                        <table className="animal-ledger-table">
+                        <table className="animal-ledger-table animal-ledger-table--accounting">
                           <thead>
                             <tr>
                               <th className="cell-date">Fecha</th>

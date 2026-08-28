@@ -972,10 +972,24 @@ table {
   min-width: 1380px;
 }
 
+/* Movimiento (animales) en verde, Contabilidad en dorado/mostaza -- para
+   distinguir de un vistazo cual tabla es cual en Resumen. */
+.animal-ledger-table--movement thead th {
+  background: rgba(53, 88, 43, 0.1);
+  color: #2b451f;
+  border-bottom: 2px solid rgba(53, 88, 43, 0.35);
+}
+
+.animal-ledger-table--accounting thead th {
+  background: rgba(154, 116, 20, 0.12);
+  color: #6b4f11;
+  border-bottom: 2px solid rgba(154, 116, 20, 0.4);
+}
+
 .animal-ledger-table-total-row td {
   font-weight: 700;
-  background: rgba(73, 87, 66, 0.06);
-  border-top: 2px solid rgba(73, 87, 66, 0.2);
+  background: rgba(154, 116, 20, 0.1);
+  border-top: 2px solid rgba(154, 116, 20, 0.35);
 }
 
 th,
