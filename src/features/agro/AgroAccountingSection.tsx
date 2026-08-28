@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { expenseConceptLabels, formatMoney, formatNumber, formatShortDate, formatYearMonth, getNetAmount, parseDecimalInput } from "./agro.home.shared";
+import { expenseConceptLabels, formatMoney, formatNumber, formatShortDate, formatYearMonth, getNetAmount, incomeConceptLabels, parseDecimalInput } from "./agro.home.shared";
 import { currencyLabels } from "./agro.demo.data";
 import {
   AccountingEntry,
@@ -17,6 +17,7 @@ interface AgroAccountingSectionProps {
   fields: FieldUnit[];
   visibleMonthLabel: string;
   accountingStatusFilter: "all" | "pending" | "partial" | "collected";
+  accountingConceptFilter: string;
   accountingFormPanelRef: React.RefObject<HTMLElement | null>;
   accountingForm: {
     date: string;
@@ -87,6 +88,7 @@ interface AgroAccountingSectionProps {
     }>
   >;
   setAccountingStatusFilter: (value: "all" | "pending" | "partial" | "collected") => void;
+  setAccountingConceptFilter: (value: string) => void;
   setAccountingSearchTerm: (value: string) => void;
   onEditEntry: (entryId: string) => void;
   onEditExchangeRate: (rateId: string) => void;
@@ -100,6 +102,7 @@ export function AgroAccountingSection({
   fields,
   visibleMonthLabel,
   accountingStatusFilter,
+  accountingConceptFilter,
   accountingFormPanelRef,
   accountingForm,
   exchangeRateForm,
@@ -116,6 +119,7 @@ export function AgroAccountingSection({
   setExchangeRateForm,
   setAccountingForm,
   setAccountingStatusFilter,
+  setAccountingConceptFilter,
   setAccountingSearchTerm,
   onEditEntry,
   onEditExchangeRate,
@@ -447,6 +451,26 @@ export function AgroAccountingSection({
             value={accountingSearchTerm}
             onChange={(event) => setAccountingSearchTerm(event.target.value)}
           />
+        </label>
+        <label className="table-search">
+          <span>Contabilidad</span>
+          <select value={accountingConceptFilter} onChange={(event) => setAccountingConceptFilter(event.target.value)}>
+            <option value="">Todos los rubros</option>
+            <optgroup label="Ingresos">
+              {Object.entries(incomeConceptLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Egresos">
+              {Object.entries(expenseConceptLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </optgroup>
+          </select>
         </label>
         <label className="table-search">
           <span>Estado de cobro</span>

@@ -158,6 +158,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const [animalSearchTerm, setAnimalSearchTerm] = useState("");
   const [accountingSearchTerm, setAccountingSearchTerm] = useState("");
   const [accountingStatusFilter, setAccountingStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
+  // "" = todos los rubros. Filtro por rubro (sanidad, sueldos, etc.) para
+  // la planilla contable, igual que el filtro de estado de cobro que ya
+  // esta al lado -- para poder ver de un vistazo cuanto se gasto/cobro en
+  // un rubro puntual en el campo/periodo visible.
+  const [accountingConceptFilter, setAccountingConceptFilter] = useState<string>("");
   const [linkedOperationsStatusFilter, setLinkedOperationsStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
   const [rainfallSearchTerm, setRainfallSearchTerm] = useState("");
   const [sanitarySearchTerm, setSanitarySearchTerm] = useState("");
@@ -1247,11 +1252,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }, [accountingLedgerRows, exchangeRateByMonth]);
 
   const visibleAccountingLedgerWithConversions = useMemo(() => {
-    if (accountingStatusFilter === "all") {
-      return accountingLedgerWithConversions;
+    let rows = accountingLedgerWithConversions;
+
+    if (accountingConceptFilter) {
+      rows = rows.filter((entry) => entry.concept === accountingConceptFilter);
     }
 
-    return accountingLedgerWithConversions.filter((entry) => {
+    if (accountingStatusFilter === "all") {
+      return rows;
+    }
+
+    return rows.filter((entry) => {
       if (entry.type !== "income") {
         return false;
       }
@@ -1266,7 +1277,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
       return entry.collectionStatus === "Cobrado";
     });
-  }, [accountingLedgerWithConversions, accountingStatusFilter]);
+  }, [accountingLedgerWithConversions, accountingConceptFilter, accountingStatusFilter]);
 
   const summaryByField = useMemo(() => {
     return visibleFields.map((field) => {
@@ -3241,6 +3252,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             fields={fields}
             visibleMonthLabel={visibleMonthRange.label}
             accountingStatusFilter={accountingStatusFilter}
+            accountingConceptFilter={accountingConceptFilter}
             accountingFormPanelRef={accountingFormPanelRef}
             accountingForm={accountingForm}
             exchangeRateForm={exchangeRateForm}
@@ -3257,6 +3269,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             setExchangeRateForm={setExchangeRateForm}
             setAccountingForm={setAccountingForm}
             setAccountingStatusFilter={setAccountingStatusFilter}
+            setAccountingConceptFilter={setAccountingConceptFilter}
             setAccountingSearchTerm={setAccountingSearchTerm}
             onEditEntry={handleEditAccountingEntry}
             onEditExchangeRate={handleEditExchangeRate}
