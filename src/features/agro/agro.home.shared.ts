@@ -405,36 +405,6 @@ export function getMovementDirection(movement: AnimalMovementRecord) {
   return isInitialStockLoad(movement) ? "entry" : deriveMovementDirection(movement.kind);
 }
 
-// Resuelve el potrero de origen y de destino "reales" de un movimiento, para
-// poder filtrar por cualquiera de los dos sin importar el tipo de
-// movimiento. En un traslado el propio potrero es una punta y la otra sale
-// de la pareja (pairedTransferMovementId); en compras/nacimientos/
-// correcciones hacia arriba el propio potrero es el destino (entran de
-// afuera del sistema); en ventas/muertes/faltantes/correcciones hacia abajo
-// es el origen (se van del sistema); un ajuste generico no tiene una
-// direccion fija, asi que no se le inventa ninguna.
-export function getMovementOriginDestinationFieldIds(movement: AnimalMovementRecord, allMovements: AnimalMovementRecord[]) {
-  if (movement.kind === "transfer_out" || movement.kind === "transfer_in" || movement.kind === "transfer_internal") {
-    const pairedMovement = movement.pairedTransferMovementId
-      ? allMovements.find((item) => item.id === movement.pairedTransferMovementId)
-      : undefined;
-
-    return movement.kind === "transfer_in"
-      ? { originFieldId: pairedMovement?.fieldId, destinationFieldId: movement.fieldId }
-      : { originFieldId: movement.fieldId, destinationFieldId: pairedMovement?.fieldId };
-  }
-
-  if (movement.kind === "purchase" || movement.kind === "birth" || movement.kind === "correction_in") {
-    return { originFieldId: undefined, destinationFieldId: movement.fieldId };
-  }
-
-  if (movement.kind === "sale" || movement.kind === "death" || movement.kind === "shortage" || movement.kind === "correction_out") {
-    return { originFieldId: movement.fieldId, destinationFieldId: undefined };
-  }
-
-  return { originFieldId: undefined, destinationFieldId: undefined };
-}
-
 // Un traslado (transfer_in/transfer_out) es interno cuando su movimiento
 // pareja pertenece al mismo establecimiento: el animal solo cambio de
 // potrero, nunca salio del rodeo del establecimiento.
