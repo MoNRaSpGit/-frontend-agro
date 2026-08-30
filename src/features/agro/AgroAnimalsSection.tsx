@@ -326,6 +326,121 @@ export function AgroAnimalsSection({
     );
   }
 
+  // Exporta exactamente lo que muestra "Planilla de animales" en este
+  // momento: ya viene filtrada por Campo/Potrero visible (arriba de todo) y
+  // Ano/Mes visible, mas lo que se haya tipeado en "Buscar en animales"
+  // (categoria incluida). No hace falta filtrar de nuevo aca.
+  async function exportAnimalLedgerToExcel() {
+    // Import dinamico: exceljs es pesada (~930kb) y el boton se usa de vez
+    // en cuando, no tiene sentido sumarla a la carga inicial de toda la app.
+    const ExcelJS = (await import("exceljs")).default;
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "SaasPro Agro";
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet("Planilla de animales", {
+      views: [{ state: "frozen", ySplit: 1 }]
+    });
+
+    const headerRow = sheet.getRow(1);
+    headerRow.values = [
+      "Fecha",
+      "Movimiento",
+      "Campo origen",
+      "Potrero origen",
+      "Campo destino",
+      "Potrero destino",
+      "Descripcion",
+      "Cantidad",
+      "Categoria",
+      "Caravana",
+      "Peso",
+      "Precio",
+      "Flete",
+      "Comision",
+      "IVA",
+      "Monto total",
+      "Moneda",
+      "Relacion contable"
+    ];
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFDF7" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF217346" } };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+    });
+
+    for (const movement of animalLedgerRows) {
+      const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+      const lugar = getOrigenDestino(movement);
+      const currency = movement.currency ?? "USD";
+
+      const row = sheet.addRow([
+        new Date(`${movement.date}T00:00:00`),
+        getMovementLabel(movement),
+        lugar.campoOrigen,
+        lugar.potreroOrigen,
+        lugar.campoDestino,
+        lugar.potreroDestino,
+        movement.notes.trim() || "-",
+        movement.quantity,
+        category ? formatCategoryLabel(category.label) : movement.categoryCode,
+        movement.earTag ?? "-",
+        movement.weightKg ?? null,
+        movement.unitPrice ?? null,
+        movement.freightAmount ?? null,
+        movement.commissionAmount ?? null,
+        movement.taxAmount ?? null,
+        movement.totalAmount ?? null,
+        movement.totalAmount !== undefined ? currency : "",
+        movement.linkedAccountingEntryId ? "Si" : "No"
+      ]);
+
+      row.getCell(1).numFmt = "dd/mm/yyyy";
+      row.getCell(8).numFmt = "#,##0";
+      for (const columnIndex of [11, 12, 13, 14, 15, 16]) {
+        row.getCell(columnIndex).numFmt = "#,##0.00";
+      }
+      row.eachCell((cell) => {
+        cell.border = { bottom: { style: "hair", color: { argb: "FFE1DCC8" } } };
+      });
+    }
+
+    sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 18 } };
+    sheet.columns = [
+      { width: 12 },
+      { width: 14 },
+      { width: 18 },
+      { width: 18 },
+      { width: 18 },
+      { width: 18 },
+      { width: 32 },
+      { width: 10 },
+      { width: 28 },
+      { width: 12 },
+      { width: 10 },
+      { width: 12 },
+      { width: 10 },
+      { width: 10 },
+      { width: 10 },
+      { width: 14 },
+      { width: 9 },
+      { width: 12 }
+    ];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const today = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `planilla-animales-${today}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <section className="content-grid">
       <article ref={animalFormPanelRef} className="panel">
@@ -721,6 +836,14 @@ export function AgroAnimalsSection({
             <h2>Planilla de animales</h2>
             <p>Vista de trabajo para revisar compras, ventas y movimientos del rodeo, filtrada por el campo/potrero seleccionado.</p>
           </div>
+          <button
+            type="button"
+            className="ghost-button excel-button"
+            onClick={() => void exportAnimalLedgerToExcel()}
+            disabled={animalLedgerRows.length === 0}
+          >
+            Exportar a Excel
+          </button>
         </div>
         <div className="inline-metrics">
           <span className="data-badge">Compras {animalLedgerSummary.purchases}</span>

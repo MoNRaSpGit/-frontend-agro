@@ -846,6 +846,16 @@ button {
   color: #8c3e2c;
 }
 
+.ghost-button.excel-button {
+  border-color: transparent;
+  background: #217346;
+  color: #fffdf7;
+}
+
+.ghost-button.excel-button:disabled {
+  background: rgba(33, 115, 70, 0.4);
+}
+
 .action-row {
   display: flex;
   flex-wrap: wrap;
