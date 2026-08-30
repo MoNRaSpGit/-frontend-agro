@@ -150,6 +150,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // obligatorio: vacio = no mostrar filas (evita tirar todo el historial de
   // una) hasta que el usuario elija que quiere ver.
   const [summaryMovementKindFilter, setSummaryMovementKindFilter] = useState<SummaryMovementFilterKind | "">("");
+  // Rango de fechas opcional para la planilla de movimientos de "Resumen
+  // por establecimiento" -- vacios = sin filtrar por fecha (se ve todo el
+  // historial de ese tipo de movimiento, como antes).
+  const [summaryDateFrom, setSummaryDateFrom] = useState("");
+  const [summaryDateTo, setSummaryDateTo] = useState("");
   // Mismo patron que summaryMovementKindFilter, pero para movimientos de
   // caja: "" = no mostrar filas. Usa el mismo summaryEstablishmentFilter
   // de arriba (no tiene un selector de establecimiento propio).
@@ -1045,22 +1050,130 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       .sort((left, right) => right.date.localeCompare(left.date));
   }, [animalMovements, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
-  // Planilla de "Resumen por establecimiento": mismos datos que el ledger de
-  // Animales (globalAnimalLedgerRows, ya acotado al mes visible), filtrados
-  // por establecimiento y tipo de movimiento. El tipo es obligatorio: sin
-  // eleccion no se muestra nada, para no tirar de entrada todo el historial.
+  // Planilla de "Resumen por establecimiento": a diferencia de
+  // globalAnimalLedgerRows (acotada al "Mes visible" de arriba), esta va por
+  // todo el historial (animalMovements sin acotar) -- el rango de fechas de
+  // esta pantalla (Desde/Hasta) es el que manda aca, independiente del mes
+  // visible del resto de la app. El tipo de movimiento es obligatorio: sin
+  // eleccion no se muestra nada, para no tirar de entrada todo el historial;
+  // vacios los "Desde"/"Hasta" no acotan (se ve todo lo que haya de ese tipo).
   const summaryMovementRows = useMemo(() => {
     if (!summaryMovementKindFilter) {
       return [];
     }
 
-    return globalAnimalLedgerRows.filter((movement) => {
-      if (summaryEstablishmentFilter && movement.establishmentId !== summaryEstablishmentFilter) {
-        return false;
-      }
-      return matchesSummaryMovementFilterKind(movement.kind, summaryMovementKindFilter);
+    return [...animalMovements]
+      .filter((movement) => {
+        if (movement.kind === "transfer_in") {
+          return false;
+        }
+        if (summaryEstablishmentFilter && movement.establishmentId !== summaryEstablishmentFilter) {
+          return false;
+        }
+        if (summaryDateFrom && movement.date < summaryDateFrom) {
+          return false;
+        }
+        if (summaryDateTo && movement.date > summaryDateTo) {
+          return false;
+        }
+        return matchesSummaryMovementFilterKind(movement.kind, summaryMovementKindFilter);
+      })
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [animalMovements, summaryDateFrom, summaryDateTo, summaryEstablishmentFilter, summaryMovementKindFilter]);
+
+  async function exportSummaryMovementRowsToExcel() {
+    // Import dinamico: exceljs es una libreria pesada y el boton de
+    // exportar se usa poco -- si la cargaramos siempre al arrancar la app,
+    // pesaria la carga inicial de TODAS las pantallas por una feature que
+    // se usa de vez en cuando. Con el import dinamico solo se baja (y se
+    // cachea) la primera vez que alguien aprieta este boton.
+    const ExcelJS = (await import("exceljs")).default;
+
+    const kindLabel = summaryMovementKindFilter ? SUMMARY_MOVEMENT_FILTER_LABELS[summaryMovementKindFilter] : "Movimientos";
+    const establishmentLabel = summaryEstablishmentFilter
+      ? (establishments.find((item) => item.id === summaryEstablishmentFilter)?.name ?? "Todos")
+      : "Todos";
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "SaasPro Agro";
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet(kindLabel.slice(0, 31), {
+      views: [{ state: "frozen", ySplit: 4 }]
     });
-  }, [globalAnimalLedgerRows, summaryEstablishmentFilter, summaryMovementKindFilter]);
+
+    // Encabezado con el contexto del filtro, para que el archivo se entienda
+    // solo aunque se comparta suelto (sin recordar con que filtro se saco).
+    sheet.mergeCells("A1:H1");
+    sheet.getCell("A1").value = `${kindLabel} - ${establishmentLabel}`;
+    sheet.getCell("A1").font = { bold: true, size: 14, color: { argb: "FF1F3D2B" } };
+
+    const rangeLabel =
+      summaryDateFrom || summaryDateTo
+        ? `Del ${summaryDateFrom ? formatShortDate(summaryDateFrom) : "inicio"} al ${summaryDateTo ? formatShortDate(summaryDateTo) : "hoy"}`
+        : "Todo el historial";
+    sheet.mergeCells("A2:H2");
+    sheet.getCell("A2").value = rangeLabel;
+    sheet.getCell("A2").font = { italic: true, size: 10, color: { argb: "FF5B6B57" } };
+
+    const headerRow = sheet.getRow(4);
+    headerRow.values = ["Fecha", "Establecimiento", "Potrero", "Categoria", "Cantidad", "Detalle", "Monto total", "Moneda"];
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFDF7" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF217346" } };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.border = { bottom: { style: "thin", color: { argb: "FF1B5E38" } } };
+    });
+
+    for (const movement of summaryMovementRows) {
+      const field = fields.find((item) => item.id === movement.fieldId);
+      const establishment = establishments.find((item) => item.id === movement.establishmentId);
+      const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+      const detail = describeAnimalMovementDetail(movement, animalMovements, fields);
+
+      const row = sheet.addRow([
+        new Date(`${movement.date}T00:00:00`),
+        establishment?.name ?? "-",
+        field?.name ?? "-",
+        category ? formatCategoryLabel(category.label) : movement.categoryCode,
+        movement.quantity,
+        detail ?? (movement.notes.trim() || "-"),
+        movement.totalAmount ?? null,
+        movement.totalAmount !== undefined ? (movement.currency ?? "USD") : ""
+      ]);
+
+      row.getCell(1).numFmt = "dd/mm/yyyy";
+      row.getCell(5).numFmt = "#,##0";
+      row.getCell(7).numFmt = "#,##0.00";
+      row.eachCell((cell) => {
+        cell.border = { bottom: { style: "hair", color: { argb: "FFE1DCC8" } } };
+      });
+    }
+
+    sheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 8 } };
+    sheet.columns = [
+      { width: 12 },
+      { width: 20 },
+      { width: 20 },
+      { width: 32 },
+      { width: 10 },
+      { width: 40 },
+      { width: 14 },
+      { width: 9 }
+    ];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const today = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `resumen-${kindLabel.toLowerCase().replace(/\s+/g, "-")}-${today}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 
   // Para el select "Contabilidad": el cliente pedia poder ver cuanto se
   // gasto/cobro en un rubro puntual (sanidad, sueldos, etc.) por mes y en
@@ -3092,6 +3205,31 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                     )}
                   </select>
                 </label>
+
+                {summaryMovementKindFilter ? (
+                  <>
+                    <div className="form-grid">
+                      <label className="period-picker">
+                        <span>Desde</span>
+                        <input type="date" value={summaryDateFrom} onChange={(event) => setSummaryDateFrom(event.target.value)} />
+                      </label>
+                      <label className="period-picker">
+                        <span>Hasta</span>
+                        <input type="date" value={summaryDateTo} onChange={(event) => setSummaryDateTo(event.target.value)} />
+                      </label>
+                    </div>
+                    <div className="action-row" style={{ justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="ghost-button excel-button"
+                        onClick={() => void exportSummaryMovementRowsToExcel()}
+                        disabled={summaryMovementRows.length === 0}
+                      >
+                        Exportar a Excel
+                      </button>
+                    </div>
+                  </>
+                ) : null}
 
                 {summaryMovementKindFilter ? (
                   <div className="table-wrap">
