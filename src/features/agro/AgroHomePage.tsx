@@ -30,6 +30,7 @@ import {
   getIncomeExpectedAmount,
   getIncomePendingAmount,
   getMovementDirection,
+  getMovementOriginDestinationFieldIds,
   getNetAmount,
   getTodayDate,
   getVisibleMonthRange,
@@ -155,6 +156,19 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // historial de ese tipo de movimiento, como antes).
   const [summaryDateFrom, setSummaryDateFrom] = useState("");
   const [summaryDateTo, setSummaryDateTo] = useState("");
+  // Filtro por potrero origen/destino "real" del movimiento (ver
+  // getMovementOriginDestinationFieldIds) -- pensado sobre todo para
+  // traslados puntuales (ej. "que salio de Casas hacia Piquete"), pero
+  // aplica igual a cualquier tipo de movimiento. Vacios = no acotan.
+  const [summaryFieldOriginFilter, setSummaryFieldOriginFilter] = useState("");
+  const [summaryFieldDestinationFilter, setSummaryFieldDestinationFilter] = useState("");
+  // Mismo filtro pero a nivel de establecimiento, para traslados entre
+  // campos (ej. "de Aguila Blanca a La Milagrosa"). Ademas de filtrar por si
+  // solos, acotan las opciones del select de potrero correspondiente -- con
+  // uno elegido, el otro potrero sigue mostrando todos si no se filtro su
+  // propio establecimiento.
+  const [summaryEstablishmentOriginFilter, setSummaryEstablishmentOriginFilter] = useState("");
+  const [summaryEstablishmentDestinationFilter, setSummaryEstablishmentDestinationFilter] = useState("");
   // Mismo patron que summaryMovementKindFilter, pero para movimientos de
   // caja: "" = no mostrar filas. Usa el mismo summaryEstablishmentFilter
   // de arriba (no tiene un selector de establecimiento propio).
@@ -1076,10 +1090,47 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         if (summaryDateTo && movement.date > summaryDateTo) {
           return false;
         }
+        if (
+          summaryFieldOriginFilter ||
+          summaryFieldDestinationFilter ||
+          summaryEstablishmentOriginFilter ||
+          summaryEstablishmentDestinationFilter
+        ) {
+          const { originFieldId, destinationFieldId } = getMovementOriginDestinationFieldIds(movement, animalMovements);
+          if (summaryFieldOriginFilter && originFieldId !== summaryFieldOriginFilter) {
+            return false;
+          }
+          if (summaryFieldDestinationFilter && destinationFieldId !== summaryFieldDestinationFilter) {
+            return false;
+          }
+          if (summaryEstablishmentOriginFilter) {
+            const originEstablishmentId = fields.find((item) => item.id === originFieldId)?.establishmentId;
+            if (originEstablishmentId !== summaryEstablishmentOriginFilter) {
+              return false;
+            }
+          }
+          if (summaryEstablishmentDestinationFilter) {
+            const destinationEstablishmentId = fields.find((item) => item.id === destinationFieldId)?.establishmentId;
+            if (destinationEstablishmentId !== summaryEstablishmentDestinationFilter) {
+              return false;
+            }
+          }
+        }
         return matchesSummaryMovementFilterKind(movement.kind, summaryMovementKindFilter);
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [animalMovements, summaryDateFrom, summaryDateTo, summaryEstablishmentFilter, summaryMovementKindFilter]);
+  }, [
+    animalMovements,
+    fields,
+    summaryDateFrom,
+    summaryDateTo,
+    summaryEstablishmentDestinationFilter,
+    summaryEstablishmentFilter,
+    summaryEstablishmentOriginFilter,
+    summaryFieldDestinationFilter,
+    summaryFieldOriginFilter,
+    summaryMovementKindFilter
+  ]);
 
   async function exportSummaryMovementRowsToExcel() {
     // Import dinamico: exceljs es una libreria pesada y el boton de
@@ -1108,10 +1159,25 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     sheet.getCell("A1").value = `${kindLabel} - ${establishmentLabel}`;
     sheet.getCell("A1").font = { bold: true, size: 14, color: { argb: "FF1F3D2B" } };
 
-    const rangeLabel =
+    const dateRangeLabel =
       summaryDateFrom || summaryDateTo
         ? `Del ${summaryDateFrom ? formatShortDate(summaryDateFrom) : "inicio"} al ${summaryDateTo ? formatShortDate(summaryDateTo) : "hoy"}`
         : "Todo el historial";
+    const originLabel =
+      (summaryFieldOriginFilter ? fields.find((item) => item.id === summaryFieldOriginFilter)?.name : undefined) ??
+      (summaryEstablishmentOriginFilter ? establishments.find((item) => item.id === summaryEstablishmentOriginFilter)?.name : undefined);
+    const destinationLabel =
+      (summaryFieldDestinationFilter ? fields.find((item) => item.id === summaryFieldDestinationFilter)?.name : undefined) ??
+      (summaryEstablishmentDestinationFilter
+        ? establishments.find((item) => item.id === summaryEstablishmentDestinationFilter)?.name
+        : undefined);
+    const fieldRangeLabel = [
+      originLabel ? `Origen: ${originLabel}` : null,
+      destinationLabel ? `Destino: ${destinationLabel}` : null
+    ]
+      .filter(Boolean)
+      .join(" - ");
+    const rangeLabel = fieldRangeLabel ? `${dateRangeLabel} - ${fieldRangeLabel}` : dateRangeLabel;
     sheet.mergeCells("A2:H2");
     sheet.getCell("A2").value = rangeLabel;
     sheet.getCell("A2").font = { italic: true, size: 10, color: { argb: "FF5B6B57" } };
@@ -3216,6 +3282,100 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                       <label className="period-picker">
                         <span>Hasta</span>
                         <input type="date" value={summaryDateTo} onChange={(event) => setSummaryDateTo(event.target.value)} />
+                      </label>
+                    </div>
+                    <div className="form-grid">
+                      <label className="period-picker">
+                        <span>Establecimiento origen</span>
+                        <select
+                          value={summaryEstablishmentOriginFilter}
+                          onChange={(event) => {
+                            const nextEstablishmentId = event.target.value;
+                            setSummaryEstablishmentOriginFilter(nextEstablishmentId);
+                            // Si el potrero origen ya elegido no es de este campo, lo
+                            // limpiamos -- si no, quedaria un filtro imposible (potrero
+                            // de un campo cruzado con establecimiento de otro) que no
+                            // muestra nada sin que se entienda por que.
+                            setSummaryFieldOriginFilter((current) => {
+                              const currentField = fields.find((item) => item.id === current);
+                              return nextEstablishmentId && currentField?.establishmentId !== nextEstablishmentId ? "" : current;
+                            });
+                          }}
+                        >
+                          <option value="">Todos</option>
+                          {establishments.map((establishment) => (
+                            <option key={establishment.id} value={establishment.id}>
+                              {establishment.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="period-picker">
+                        <span>Establecimiento destino</span>
+                        <select
+                          value={summaryEstablishmentDestinationFilter}
+                          onChange={(event) => {
+                            const nextEstablishmentId = event.target.value;
+                            setSummaryEstablishmentDestinationFilter(nextEstablishmentId);
+                            setSummaryFieldDestinationFilter((current) => {
+                              const currentField = fields.find((item) => item.id === current);
+                              return nextEstablishmentId && currentField?.establishmentId !== nextEstablishmentId ? "" : current;
+                            });
+                          }}
+                        >
+                          <option value="">Todos</option>
+                          {establishments.map((establishment) => (
+                            <option key={establishment.id} value={establishment.id}>
+                              {establishment.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="form-grid">
+                      <label className="period-picker">
+                        <span>Potrero origen</span>
+                        <select value={summaryFieldOriginFilter} onChange={(event) => setSummaryFieldOriginFilter(event.target.value)}>
+                          <option value="">Todos</option>
+                          {establishments
+                            .filter((establishment) => !summaryEstablishmentOriginFilter || establishment.id === summaryEstablishmentOriginFilter)
+                            .map((establishment) => (
+                              <optgroup key={establishment.id} label={establishment.name}>
+                                {fields
+                                  .filter((field) => field.establishmentId === establishment.id)
+                                  .map((field) => (
+                                    <option key={field.id} value={field.id}>
+                                      {field.name}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            ))}
+                        </select>
+                      </label>
+                      <label className="period-picker">
+                        <span>Potrero destino</span>
+                        <select
+                          value={summaryFieldDestinationFilter}
+                          onChange={(event) => setSummaryFieldDestinationFilter(event.target.value)}
+                        >
+                          <option value="">Todos</option>
+                          {establishments
+                            .filter(
+                              (establishment) =>
+                                !summaryEstablishmentDestinationFilter || establishment.id === summaryEstablishmentDestinationFilter
+                            )
+                            .map((establishment) => (
+                              <optgroup key={establishment.id} label={establishment.name}>
+                                {fields
+                                  .filter((field) => field.establishmentId === establishment.id)
+                                  .map((field) => (
+                                    <option key={field.id} value={field.id}>
+                                      {field.name}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            ))}
+                        </select>
                       </label>
                     </div>
                     <div className="action-row" style={{ justifyContent: "flex-end" }}>
