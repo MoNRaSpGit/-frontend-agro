@@ -282,6 +282,17 @@ export function resolveNormalizedFieldId(fieldsSource: FieldUnit[], establishmen
     return existingField.id;
   }
 
+  // El potrero al que apuntaba este registro ya no existe (se borro, o el
+  // dato quedo huerfano por algun motivo). Antes esto se redirigia en
+  // silencio al primer potrero del campo (o se dejaba el id viejo tal cual
+  // si no habia ninguno) sin dejar rastro. Dejamos un aviso para poder
+  // investigar si esto vuelve a pasar, en vez de que el stock de algun
+  // potrero de repente no cierre y no haya forma de saber por que.
+  // eslint-disable-next-line no-console -- aviso deliberado, no ruido de debug
+  console.warn(
+    `[agro] fieldId "${currentFieldId}" no corresponde a ningun potrero existente (establishmentId "${establishmentId}") -- se redirige al primer potrero disponible de ese campo.`
+  );
+
   return getFieldIdForEstablishmentFromSource(fieldsSource, establishmentId) || currentFieldId;
 }
 
