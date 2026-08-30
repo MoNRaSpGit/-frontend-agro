@@ -170,14 +170,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const [summaryEstablishmentOriginFilter, setSummaryEstablishmentOriginFilter] = useState("");
   const [summaryEstablishmentDestinationFilter, setSummaryEstablishmentDestinationFilter] = useState("");
   // Mismo patron que summaryMovementKindFilter, pero para movimientos de
-  // caja: "" = no mostrar filas. Tiene su propio filtro de establecimiento
-  // (summaryAccountingEstablishmentFilter) en vez de compartir el de
-  // Movimiento -- ese ahora se oculta en Traslados (lo reemplazan origen/
-  // destino), y Contabilidad no tiene ese concepto, siempre necesita poder
-  // elegir un solo establecimiento sin depender de que pestana de
-  // Movimiento este abierta.
+  // caja: "" = no mostrar filas. Usa el mismo summaryEstablishmentFilter
+  // de arriba (no tiene un selector de establecimiento propio).
   const [summaryAccountingConceptFilter, setSummaryAccountingConceptFilter] = useState<string>("");
-  const [summaryAccountingEstablishmentFilter, setSummaryAccountingEstablishmentFilter] = useState("");
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [fields, setFields] = useState<FieldUnit[]>([]);
   const [selectedEstablishmentId, setSelectedEstablishmentId] = useState("");
@@ -1086,15 +1081,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         if (movement.kind === "transfer_in") {
           return false;
         }
-        // El filtro general de "Establecimiento" solo aplica fuera de
-        // Traslados -- ahi lo reemplazan Establecimiento origen/destino
-        // (un traslado puede cruzar dos campos, un solo establecimiento no
-        // alcanza para describirlo).
-        if (
-          summaryMovementKindFilter !== "transfer" &&
-          summaryEstablishmentFilter &&
-          movement.establishmentId !== summaryEstablishmentFilter
-        ) {
+        if (summaryEstablishmentFilter && movement.establishmentId !== summaryEstablishmentFilter) {
           return false;
         }
         if (summaryDateFrom && movement.date < summaryDateFrom) {
@@ -1104,8 +1091,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           return false;
         }
         if (
-          summaryMovementKindFilter === "transfer" &&
-          (summaryFieldOriginFilter || summaryFieldDestinationFilter || summaryEstablishmentOriginFilter || summaryEstablishmentDestinationFilter)
+          summaryFieldOriginFilter ||
+          summaryFieldDestinationFilter ||
+          summaryEstablishmentOriginFilter ||
+          summaryEstablishmentDestinationFilter
         ) {
           const { originFieldId, destinationFieldId } = getMovementOriginDestinationFieldIds(movement, animalMovements);
           if (summaryFieldOriginFilter && originFieldId !== summaryFieldOriginFilter) {
@@ -1256,7 +1245,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // gasto/cobro en un rubro puntual (sanidad, sueldos, etc.) por mes y en
   // el año completo, y no lo encontraba en ningun lado -- a diferencia de
   // "Movimiento" (acotado al mes visible), esto va por el "Año visible"
-  // completo para poder armar el resumen mes a mes + total anual.
+  // completo para poder armar el resumen mes a mes + total anual. Reusa el
+  // mismo summaryEstablishmentFilter de arriba, sin selector propio.
   const summaryAccountingYearRows = useMemo(() => {
     if (!summaryAccountingConceptFilter) {
       return [];
@@ -1267,13 +1257,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         if (entry.date.slice(0, 4) !== selectedYear) {
           return false;
         }
-        if (summaryAccountingEstablishmentFilter && entry.establishmentId !== summaryAccountingEstablishmentFilter) {
+        if (summaryEstablishmentFilter && entry.establishmentId !== summaryEstablishmentFilter) {
           return false;
         }
         return entry.concept === summaryAccountingConceptFilter;
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [accountingEntries, selectedYear, summaryAccountingEstablishmentFilter, summaryAccountingConceptFilter]);
+  }, [accountingEntries, selectedYear, summaryEstablishmentFilter, summaryAccountingConceptFilter]);
 
   // Resumen mes a mes del rubro elegido, cada mes con su total separado por
   // moneda (un rubro nunca mezcla ingreso y egreso, pero si puede tener
@@ -3251,6 +3241,21 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                   </div>
                 </div>
                 <label className="period-picker">
+                  <span>Establecimiento</span>
+                  <select
+                    value={summaryEstablishmentFilter}
+                    onChange={(event) => setSummaryEstablishmentFilter(event.target.value)}
+                  >
+                    <option value="">Todos</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="period-picker">
                   <span>Movimiento</span>
                   <select
                     value={summaryMovementKindFilter}
@@ -3267,23 +3272,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                   </select>
                 </label>
 
-                {/* Traslados puede cruzar dos campos: pide Establecimiento
-                    origen/destino en vez del selector unico. El resto de los
-                    movimientos siempre son "adentro" de un solo campo. */}
-                {summaryMovementKindFilter && summaryMovementKindFilter !== "transfer" ? (
-                  <label className="period-picker">
-                    <span>Establecimiento</span>
-                    <select value={summaryEstablishmentFilter} onChange={(event) => setSummaryEstablishmentFilter(event.target.value)}>
-                      <option value="">Todos</option>
-                      {establishments.map((establishment) => (
-                        <option key={establishment.id} value={establishment.id}>
-                          {establishment.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-
                 {summaryMovementKindFilter ? (
                   <>
                     <div className="form-grid">
@@ -3296,8 +3284,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                         <input type="date" value={summaryDateTo} onChange={(event) => setSummaryDateTo(event.target.value)} />
                       </label>
                     </div>
-                    {summaryMovementKindFilter === "transfer" ? (
-                      <>
                     <div className="form-grid">
                       <label className="period-picker">
                         <span>Establecimiento origen</span>
@@ -3392,8 +3378,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                         </select>
                       </label>
                     </div>
-                      </>
-                    ) : null}
                     <div className="action-row" style={{ justifyContent: "flex-end" }}>
                       <button
                         type="button"
@@ -3481,20 +3465,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
                 {summaryAccountingConceptFilter ? (
                   <>
-                    <label className="period-picker">
-                      <span>Establecimiento</span>
-                      <select
-                        value={summaryAccountingEstablishmentFilter}
-                        onChange={(event) => setSummaryAccountingEstablishmentFilter(event.target.value)}
-                      >
-                        <option value="">Todos</option>
-                        {establishments.map((establishment) => (
-                          <option key={establishment.id} value={establishment.id}>
-                            {establishment.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
                     <div className="table-wrap">
                       <table className="animal-ledger-table animal-ledger-table--accounting">
                         <thead>

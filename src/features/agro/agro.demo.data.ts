@@ -84,6 +84,7 @@ export function getEstablishmentIdFromFieldId(fieldId: string) {
   // Antes esto devolvia "" en silencio y el movimiento quedaba con un campo
   // vacio sin que se notara en ningun lado -- dejamos rastro en la consola
   // para poder investigarlo si vuelve a pasar, en vez de que sea un misterio.
+  // eslint-disable-next-line no-console -- aviso deliberado, no ruido de debug
   console.warn(`[agro] No se pudo resolver establishmentId para fieldId "${fieldId}" (ni propio, ni potrero existente, ni mapeo legado).`);
   return "";
 }
