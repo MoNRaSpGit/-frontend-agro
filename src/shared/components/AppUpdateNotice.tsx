@@ -3,6 +3,26 @@ import { fetchPublishedFrontendBuildMeta, FRONTEND_BUILD_INFO } from "../config/
 
 const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 
+// Campos de texto/numero que en los formularios de la app arrancan vacios
+// (cantidad, peso, precio, observaciones, etc.) -- si alguno tiene contenido
+// tipeado, asumimos que hay algo sin guardar y no recargamos solos, para no
+// borrarle al usuario una carga en progreso. Los <select> y los inputs de
+// fecha no cuentan: casi siempre tienen un valor por defecto (hoy, primera
+// opcion) que no representa trabajo real perdible.
+function hasUnsavedFormInput() {
+  const fields = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+    'form input[type="text"], form input[type="number"], form textarea'
+  );
+
+  for (const field of fields) {
+    if (field.value.trim() !== "") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function AppUpdateNotice() {
   const [show, setShow] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -17,7 +37,18 @@ export function AppUpdateNotice() {
           return;
         }
 
-        setShow(Boolean(published.releaseSha && published.releaseSha !== FRONTEND_BUILD_INFO.releaseSha));
+        const updateAvailable = Boolean(published.releaseSha && published.releaseSha !== FRONTEND_BUILD_INFO.releaseSha);
+
+        if (updateAvailable && !hasUnsavedFormInput()) {
+          // Nada sin guardar en pantalla -- no hace falta molestar, actualizamos solos.
+          setIsUpdating(true);
+          window.setTimeout(() => {
+            window.location.reload();
+          }, 500);
+          return;
+        }
+
+        setShow(updateAvailable);
       } catch {
         if (mounted) {
           setShow(false);
