@@ -2142,6 +2142,22 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         .get(animalForm.species)
         ?.find((item) => item.categoryCode === animalForm.categoryCode);
 
+      // DIAGNOSTICO TEMPORAL (bug intermitente "categoria no tiene stock" en
+      // potrero Casas, ver memoria de sesion) -- sacar despues de capturar
+      // el proximo caso en vivo.
+      // eslint-disable-next-line no-console
+      console.log("[agro-diag transfer]", {
+        fieldId: animalForm.fieldId,
+        species: animalForm.species,
+        categoryCode: animalForm.categoryCode,
+        categoryCodeType: typeof animalForm.categoryCode,
+        quantity,
+        availableCategory,
+        categoriesForSpecies: transferOriginAvailability.get(animalForm.species),
+        availabilityKeys: Array.from(transferOriginAvailability.keys()),
+        stockBalanceEntriesForField: Array.from(stockBalanceMap.entries()).filter(([key]) => key.startsWith(`${animalForm.fieldId}:`))
+      });
+
       if (!availableCategory) {
         nextErrors.categoryCode = "Esa categoria no tiene stock disponible en el potrero origen.";
       } else if (Number.isFinite(quantity) && quantity > availableCategory.quantity) {
