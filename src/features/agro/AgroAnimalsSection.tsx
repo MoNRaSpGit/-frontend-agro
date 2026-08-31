@@ -69,6 +69,16 @@ interface AgroAnimalsSectionProps {
   projectedAnimalTotal: number;
   transferAvailableSpecies: AgroSpecies[];
   transferAvailableCategories: Array<{ categoryCode: string; quantity: number }>;
+  // Igual que transferOriginAvailability (AgroHomePage) pero parametrizado
+  // por un fieldId cualquiera -- hace falta para recalcular especie y
+  // categoria EN EL MISMO cambio de estado que el potrero origen (ver
+  // onChange de "Potrero origen" mas abajo). Antes esa correccion vivia
+  // solo en un useEffect que corria un render despues, dejando una
+  // ventana en la que species/categoryCode le quedaban pisados del
+  // potrero anterior -- si el usuario guardaba en ese instante, mandaba
+  // una categoria invalida para el potrero nuevo (bug intermitente
+  // "Esa categoria no tiene stock disponible en el potrero origen").
+  getTransferAvailabilityForField: (fieldId: string) => Map<AgroSpecies, Array<{ categoryCode: string; quantity: number }>>;
   registerAnimalFieldRef: (fieldName: string) => (element: HTMLInputElement | HTMLSelectElement | null) => void;
   requestDeleteAnimalMovement: (movementId: string) => void;
   resetAnimalForm: () => void;
@@ -170,6 +180,7 @@ export function AgroAnimalsSection({
   projectedAnimalTotal,
   transferAvailableSpecies,
   transferAvailableCategories,
+  getTransferAvailabilityForField,
   registerAnimalFieldRef,
   requestDeleteAnimalMovement,
   resetAnimalForm,
@@ -203,6 +214,20 @@ export function AgroAnimalsSection({
       item.establishmentId === animalForm.transferDestinationEstablishmentId &&
       (!isInternalTransfer || item.id !== animalForm.fieldId)
   );
+
+  // Recalcula especie/categoria para el potrero origen que se acaba de
+  // elegir, en el mismo tick que el cambio de fieldId -- ver el comentario
+  // de getTransferAvailabilityForField en la interfaz de props de arriba.
+  function resolveSpeciesAndCategoryForOriginField(nextFieldId: string, currentSpecies: AgroSpecies, currentCategoryCode: string) {
+    const availability = getTransferAvailabilityForField(nextFieldId);
+    const availableSpecies = Array.from(availability.keys());
+    const nextSpecies = availableSpecies.includes(currentSpecies) ? currentSpecies : availableSpecies[0] ?? currentSpecies;
+    const nextCategories = availability.get(nextSpecies) ?? [];
+    const nextCategoryCode = nextCategories.some((item) => item.categoryCode === currentCategoryCode)
+      ? currentCategoryCode
+      : nextCategories[0]?.categoryCode ?? "";
+    return { species: nextSpecies, categoryCode: nextCategoryCode };
+  }
 
   // "Traslado" es la fila de salida (transfer_out) y "Ingreso" es la fila
   // de llegada (transfer_in) del mismo movimiento -- antes las dos decian
@@ -521,6 +546,7 @@ export function AgroAnimalsSection({
                     setAnimalForm((current) => ({
                       ...current,
                       fieldId: nextFieldId,
+                      ...resolveSpeciesAndCategoryForOriginField(nextFieldId, current.species, current.categoryCode),
                       transferDestinationFieldId:
                         current.transferDestinationEstablishmentId === current.establishmentId &&
                         current.transferDestinationFieldId === nextFieldId
@@ -567,7 +593,14 @@ export function AgroAnimalsSection({
                 value={animalForm.fieldId}
                 onChange={(event) => {
                   clearAnimalFieldError("fieldId");
-                  setAnimalForm((current) => ({ ...current, fieldId: event.target.value }));
+                  const nextFieldId = event.target.value;
+                  setAnimalForm((current) => ({
+                    ...current,
+                    fieldId: nextFieldId,
+                    ...(isTransferMovement
+                      ? resolveSpeciesAndCategoryForOriginField(nextFieldId, current.species, current.categoryCode)
+                      : null)
+                  }));
                 }}
               >
                 {selectedFields.map((item) => (
@@ -605,11 +638,17 @@ export function AgroAnimalsSection({
               onChange={(event) => {
                 clearAnimalFieldError("species");
                 const nextSpecies = event.target.value as AgroSpecies;
-                setAnimalForm((current) => ({
-                  ...current,
-                  species: nextSpecies,
-                  categoryCode: categoryCatalog[nextSpecies][0]?.code ?? ""
-                }));
+                setAnimalForm((current) => {
+                  if (!isTransferMovement) {
+                    return { ...current, species: nextSpecies, categoryCode: categoryCatalog[nextSpecies][0]?.code ?? "" };
+                  }
+                  // En un traslado la categoria tiene que salir de lo que
+                  // realmente hay en el potrero origen para esa especie, no
+                  // de la primera del catalogo completo (que puede no tener
+                  // stock ahi -- mismo bug que el potrero origen, ver arriba).
+                  const nextCategories = getTransferAvailabilityForField(current.fieldId).get(nextSpecies) ?? [];
+                  return { ...current, species: nextSpecies, categoryCode: nextCategories[0]?.categoryCode ?? "" };
+                });
               }}
             >
               {(isTransferMovement

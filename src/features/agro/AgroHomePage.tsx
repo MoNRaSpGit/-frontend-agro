@@ -794,36 +794,51 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       : { sourceMovement: pairedMovement, destinationMovement: movement };
   }, [animalMovements, editingAnimalMovementId]);
 
-  const transferOriginAvailability = useMemo(() => {
-    const availability = new Map<AgroSpecies, Array<{ categoryCode: string; quantity: number }>>();
+  // Parametrizado por fieldId (no solo el potrero origen actual) para que
+  // el selector de "Potrero origen" pueda recalcular especie/categoria
+  // disponible EN EL MISMO cambio de estado que el fieldId, sin esperar a
+  // que este memo se vuelva a calcular en el render siguiente -- ver
+  // getTransferAvailabilityForField mas abajo y su uso en
+  // AgroAnimalsSection (bug intermitente "Esa categoria no tiene stock
+  // disponible en el potrero origen").
+  const buildTransferAvailabilityForField = useCallback(
+    (fieldId: string) => {
+      const availability = new Map<AgroSpecies, Array<{ categoryCode: string; quantity: number }>>();
 
-    for (const [key, rawQuantity] of stockBalanceMap.entries()) {
-      const [fieldId, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
-      if (fieldId !== animalForm.fieldId) {
-        continue;
+      for (const [key, rawQuantity] of stockBalanceMap.entries()) {
+        const [entryFieldId, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
+        if (entryFieldId !== fieldId) {
+          continue;
+        }
+
+        let quantity = rawQuantity;
+        if (
+          currentEditingTransferMovement &&
+          currentEditingTransferMovement.sourceMovement.fieldId === entryFieldId &&
+          currentEditingTransferMovement.sourceMovement.species === species &&
+          currentEditingTransferMovement.sourceMovement.categoryCode === categoryCode
+        ) {
+          quantity += currentEditingTransferMovement.sourceMovement.quantity;
+        }
+
+        if (quantity <= 0) {
+          continue;
+        }
+
+        const rows = availability.get(species) ?? [];
+        rows.push({ categoryCode, quantity });
+        availability.set(species, rows);
       }
 
-      let quantity = rawQuantity;
-      if (
-        currentEditingTransferMovement &&
-        currentEditingTransferMovement.sourceMovement.fieldId === fieldId &&
-        currentEditingTransferMovement.sourceMovement.species === species &&
-        currentEditingTransferMovement.sourceMovement.categoryCode === categoryCode
-      ) {
-        quantity += currentEditingTransferMovement.sourceMovement.quantity;
-      }
+      return availability;
+    },
+    [currentEditingTransferMovement, stockBalanceMap]
+  );
 
-      if (quantity <= 0) {
-        continue;
-      }
-
-      const rows = availability.get(species) ?? [];
-      rows.push({ categoryCode, quantity });
-      availability.set(species, rows);
-    }
-
-    return availability;
-  }, [animalForm.fieldId, currentEditingTransferMovement, stockBalanceMap]);
+  const transferOriginAvailability = useMemo(
+    () => buildTransferAvailabilityForField(animalForm.fieldId),
+    [animalForm.fieldId, buildTransferAvailabilityForField]
+  );
 
   const transferAvailableSpecies = useMemo(
     () => Array.from(transferOriginAvailability.keys()),
@@ -2142,22 +2157,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         .get(animalForm.species)
         ?.find((item) => item.categoryCode === animalForm.categoryCode);
 
-      // DIAGNOSTICO TEMPORAL (bug intermitente "categoria no tiene stock" en
-      // potrero Casas, ver memoria de sesion) -- sacar despues de capturar
-      // el proximo caso en vivo.
-      // eslint-disable-next-line no-console
-      console.log("[agro-diag transfer]", {
-        fieldId: animalForm.fieldId,
-        species: animalForm.species,
-        categoryCode: animalForm.categoryCode,
-        categoryCodeType: typeof animalForm.categoryCode,
-        quantity,
-        availableCategory,
-        categoriesForSpecies: transferOriginAvailability.get(animalForm.species),
-        availabilityKeys: Array.from(transferOriginAvailability.keys()),
-        stockBalanceEntriesForField: Array.from(stockBalanceMap.entries()).filter(([key]) => key.startsWith(`${animalForm.fieldId}:`))
-      });
-
       if (!availableCategory) {
         nextErrors.categoryCode = "Esa categoria no tiene stock disponible en el potrero origen.";
       } else if (Number.isFinite(quantity) && quantity > availableCategory.quantity) {
@@ -2965,6 +2964,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             projectedAnimalTotal={projectedAnimalTotal}
             transferAvailableSpecies={transferAvailableSpecies}
             transferAvailableCategories={transferAvailableCategories}
+            getTransferAvailabilityForField={buildTransferAvailabilityForField}
             registerAnimalFieldRef={registerAnimalFieldRef}
             requestDeleteAnimalMovement={requestDeleteAnimalMovement}
             resetAnimalForm={resetAnimalForm}
