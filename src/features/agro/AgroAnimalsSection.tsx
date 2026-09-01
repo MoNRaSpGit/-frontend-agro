@@ -466,6 +466,48 @@ export function AgroAnimalsSection({
     URL.revokeObjectURL(url);
   }
 
+  // Mismo criterio que exportAnimalLedgerToExcel: exporta exactamente lo
+  // que muestra "Planilla de animales" en este momento (menos columna
+  // "Relacion contable", que no aporta nada en un PDF para imprimir).
+  async function exportAnimalLedgerToPdf() {
+    const { exportRowsToPdf } = await import("./agro.exportPdf");
+    const rows = animalLedgerRows.map((movement) => {
+      const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+      const lugar = getOrigenDestino(movement);
+      const currency = movement.currency ?? "USD";
+
+      return [
+        formatShortDate(movement.date),
+        getMovementLabel(movement),
+        lugar.campoOrigen,
+        lugar.potreroOrigen,
+        lugar.campoDestino,
+        lugar.potreroDestino,
+        movement.quantity,
+        category ? formatCategoryLabel(category.label) : movement.categoryCode,
+        movement.totalAmount !== undefined ? formatMoney(movement.totalAmount, currency) : "-"
+      ];
+    });
+
+    await exportRowsToPdf({
+      title: "Planilla de animales",
+      subtitle: `${rows.length} movimiento(s)`,
+      columns: [
+        "Fecha",
+        "Movimiento",
+        "Campo origen",
+        "Potrero origen",
+        "Campo destino",
+        "Potrero destino",
+        "Cantidad",
+        "Categoria",
+        "Monto total"
+      ],
+      rows,
+      fileName: `planilla-animales-${new Date().toISOString().slice(0, 10)}.pdf`
+    });
+  }
+
   return (
     <section className="content-grid">
       <article ref={animalFormPanelRef} className="panel">
@@ -875,14 +917,24 @@ export function AgroAnimalsSection({
             <h2>Planilla de animales</h2>
             <p>Vista de trabajo para revisar compras, ventas y movimientos del rodeo, filtrada por el campo/potrero seleccionado.</p>
           </div>
-          <button
-            type="button"
-            className="ghost-button excel-button"
-            onClick={() => void exportAnimalLedgerToExcel()}
-            disabled={animalLedgerRows.length === 0}
-          >
-            Exportar a Excel
-          </button>
+          <div className="table-actions">
+            <button
+              type="button"
+              className="ghost-button excel-button"
+              onClick={() => void exportAnimalLedgerToExcel()}
+              disabled={animalLedgerRows.length === 0}
+            >
+              Exportar a Excel
+            </button>
+            <button
+              type="button"
+              className="ghost-button pdf-button"
+              onClick={() => void exportAnimalLedgerToPdf()}
+              disabled={animalLedgerRows.length === 0}
+            >
+              Exportar a PDF
+            </button>
+          </div>
         </div>
         <div className="inline-metrics">
           <span className="data-badge">Compras {animalLedgerSummary.purchases}</span>

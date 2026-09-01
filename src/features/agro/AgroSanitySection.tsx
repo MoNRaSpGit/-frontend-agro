@@ -69,6 +69,57 @@ export function AgroSanitySection({
   const selectedEstablishment = establishments.find((item) => item.id === sanitaryForm.establishmentId);
   const selectedFields = fields.filter((item) => item.establishmentId === sanitaryForm.establishmentId);
 
+  // Exporta exactamente lo que muestra "Planilla sanitaria" (ya filtrada
+  // por "Buscar en sanidad").
+  function buildSanitaryExportRows() {
+    return sanitaryRows.map((record) => {
+      const field = fields.find((item) => item.id === record.fieldId);
+      const establishment = establishments.find((item) => item.id === record.establishmentId);
+      const category = categoryCatalog[record.species]?.find((item) => item.code === record.categoryCode);
+      return [
+        record.date,
+        establishment?.name ?? "-",
+        field?.name ?? "-",
+        speciesLabels[record.species],
+        category ? formatCategoryLabel(category.label) : record.categoryCode || "-",
+        record.quantity,
+        record.treatment,
+        record.notes || "-"
+      ];
+    });
+  }
+
+  async function exportSanitaryToExcel() {
+    const { exportRowsToExcel } = await import("./agro.exportExcel");
+    await exportRowsToExcel({
+      sheetName: "Planilla sanitaria",
+      columns: [
+        { header: "Fecha", width: 12, numFmt: "dd/mm/yyyy" },
+        { header: "Campo", width: 18 },
+        { header: "Potrero", width: 18 },
+        { header: "Especie", width: 12 },
+        { header: "Categoria", width: 24 },
+        { header: "Cantidad", width: 10, numFmt: "#,##0" },
+        { header: "Tratamiento", width: 24 },
+        { header: "Observaciones", width: 32 }
+      ],
+      rows: buildSanitaryExportRows().map((row) => [new Date(`${row[0]}T00:00:00`), ...row.slice(1)]),
+      fileName: `planilla-sanitaria-${new Date().toISOString().slice(0, 10)}.xlsx`
+    });
+  }
+
+  async function exportSanitaryToPdf() {
+    const { exportRowsToPdf } = await import("./agro.exportPdf");
+    const rows = buildSanitaryExportRows();
+    await exportRowsToPdf({
+      title: "Planilla sanitaria",
+      subtitle: `${rows.length} tratamiento(s)`,
+      columns: ["Fecha", "Campo", "Potrero", "Especie", "Categoria", "Cantidad", "Tratamiento", "Observaciones"],
+      rows: rows.map((row) => [formatShortDate(String(row[0])), ...row.slice(1)]),
+      fileName: `planilla-sanitaria-${new Date().toISOString().slice(0, 10)}.pdf`
+    });
+  }
+
   return (
     <section className="content-grid">
       <article className="panel">
@@ -187,6 +238,24 @@ export function AgroSanitySection({
           <div>
             <h2>Planilla sanitaria</h2>
             <p>Lectura cronologica de tratamientos por campo y potrero.</p>
+          </div>
+          <div className="table-actions">
+            <button
+              type="button"
+              className="ghost-button excel-button"
+              onClick={() => void exportSanitaryToExcel()}
+              disabled={sanitaryRows.length === 0}
+            >
+              Exportar a Excel
+            </button>
+            <button
+              type="button"
+              className="ghost-button pdf-button"
+              onClick={() => void exportSanitaryToPdf()}
+              disabled={sanitaryRows.length === 0}
+            >
+              Exportar a PDF
+            </button>
           </div>
         </div>
         <label className="table-search">

@@ -52,6 +52,43 @@ export function AgroRainfallSection({
 }: AgroRainfallSectionProps) {
   const selectedEstablishment = establishments.find((item) => item.id === rainfallForm.establishmentId);
 
+  // Exporta exactamente lo que muestra "Bitacora de lluvias" (ya filtrada
+  // por "Buscar en lluvias").
+  function buildRainfallExportRows() {
+    return rainfallRows.map((record) => {
+      const field = fields.find((item) => item.id === record.fieldId);
+      const establishment = field ? establishments.find((item) => item.id === field.establishmentId) : undefined;
+      return [record.date, establishment?.name ?? "-", record.millimeters, record.notes || "-"];
+    });
+  }
+
+  async function exportRainfallToExcel() {
+    const { exportRowsToExcel } = await import("./agro.exportExcel");
+    await exportRowsToExcel({
+      sheetName: "Bitacora de lluvias",
+      columns: [
+        { header: "Fecha", width: 12, numFmt: "dd/mm/yyyy" },
+        { header: "Campo", width: 20 },
+        { header: "Milimetros", width: 12, numFmt: "#,##0.0" },
+        { header: "Observaciones", width: 36 }
+      ],
+      rows: buildRainfallExportRows().map((row) => [new Date(`${row[0]}T00:00:00`), ...row.slice(1)]),
+      fileName: `bitacora-lluvias-${new Date().toISOString().slice(0, 10)}.xlsx`
+    });
+  }
+
+  async function exportRainfallToPdf() {
+    const { exportRowsToPdf } = await import("./agro.exportPdf");
+    const rows = buildRainfallExportRows();
+    await exportRowsToPdf({
+      title: "Bitacora de lluvias",
+      subtitle: `${rows.length} registro(s)`,
+      columns: ["Fecha", "Campo", "Milimetros", "Observaciones"],
+      rows: rows.map((row) => [formatShortDate(String(row[0])), row[1], `${formatNumber(Number(row[2]))} mm`, row[3]]),
+      fileName: `bitacora-lluvias-${new Date().toISOString().slice(0, 10)}.pdf`
+    });
+  }
+
   return (
     <section className="content-grid">
       <article className="panel">
@@ -109,6 +146,24 @@ export function AgroRainfallSection({
           <div>
             <h2>Bitacora de lluvias</h2>
             <p>Ultimos registros del establecimiento que estas mirando.</p>
+          </div>
+          <div className="table-actions">
+            <button
+              type="button"
+              className="ghost-button excel-button"
+              onClick={() => void exportRainfallToExcel()}
+              disabled={rainfallRows.length === 0}
+            >
+              Exportar a Excel
+            </button>
+            <button
+              type="button"
+              className="ghost-button pdf-button"
+              onClick={() => void exportRainfallToPdf()}
+              disabled={rainfallRows.length === 0}
+            >
+              Exportar a PDF
+            </button>
           </div>
         </div>
         <label className="table-search">

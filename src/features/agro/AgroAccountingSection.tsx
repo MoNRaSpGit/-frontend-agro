@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { expenseConceptLabels, formatMoney, formatNumber, formatShortDate, formatYearMonth, getNetAmount, parseDecimalInput } from "./agro.home.shared";
+import {
+  expenseConceptLabels,
+  formatMoney,
+  formatNumber,
+  formatShortDate,
+  formatYearMonth,
+  getNetAmount,
+  incomeConceptLabels,
+  parseDecimalInput
+} from "./agro.home.shared";
 import { currencyLabels } from "./agro.demo.data";
 import {
   AccountingEntry,
@@ -17,6 +26,8 @@ interface AgroAccountingSectionProps {
   fields: FieldUnit[];
   visibleMonthLabel: string;
   accountingStatusFilter: "all" | "pending" | "partial" | "collected";
+  accountingTypeFilter: "all" | AccountingEntryType;
+  accountingConceptFilter: string;
   accountingFormPanelRef: React.RefObject<HTMLElement | null>;
   accountingForm: {
     date: string;
@@ -87,6 +98,8 @@ interface AgroAccountingSectionProps {
     }>
   >;
   setAccountingStatusFilter: (value: "all" | "pending" | "partial" | "collected") => void;
+  setAccountingTypeFilter: (value: "all" | AccountingEntryType) => void;
+  setAccountingConceptFilter: (value: string) => void;
   setAccountingSearchTerm: (value: string) => void;
   onEditEntry: (entryId: string) => void;
   onEditExchangeRate: (rateId: string) => void;
@@ -100,6 +113,8 @@ export function AgroAccountingSection({
   fields,
   visibleMonthLabel,
   accountingStatusFilter,
+  accountingTypeFilter,
+  accountingConceptFilter,
   accountingFormPanelRef,
   accountingForm,
   exchangeRateForm,
@@ -116,6 +131,8 @@ export function AgroAccountingSection({
   setExchangeRateForm,
   setAccountingForm,
   setAccountingStatusFilter,
+  setAccountingTypeFilter,
+  setAccountingConceptFilter,
   setAccountingSearchTerm,
   onEditEntry,
   onEditExchangeRate,
@@ -177,6 +194,124 @@ export function AgroAccountingSection({
 
     onDeleteExchangeRate(pendingExchangeRateDelete.id);
     setPendingExchangeRateDelete(null);
+  }
+
+  // Exporta exactamente lo que muestra "Planilla contable" en este momento
+  // (ya viene filtrada por Ano/Mes, busqueda, estado de cobro, Tipo y
+  // Rubro -- no hace falta filtrar de nuevo aca).
+  function conceptLabelFor(entry: (typeof accountingLedgerWithConversions)[number]) {
+    return entry.type === "income"
+      ? incomeConceptLabels[entry.concept as IncomeConcept]
+      : expenseConceptLabels[entry.concept as ExpenseConcept];
+  }
+
+  const ACCOUNTING_EXPORT_COLUMNS = [
+    "Fecha",
+    "Campo",
+    "Tipo",
+    "Rubro",
+    "Moneda",
+    "Bruto",
+    "Comision",
+    "IVA",
+    "Total",
+    "Cobrado",
+    "Pendiente",
+    "Estado",
+    "UYU a USD",
+    "Relacionado a animales"
+  ];
+
+  function buildAccountingExportRows() {
+    return accountingLedgerWithConversions.map((entry) => {
+      const establishment = establishments.find((item) => item.id === entry.establishmentId);
+      return {
+        date: entry.date,
+        campo: establishment?.name ?? "-",
+        tipo: entry.type === "income" ? "Ingreso" : "Egreso",
+        rubro: conceptLabelFor(entry),
+        moneda: entry.currency,
+        bruto: entry.grossAmount,
+        comision: entry.commissionAmount,
+        iva: entry.taxAmount,
+        total: entry.netAmount,
+        cobrado: entry.type === "income" ? entry.collectedAmount : null,
+        pendiente: entry.type === "income" ? entry.pendingAmount : null,
+        estado: entry.collectionStatus ?? "-",
+        usdEquivalent: entry.usdEquivalent,
+        relacionado: entry.linkedAnimalMovementId ? "Si" : "No"
+      };
+    });
+  }
+
+  async function exportAccountingLedgerToExcel() {
+    const { exportRowsToExcel } = await import("./agro.exportExcel");
+    const rows = buildAccountingExportRows();
+
+    await exportRowsToExcel({
+      sheetName: "Planilla contable",
+      columns: [
+        { header: "Fecha", width: 12, numFmt: "dd/mm/yyyy" },
+        { header: "Campo", width: 18 },
+        { header: "Tipo", width: 10 },
+        { header: "Rubro", width: 24 },
+        { header: "Moneda", width: 9 },
+        { header: "Bruto", width: 12, numFmt: "#,##0.00" },
+        { header: "Comision", width: 10, numFmt: "#,##0.00" },
+        { header: "IVA", width: 10, numFmt: "#,##0.00" },
+        { header: "Total", width: 12, numFmt: "#,##0.00" },
+        { header: "Cobrado", width: 12, numFmt: "#,##0.00" },
+        { header: "Pendiente", width: 12, numFmt: "#,##0.00" },
+        { header: "Estado", width: 12 },
+        { header: "UYU a USD", width: 12, numFmt: "#,##0.00" },
+        { header: "Relacionado a animales", width: 16 }
+      ],
+      rows: rows.map((row) => [
+        new Date(`${row.date}T00:00:00`),
+        row.campo,
+        row.tipo,
+        row.rubro,
+        row.moneda,
+        row.bruto,
+        row.comision,
+        row.iva,
+        row.total,
+        row.cobrado ?? "-",
+        row.pendiente ?? "-",
+        row.estado,
+        row.usdEquivalent ?? "-",
+        row.relacionado
+      ]),
+      fileName: `planilla-contable-${new Date().toISOString().slice(0, 10)}.xlsx`
+    });
+  }
+
+  async function exportAccountingLedgerToPdf() {
+    const { exportRowsToPdf } = await import("./agro.exportPdf");
+    const rows = buildAccountingExportRows();
+
+    await exportRowsToPdf({
+      title: "Planilla contable",
+      subtitle: `${visibleMonthLabel} -- ${rows.length} movimiento(s)`,
+      columns: ACCOUNTING_EXPORT_COLUMNS,
+      rows: rows.map((row) => [
+        formatShortDate(row.date),
+        row.campo,
+        row.tipo,
+        row.rubro,
+        row.moneda,
+        formatMoney(row.bruto, row.moneda),
+        formatMoney(row.comision, row.moneda),
+        formatMoney(row.iva, row.moneda),
+        formatMoney(row.total, row.moneda),
+        row.cobrado !== null ? formatMoney(row.cobrado, row.moneda) : "-",
+        row.pendiente !== null ? formatMoney(row.pendiente, row.moneda) : "-",
+        row.estado,
+        row.usdEquivalent !== null ? formatMoney(row.usdEquivalent, "USD") : "-",
+        row.relacionado
+      ]),
+      fileName: `planilla-contable-${new Date().toISOString().slice(0, 10)}.pdf`
+    });
   }
 
   return (
@@ -427,6 +562,24 @@ export function AgroAccountingSection({
             <h2>Planilla contable</h2>
             <p>Lectura cronologica de {visibleMonthLabel} para revisar ingresos, egresos, rubros y moneda.</p>
           </div>
+          <div className="table-actions">
+            <button
+              type="button"
+              className="ghost-button excel-button"
+              onClick={() => void exportAccountingLedgerToExcel()}
+              disabled={accountingLedgerWithConversions.length === 0}
+            >
+              Exportar a Excel
+            </button>
+            <button
+              type="button"
+              className="ghost-button pdf-button"
+              onClick={() => void exportAccountingLedgerToPdf()}
+              disabled={accountingLedgerWithConversions.length === 0}
+            >
+              Exportar a PDF
+            </button>
+          </div>
         </div>
         <div className="inline-metrics">
           <span className="data-badge accent">Neto visible {formatMoney(projectedNet, accountingForm.currency)}</span>
@@ -460,6 +613,40 @@ export function AgroAccountingSection({
             <option value="pending">Pendiente</option>
             <option value="partial">Parcial</option>
             <option value="collected">Cobrado</option>
+          </select>
+        </label>
+        <label className="table-search">
+          <span>Tipo</span>
+          <select
+            value={accountingTypeFilter}
+            onChange={(event) => {
+              setAccountingTypeFilter(event.target.value as "all" | AccountingEntryType);
+              setAccountingConceptFilter("all");
+            }}
+          >
+            <option value="all">Todos</option>
+            <option value="income">Ingreso (venta)</option>
+            <option value="expense">Egreso (compra/gasto)</option>
+          </select>
+        </label>
+        <label className="table-search">
+          <span>Rubro</span>
+          <select value={accountingConceptFilter} onChange={(event) => setAccountingConceptFilter(event.target.value)}>
+            <option value="all">Todos</option>
+            {accountingTypeFilter !== "expense"
+              ? Object.entries(incomeConceptLabels).map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))
+              : null}
+            {accountingTypeFilter !== "income"
+              ? Object.entries(expenseConceptLabels).map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))
+              : null}
           </select>
         </label>
         <div ref={accountingTableWrapRef} className="table-wrap">

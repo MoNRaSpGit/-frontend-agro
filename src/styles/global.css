@@ -856,6 +856,16 @@ button {
   background: rgba(33, 115, 70, 0.4);
 }
 
+.ghost-button.pdf-button {
+  border-color: transparent;
+  background: #b3261e;
+  color: #fffdf7;
+}
+
+.ghost-button.pdf-button:disabled {
+  background: rgba(179, 38, 30, 0.4);
+}
+
 .action-row {
   display: flex;
   flex-wrap: wrap;

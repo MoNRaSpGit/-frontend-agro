@@ -163,6 +163,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const [animalSearchTerm, setAnimalSearchTerm] = useState("");
   const [accountingSearchTerm, setAccountingSearchTerm] = useState("");
   const [accountingStatusFilter, setAccountingStatusFilter] = useState<"all" | "pending" | "partial" | "collected">("all");
+  const [accountingTypeFilter, setAccountingTypeFilter] = useState<"all" | AccountingEntryType>("all");
+  const [accountingConceptFilter, setAccountingConceptFilter] = useState("all");
   const [rainfallSearchTerm, setRainfallSearchTerm] = useState("");
   const [sanitarySearchTerm, setSanitarySearchTerm] = useState("");
   const [editingAnimalMovementId, setEditingAnimalMovementId] = useState<string | null>(null);
@@ -1321,11 +1323,19 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }, [accountingLedgerRows, exchangeRateByMonth]);
 
   const visibleAccountingLedgerWithConversions = useMemo(() => {
-    if (accountingStatusFilter === "all") {
-      return accountingLedgerWithConversions;
-    }
-
     return accountingLedgerWithConversions.filter((entry) => {
+      if (accountingTypeFilter !== "all" && entry.type !== accountingTypeFilter) {
+        return false;
+      }
+
+      if (accountingConceptFilter !== "all" && entry.concept !== accountingConceptFilter) {
+        return false;
+      }
+
+      if (accountingStatusFilter === "all") {
+        return true;
+      }
+
       if (entry.type !== "income") {
         return false;
       }
@@ -1340,7 +1350,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
       return entry.collectionStatus === "Cobrado";
     });
-  }, [accountingLedgerWithConversions, accountingStatusFilter]);
+  }, [accountingConceptFilter, accountingLedgerWithConversions, accountingStatusFilter, accountingTypeFilter]);
 
   const globalPeriodSummary = useMemo(() => {
     const rangeSummary = summarizeRangeData(
@@ -2981,6 +2991,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             fields={fields}
             visibleMonthLabel={visibleMonthRange.label}
             accountingStatusFilter={accountingStatusFilter}
+            accountingTypeFilter={accountingTypeFilter}
+            accountingConceptFilter={accountingConceptFilter}
             accountingFormPanelRef={accountingFormPanelRef}
             accountingForm={accountingForm}
             exchangeRateForm={exchangeRateForm}
@@ -2997,6 +3009,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             setExchangeRateForm={setExchangeRateForm}
             setAccountingForm={setAccountingForm}
             setAccountingStatusFilter={setAccountingStatusFilter}
+            setAccountingTypeFilter={setAccountingTypeFilter}
+            setAccountingConceptFilter={setAccountingConceptFilter}
             setAccountingSearchTerm={setAccountingSearchTerm}
             onEditEntry={handleEditAccountingEntry}
             onEditExchangeRate={handleEditExchangeRate}
