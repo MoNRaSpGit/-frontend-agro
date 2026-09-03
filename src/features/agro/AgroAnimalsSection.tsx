@@ -1259,7 +1259,7 @@ export function AgroAnimalsSection({
           ) : null}
           <div className="action-row span-2">
             <button type="submit" className="primary-button">
-              {editingAnimalMovementId ? "Guardar cambios" : "Guardar movimiento demo"}
+              {editingAnimalMovementId ? "Guardar cambios" : "Guardar"}
             </button>
             {editingAnimalMovementId ? (
               <button type="button" className="ghost-button" onClick={resetAnimalForm}>
