@@ -62,6 +62,12 @@ interface AgroAnimalsSectionProps {
   visibleFields: FieldUnit[];
   selectedVisibleFieldId: string;
   onVisibleFieldChange: (value: string) => void;
+  // Mismo "Campo visible" del encabezado -- elegirlo aca tambien cambia
+  // que potreros aparecen en el select de Potrero de al lado (mismo
+  // efecto que ya tiene AgroToolbar, que limpia el potrero elegido si deja
+  // de pertenecer al campo nuevo).
+  selectedEstablishmentId: string;
+  onEstablishmentChange: (value: string) => void;
   // Stock real en vivo (fieldId:species:categoryCode -> cantidad), para la
   // columna "Actualidad" de la Planilla de stock -- asi esa columna
   // siempre muestra lo que el potrero tiene AHORA, no solo lo que quedo
@@ -193,6 +199,8 @@ export function AgroAnimalsSection({
   visibleFields,
   selectedVisibleFieldId,
   onVisibleFieldChange,
+  selectedEstablishmentId: selectedVisibleEstablishmentId,
+  onEstablishmentChange,
   stockBalanceMap,
   animalLedgerSummary,
   animalSearchTerm,
@@ -849,17 +857,29 @@ export function AgroAnimalsSection({
           </button>
         </div>
       </div>
-      <label className="table-search">
-        <span>Potrero</span>
-        <select value={selectedVisibleFieldId} onChange={(event) => onVisibleFieldChange(event.target.value)}>
-          <option value="">Todos</option>
-          {visibleFields.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="form-grid">
+        <label className="table-search">
+          <span>Campo</span>
+          <select value={selectedVisibleEstablishmentId} onChange={(event) => onEstablishmentChange(event.target.value)}>
+            {establishments.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="table-search">
+          <span>Potrero</span>
+          <select value={selectedVisibleFieldId} onChange={(event) => onVisibleFieldChange(event.target.value)}>
+            <option value="">Todos</option>
+            {visibleFields.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="table-wrap">
         <table className="animal-ledger-table">
           <thead>
@@ -961,17 +981,29 @@ export function AgroAnimalsSection({
           </button>
         </div>
       </div>
-      <label className="table-search">
-        <span>Potrero</span>
-        <select value={selectedVisibleFieldId} onChange={(event) => onVisibleFieldChange(event.target.value)}>
-          <option value="">Todos</option>
-          {visibleFields.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="form-grid">
+        <label className="table-search">
+          <span>Campo</span>
+          <select value={selectedVisibleEstablishmentId} onChange={(event) => onEstablishmentChange(event.target.value)}>
+            {establishments.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="table-search">
+          <span>Potrero</span>
+          <select value={selectedVisibleFieldId} onChange={(event) => onVisibleFieldChange(event.target.value)}>
+            <option value="">Todos</option>
+            {visibleFields.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="table-wrap">
         <table className="animal-ledger-table">
           <thead>

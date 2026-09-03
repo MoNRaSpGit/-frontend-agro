@@ -3123,6 +3123,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             visibleFields={establishmentFields}
             selectedVisibleFieldId={selectedVisibleFieldId}
             onVisibleFieldChange={setSelectedVisibleFieldId}
+            selectedEstablishmentId={selectedEstablishmentId}
+            onEstablishmentChange={setSelectedEstablishmentId}
             stockBalanceMap={stockBalanceMap}
             animalLedgerSummary={animalLedgerSummary}
             animalSearchTerm={animalSearchTerm}
