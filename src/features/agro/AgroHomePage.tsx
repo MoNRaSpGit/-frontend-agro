@@ -189,6 +189,16 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     confirmLabel?: string;
     variant?: "neutral";
   } | null>(null);
+  // Corrección de stock: mismo criterio que el traslado entre campos --
+  // pide confirmar antes de guardar, mostrando potrero/especie/categoria y
+  // el cambio exacto (de X a Y), para que no se cargue un numero grande
+  // por error sin darse cuenta.
+  const [pendingCorrectionConfirm, setPendingCorrectionConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    variant?: "neutral";
+  } | null>(null);
   const [animalMovements, setAnimalMovements] = useState<AnimalMovementRecord[]>([]);
   const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>([]);
   const [rainfallRecords, setRainfallRecords] = useState<RainfallRecord[]>([]);
@@ -862,6 +872,40 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     [animalForm.species, transferOriginAvailability]
   );
 
+  // Stock actual en el potrero origen para el "Ver origen y destino" del
+  // traslado -- mismo numero que ya usa la validacion (transferOriginAvailability),
+  // solo expuesto directo para mostrarlo en la vista previa.
+  const transferOriginCurrentQuantity = useMemo(
+    () => transferAvailableCategories.find((item) => item.categoryCode === animalForm.categoryCode)?.quantity ?? 0,
+    [transferAvailableCategories, animalForm.categoryCode]
+  );
+
+  // Stock actual en el potrero destino, con el mismo criterio que
+  // transferOriginAvailability para no contar dos veces el movimiento que
+  // se esta editando (si se esta editando un traslado, su mitad de
+  // "entrada" en el destino no debe sumarse a si misma en la vista previa).
+  const transferDestinationCurrentQuantity = useMemo(() => {
+    const key = `${animalForm.transferDestinationFieldId}:${animalForm.species}:${animalForm.categoryCode}`;
+    let quantity = stockBalanceMap.get(key) ?? 0;
+
+    if (
+      currentEditingTransferMovement &&
+      currentEditingTransferMovement.destinationMovement.fieldId === animalForm.transferDestinationFieldId &&
+      currentEditingTransferMovement.destinationMovement.species === animalForm.species &&
+      currentEditingTransferMovement.destinationMovement.categoryCode === animalForm.categoryCode
+    ) {
+      quantity -= currentEditingTransferMovement.destinationMovement.quantity;
+    }
+
+    return quantity;
+  }, [
+    animalForm.transferDestinationFieldId,
+    animalForm.species,
+    animalForm.categoryCode,
+    stockBalanceMap,
+    currentEditingTransferMovement
+  ]);
+
   const editingAnimalMovement = useMemo(() => {
     if (!editingAnimalMovementId) {
       return null;
@@ -893,6 +937,37 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     return quantity;
   }, [animalForm.categoryCode, animalForm.fieldId, animalForm.species, editingAnimalMovement, stockBalanceMap]);
+
+  // Igual que animalFormBaselineQuantity pero para TODAS las categorias del
+  // catalogo (no solo la elegida) -- para que el combo de Categoria en una
+  // Correccion de stock muestre "Toros (25)" al lado de cada opcion, con el
+  // numero real de cada una, y el usuario vea de un vistazo cuales estan
+  // bien y cuales hay que corregir sin tener que ir clickeando una por una.
+  // Misma exclusion del movimiento en edicion que animalFormBaselineQuantity,
+  // para no contar dos veces la propia correccion que se esta editando.
+  const correctionFieldCategoryQuantities = useMemo(() => {
+    const quantities = new Map<string, number>();
+
+    for (const category of categoryCatalog[animalForm.species]) {
+      const key = `${animalForm.fieldId}:${animalForm.species}:${category.code}`;
+      let quantity = stockBalanceMap.get(key) ?? 0;
+
+      if (
+        editingAnimalMovement &&
+        !isTransferMovementKind(editingAnimalMovement.kind) &&
+        editingAnimalMovement.fieldId === animalForm.fieldId &&
+        editingAnimalMovement.species === animalForm.species &&
+        editingAnimalMovement.categoryCode === category.code
+      ) {
+        const sign = getMovementDirection(editingAnimalMovement) === "entry" ? 1 : -1;
+        quantity -= sign * editingAnimalMovement.quantity;
+      }
+
+      quantities.set(category.code, quantity);
+    }
+
+    return quantities;
+  }, [animalForm.fieldId, animalForm.species, editingAnimalMovement, stockBalanceMap]);
 
   // En sanidad no se mueve stock, pero igual se filtra y se bloquea con la
   // misma logica que el traslado: antes el combo de categoria mostraba el
@@ -1087,6 +1162,18 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       )
       .sort((left, right) => right.date.localeCompare(left.date));
   }, [animalMovements, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+
+  // Planilla de stock: solo las correcciones (correction_in/correction_out),
+  // separadas de "Movimientos recientes" para que el cliente las vea de un
+  // vistazo sin mezclarlas con compras/ventas/traslados. A diferencia de
+  // "Movimientos recientes", no se acota al mes visible -- una correccion
+  // es un ajuste puntual poco frecuente, mejor verla siempre entera que
+  // arriesgarse a que quede "escondida" al cambiar de mes.
+  const stockCorrectionRows = useMemo(() => {
+    return [...animalMovements]
+      .filter((movement) => movement.kind === "correction_in" || movement.kind === "correction_out")
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [animalMovements]);
 
   // Planilla de "Resumen por establecimiento": mismos datos que el ledger de
   // Animales (globalAnimalLedgerRows, ya acotado al mes visible), filtrados
@@ -2105,10 +2192,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   function handleAnimalSubmit(
     event?: React.FormEvent<HTMLFormElement>,
-    options?: { skipCrossEstablishmentConfirm?: boolean }
+    options?: { skipCrossEstablishmentConfirm?: boolean; skipCorrectionConfirm?: boolean }
   ) {
     event?.preventDefault();
     const skipCrossEstablishmentConfirm = options?.skipCrossEstablishmentConfirm ?? false;
+    const skipCorrectionConfirm = options?.skipCorrectionConfirm ?? false;
 
     const quantity = parseDecimalInput(animalForm.quantity);
     const weightKg = parseDecimalInput(animalForm.weightKg);
@@ -2255,6 +2343,23 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         title: "Confirmar traslado entre campos",
         message: `¿Seguro que querés hacer un traslado de ${originName} a ${destinationName}?`,
         confirmLabel: "Si, trasladar",
+        variant: "neutral"
+      });
+      return;
+    }
+
+    // Correccion de stock: misma logica, confirmacion extra antes de
+    // guardar (correctionDelta ya viene calculado mas arriba).
+    if (isCorrectionMovement && !skipCorrectionConfirm) {
+      const fieldName = fields.find((item) => item.id === animalForm.fieldId)?.name ?? animalForm.fieldId;
+      const category = categoryCatalog[animalForm.species].find((item) => item.code === animalForm.categoryCode);
+      const categoryLabel = category ? formatCategoryLabel(category.label) : animalForm.categoryCode;
+      const direccion = correctionDelta > 0 ? "entrada" : "salida";
+
+      setPendingCorrectionConfirm({
+        title: "Confirmar corrección de stock",
+        message: `Vas a corregir ${fieldName} (${speciesLabels[animalForm.species]}, ${categoryLabel}): de ${formatNumber(animalFormBaselineQuantity, 0)} a ${formatNumber(quantity, 0)} — se va a registrar una ${direccion} de ${formatNumber(Math.abs(correctionDelta), 0)}.`,
+        confirmLabel: "Si, corregir",
         variant: "neutral"
       });
       return;
@@ -2896,6 +3001,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     handleAnimalSubmit(undefined, { skipCrossEstablishmentConfirm: true });
   }
 
+  function handleConfirmCorrection() {
+    setPendingCorrectionConfirm(null);
+    handleAnimalSubmit(undefined, { skipCorrectionConfirm: true });
+  }
+
   const projectedNet = getNetAmount(
     accountingForm.type,
     parseDecimalInput(accountingForm.grossAmount) || 0,
@@ -3012,6 +3122,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             animalMovements={animalMovements}
             animalLedgerRows={animalLedgerRows}
             globalAnimalLedgerRows={globalAnimalLedgerRows}
+            stockCorrectionRows={stockCorrectionRows}
+            stockBalanceMap={stockBalanceMap}
             animalLedgerSummary={animalLedgerSummary}
             animalSearchTerm={animalSearchTerm}
             animalTableRef={animalTableRef}
@@ -3026,9 +3138,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             isCommercialAnimalMovement={isCommercialAnimalMovement}
             isCorrectionAnimalMovement={isCorrectionAnimalMovement}
             correctionCurrentQuantity={animalFormBaselineQuantity}
+            correctionFieldCategoryQuantities={correctionFieldCategoryQuantities}
             projectedAnimalTotal={projectedAnimalTotal}
             transferAvailableSpecies={transferAvailableSpecies}
             transferAvailableCategories={transferAvailableCategories}
+            transferOriginCurrentQuantity={transferOriginCurrentQuantity}
+            transferDestinationCurrentQuantity={transferDestinationCurrentQuantity}
             getTransferAvailabilityForField={buildTransferAvailabilityForField}
             registerAnimalFieldRef={registerAnimalFieldRef}
             requestDeleteAnimalMovement={requestDeleteAnimalMovement}
@@ -3432,6 +3547,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           pendingDelete={pendingCrossEstablishmentTransfer}
           onCancel={() => setPendingCrossEstablishmentTransfer(null)}
           onConfirm={handleConfirmCrossEstablishmentTransfer}
+        />
+
+        <AgroDeleteConfirmModal
+          pendingDelete={pendingCorrectionConfirm}
+          onCancel={() => setPendingCorrectionConfirm(null)}
+          onConfirm={handleConfirmCorrection}
         />
       </ProductShell>
     </main>

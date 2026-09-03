@@ -46,6 +46,15 @@ interface AgroAnimalsSectionProps {
   // que el cliente tenga que ir cambiando el filtro para ver ambas puntas
   // de un traslado entre establecimientos distintos.
   globalAnimalLedgerRows: AnimalMovementRecord[];
+  // Solo correction_in/correction_out, de siempre (no acotado al mes
+  // visible) -- para la "Planilla de stock" separada.
+  stockCorrectionRows: AnimalMovementRecord[];
+  // Stock real en vivo (fieldId:species:categoryCode -> cantidad), para la
+  // columna "Actualidad" de la Planilla de stock -- asi esa columna
+  // siempre muestra lo que el potrero tiene AHORA, no solo lo que quedo
+  // justo despues de esa correccion puntual (que podria haber cambiado de
+  // nuevo despues, ej: otra correccion o movimiento posterior).
+  stockBalanceMap: Map<string, number>;
   animalLedgerSummary: {
     purchases: number;
     sales: number;
@@ -66,9 +75,16 @@ interface AgroAnimalsSectionProps {
   isCommercialAnimalMovement: boolean;
   isCorrectionAnimalMovement: boolean;
   correctionCurrentQuantity: number;
+  // categoryCode -> cantidad actual en este potrero/especie, para mostrar
+  // "(25)" al lado de cada categoria en el combo, en una Correccion.
+  correctionFieldCategoryQuantities: Map<string, number>;
   projectedAnimalTotal: number;
   transferAvailableSpecies: AgroSpecies[];
   transferAvailableCategories: Array<{ categoryCode: string; quantity: number }>;
+  // Stock actual en origen/destino para el boton "Ver origen y destino"
+  // del traslado (vista previa antes/despues, pedida por el cliente).
+  transferOriginCurrentQuantity: number;
+  transferDestinationCurrentQuantity: number;
   // Igual que transferOriginAvailability (AgroHomePage) pero parametrizado
   // por un fieldId cualquiera -- hace falta para recalcular especie y
   // categoria EN EL MISMO cambio de estado que el potrero origen (ver
@@ -163,6 +179,8 @@ export function AgroAnimalsSection({
   animalMovements,
   animalLedgerRows,
   globalAnimalLedgerRows,
+  stockCorrectionRows,
+  stockBalanceMap,
   animalLedgerSummary,
   animalSearchTerm,
   animalTableRef,
@@ -177,9 +195,12 @@ export function AgroAnimalsSection({
   isCommercialAnimalMovement,
   isCorrectionAnimalMovement,
   correctionCurrentQuantity,
+  correctionFieldCategoryQuantities,
   projectedAnimalTotal,
   transferAvailableSpecies,
   transferAvailableCategories,
+  transferOriginCurrentQuantity,
+  transferDestinationCurrentQuantity,
   getTransferAvailabilityForField,
   registerAnimalFieldRef,
   requestDeleteAnimalMovement,
@@ -193,9 +214,16 @@ export function AgroAnimalsSection({
   const LEDGER_PREVIEW_STEP = 5;
   const [visibleFilteredCount, setVisibleFilteredCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleRecentCount, setVisibleRecentCount] = useState(LEDGER_PREVIEW_COUNT);
+  const [showTransferPreview, setShowTransferPreview] = useState(false);
 
   const visibleFilteredMovements = animalLedgerRows.slice(0, visibleFilteredCount);
-  const visibleRecentMovements = globalAnimalLedgerRows.slice(0, visibleRecentCount);
+  // Las correcciones de stock ya no se muestran aca -- tienen su propia
+  // "Planilla de stock" mas abajo (el cliente las encontraba confundibles
+  // mezcladas con compras/ventas/traslados de verdad).
+  const recentMovementsWithoutCorrections = globalAnimalLedgerRows.filter(
+    (movement) => movement.kind !== "correction_in" && movement.kind !== "correction_out"
+  );
+  const visibleRecentMovements = recentMovementsWithoutCorrections.slice(0, visibleRecentCount);
 
   // Vuelve a la vista compacta cuando cambia la busqueda -- si no, el
   // usuario podia quedar viendo "todos" de una busqueda vieja mezclado con
@@ -215,6 +243,22 @@ export function AgroAnimalsSection({
       (!isInternalTransfer || item.id !== animalForm.fieldId)
   );
 
+  // Datos para el boton "Ver origen y destino": antes/despues de cada lado
+  // del traslado, partido a la mitad. "Despues" solo se calcula si ya hay
+  // una cantidad valida cargada -- si no, se muestra igual que "antes".
+  const transferPreviewQuantity = parseDecimalInput(animalForm.quantity);
+  const hasValidTransferPreviewQuantity = Number.isFinite(transferPreviewQuantity) && transferPreviewQuantity > 0;
+  const transferOriginAfterQuantity = hasValidTransferPreviewQuantity
+    ? transferOriginCurrentQuantity - transferPreviewQuantity
+    : transferOriginCurrentQuantity;
+  const transferDestinationAfterQuantity = hasValidTransferPreviewQuantity
+    ? transferDestinationCurrentQuantity + transferPreviewQuantity
+    : transferDestinationCurrentQuantity;
+  const transferOriginFieldName = fields.find((item) => item.id === animalForm.fieldId)?.name ?? "-";
+  const transferDestinationFieldName = fields.find((item) => item.id === animalForm.transferDestinationFieldId)?.name ?? "-";
+  const transferDestinationEstablishmentName =
+    establishments.find((item) => item.id === animalForm.transferDestinationEstablishmentId)?.name ?? "-";
+
   // Recalcula especie/categoria para el potrero origen que se acaba de
   // elegir, en el mismo tick que el cambio de fieldId -- ver el comentario
   // de getTransferAvailabilityForField en la interfaz de props de arriba.
@@ -227,6 +271,33 @@ export function AgroAnimalsSection({
       ? currentCategoryCode
       : nextCategories[0]?.categoryCode ?? "";
     return { species: nextSpecies, categoryCode: nextCategoryCode };
+  }
+
+  // Toda correccion se crea con buildStockCorrectionMovement
+  // (agro.home.shared.ts), que siempre arranca la nota con "Correccion
+  // manual: de X a Y animales." -- de ahi se sacan los numeros de antes y
+  // despues para la Planilla de stock, sin tener que recalcular el
+  // historial de nuevo aca.
+  function getCorrectionBeforeAfter(movement: AnimalMovementRecord) {
+    const match = movement.notes.match(/de (-?\d+) a (-?\d+) animales/);
+    if (!match) {
+      return null;
+    }
+    return { before: Number(match[1]), after: Number(match[2]) };
+  }
+
+  // El resto de la nota (lo que haya tipeado el usuario), sin el prefijo
+  // automatico -- para mostrar el motivo real en la Planilla de stock.
+  function getCorrectionReason(movement: AnimalMovementRecord) {
+    return movement.notes.replace(/^Correccion manual: de -?\d+ a -?\d+ animales\.\s*/, "").trim();
+  }
+
+  // Stock real de HOY para ese potrero/especie/categoria (columna
+  // "Actualidad") -- distinto del "despues" que quedo grabado en la nota
+  // de esa correccion puntual, que puede haber cambiado de nuevo desde
+  // entonces.
+  function getCorrectionCurrentQuantity(movement: AnimalMovementRecord) {
+    return stockBalanceMap.get(`${movement.fieldId}:${movement.species}:${movement.categoryCode}`) ?? 0;
   }
 
   // "Traslado" es la fila de salida (transfer_out) y "Ingreso" es la fila
@@ -508,6 +579,253 @@ export function AgroAnimalsSection({
     });
   }
 
+  // Filas de la Planilla de stock, compartidas entre la tabla y los dos
+  // exports -- cada correccion ya trae antes/despues en la nota (ver
+  // getCorrectionBeforeAfter).
+  function buildStockCorrectionExportRows() {
+    return stockCorrectionRows.map((movement) => {
+      const field = fields.find((item) => item.id === movement.fieldId);
+      const establishment = establishments.find((item) => item.id === field?.establishmentId);
+      const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+      const beforeAfter = getCorrectionBeforeAfter(movement);
+      return [
+        movement.date,
+        establishment?.name ?? "-",
+        field?.name ?? "-",
+        speciesLabels[movement.species],
+        category ? formatCategoryLabel(category.label) : movement.categoryCode || "-",
+        beforeAfter?.before ?? "-",
+        getCorrectionCurrentQuantity(movement),
+        movement.kind === "correction_in" ? `+${movement.quantity}` : `-${movement.quantity}`,
+        getCorrectionReason(movement) || "-"
+      ];
+    });
+  }
+
+  async function exportStockCorrectionsToExcel() {
+    const { exportRowsToExcel } = await import("./agro.exportExcel");
+    await exportRowsToExcel({
+      sheetName: "Planilla de stock",
+      columns: [
+        { header: "Fecha", width: 12, numFmt: "dd/mm/yyyy" },
+        { header: "Campo", width: 18 },
+        { header: "Potrero", width: 18 },
+        { header: "Especie", width: 12 },
+        { header: "Categoria", width: 24 },
+        { header: "Antes", width: 10, numFmt: "#,##0" },
+        { header: "Actualidad", width: 12, numFmt: "#,##0" },
+        { header: "Diferencia", width: 12 },
+        { header: "Motivo", width: 40 }
+      ],
+      rows: buildStockCorrectionExportRows().map((row) => [new Date(`${row[0]}T00:00:00`), ...row.slice(1)]),
+      fileName: `planilla-stock-${new Date().toISOString().slice(0, 10)}.xlsx`
+    });
+  }
+
+  async function exportStockCorrectionsToPdf() {
+    const { exportRowsToPdf } = await import("./agro.exportPdf");
+    const rows = buildStockCorrectionExportRows();
+    await exportRowsToPdf({
+      title: "Planilla de stock",
+      subtitle: `${rows.length} correccion(es)`,
+      columns: ["Fecha", "Campo", "Potrero", "Especie", "Categoria", "Antes", "Actualidad", "Diferencia", "Motivo"],
+      rows: rows.map((row) => [formatShortDate(String(row[0])), ...row.slice(1)]),
+      fileName: `planilla-stock-${new Date().toISOString().slice(0, 10)}.pdf`
+    });
+  }
+
+  // Las dos tablas de mas abajo se arman una sola vez aca (no directo en el
+  // JSX del return) para poder reordenarlas segun el Movimiento elegido en
+  // el formulario, sin duplicar el markup -- ver el uso mas abajo.
+  const planillaDeAnimalesPanel = (
+    <article className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Planilla de animales</h2>
+          <p>Vista de trabajo para revisar compras, ventas y movimientos del rodeo, filtrada por el campo/potrero seleccionado.</p>
+        </div>
+        <div className="table-actions">
+          <button
+            type="button"
+            className="ghost-button excel-button"
+            onClick={() => void exportAnimalLedgerToExcel()}
+            disabled={animalLedgerRows.length === 0}
+          >
+            Exportar a Excel
+          </button>
+          <button
+            type="button"
+            className="ghost-button pdf-button"
+            onClick={() => void exportAnimalLedgerToPdf()}
+            disabled={animalLedgerRows.length === 0}
+          >
+            Exportar a PDF
+          </button>
+        </div>
+      </div>
+      <div className="inline-metrics">
+        <span className="data-badge">Compras {animalLedgerSummary.purchases}</span>
+        <span className="data-badge">Ventas {animalLedgerSummary.sales}</span>
+        <span className="data-badge">Traslados {animalLedgerSummary.stockInternalMoves}</span>
+        <span className="data-badge">Nacimientos, muertes y faltantes {animalLedgerSummary.stockIncidents}</span>
+        <span className="data-badge accent">Relacionados a contabilidad {animalLedgerSummary.linkedCommercialRows}</span>
+      </div>
+      <label className="table-search">
+        <span>Buscar en animales</span>
+        <input
+          type="search"
+          placeholder="Campo, potrero, categoria, especie, fecha o nota..."
+          value={animalSearchTerm}
+          onChange={(event) => setAnimalSearchTerm(event.target.value)}
+        />
+      </label>
+      <div ref={animalTableWrapRef} className="table-wrap floating-scroll-host">
+        <table ref={animalTableRef} className="animal-ledger-table">
+          <thead>
+            <tr>
+              <th className="cell-date">Fecha</th>
+              <th className="cell-kind">Movimiento</th>
+              <th className="cell-field">Campo origen</th>
+              <th className="cell-field">Potrero origen</th>
+              <th className="cell-field">Campo destino</th>
+              <th className="cell-field">Potrero destino</th>
+              <th className="cell-description">Descripcion</th>
+              <th className="cell-number">Cantidad</th>
+              <th className="cell-category">Categoria</th>
+              <th className="cell-tag">Caravana</th>
+              <th className="cell-number">Peso</th>
+              <th className="cell-money">Precio</th>
+              <th className="cell-money">Flete</th>
+              <th className="cell-money">Comision</th>
+              <th className="cell-money">IVA</th>
+              <th className="cell-money">Monto total</th>
+              <th className="cell-link">Relacion contable</th>
+              <th className="cell-actions">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleFilteredMovements.length ? (
+              visibleFilteredMovements.map((movement) => renderLedgerRow(movement))
+            ) : (
+              <tr>
+                <td className="cell-empty" colSpan={17}>
+                  No hay movimientos para este filtro.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div
+        ref={animalTableScrollbarRef}
+        className={showAnimalFloatingScrollbar ? "floating-table-scrollbar" : "floating-table-scrollbar hidden"}
+      >
+        <div ref={animalTableScrollbarInnerRef} className="floating-table-scrollbar-inner" />
+      </div>
+      {animalLedgerRows.length > LEDGER_PREVIEW_COUNT ? (
+        <div className="action-row">
+          {visibleFilteredCount < animalLedgerRows.length ? (
+            <>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setVisibleFilteredCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, animalLedgerRows.length))}
+              >
+                Ver 5 más
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setVisibleFilteredCount(animalLedgerRows.length)}>
+                Ver todos ({animalLedgerRows.length})
+              </button>
+            </>
+          ) : (
+            <button type="button" className="ghost-button" onClick={() => setVisibleFilteredCount(LEDGER_PREVIEW_COUNT)}>
+              Ver menos
+            </button>
+          )}
+        </div>
+      ) : null}
+    </article>
+  );
+
+  const planillaDeStockPanel = (
+    <article className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Planilla de stock</h2>
+          <p>Correcciones de stock, de todos los campos.</p>
+        </div>
+        <div className="table-actions">
+          <button
+            type="button"
+            className="ghost-button excel-button"
+            onClick={() => void exportStockCorrectionsToExcel()}
+            disabled={stockCorrectionRows.length === 0}
+          >
+            Excel
+          </button>
+          <button
+            type="button"
+            className="ghost-button pdf-button"
+            onClick={() => void exportStockCorrectionsToPdf()}
+            disabled={stockCorrectionRows.length === 0}
+          >
+            PDF
+          </button>
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table className="animal-ledger-table">
+          <thead>
+            <tr>
+              <th className="cell-date">Fecha</th>
+              <th className="cell-field">Campo</th>
+              <th className="cell-field">Potrero</th>
+              <th>Especie</th>
+              <th className="cell-category">Categoria</th>
+              <th className="cell-number">Antes</th>
+              <th className="cell-number">Actualidad</th>
+              <th className="cell-number">Diferencia</th>
+              <th className="cell-description">Motivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stockCorrectionRows.length ? (
+              stockCorrectionRows.map((movement) => {
+                const field = fields.find((item) => item.id === movement.fieldId);
+                const establishment = establishments.find((item) => item.id === field?.establishmentId);
+                const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+                const beforeAfter = getCorrectionBeforeAfter(movement);
+                const isEntry = movement.kind === "correction_in";
+                return (
+                  <tr key={movement.id}>
+                    <td>{formatShortDate(movement.date)}</td>
+                    <td>{establishment?.name ?? "-"}</td>
+                    <td>{field?.name ?? "-"}</td>
+                    <td>{speciesLabels[movement.species]}</td>
+                    <td>{category ? formatCategoryLabel(category.label) : movement.categoryCode || "-"}</td>
+                    <td className="cell-number">{beforeAfter ? formatNumber(beforeAfter.before, 0) : "-"}</td>
+                    <td className="cell-number">{formatNumber(getCorrectionCurrentQuantity(movement), 0)}</td>
+                    <td className={`cell-number ${isEntry ? "tone-positive" : "tone-negative"}`}>
+                      {isEntry ? "+" : "-"}
+                      {formatNumber(movement.quantity, 0)}
+                    </td>
+                    <td>{getCorrectionReason(movement) || "-"}</td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td className="cell-empty" colSpan={9}>
+                  Todavia no hay correcciones de stock cargadas.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+
   return (
     <section className="content-grid">
       <article ref={animalFormPanelRef} className="panel">
@@ -723,7 +1041,9 @@ export function AgroAnimalsSection({
                   })
                 : categoryCatalog[animalForm.species].map((category) => ({
                     code: category.code,
-                    label: category.label
+                    label: isCorrectionAnimalMovement
+                      ? `${category.label} (${formatNumber(correctionFieldCategoryQuantities.get(category.code) ?? 0, 0)})`
+                      : category.label
                   }))
               ).map((category) => (
                 <option key={category.code} value={category.code}>
@@ -751,6 +1071,45 @@ export function AgroAnimalsSection({
               </small>
             ) : null}
           </label>
+          {isTransferMovement ? (
+            <div className="span-2 transfer-preview">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setShowTransferPreview((current) => !current)}
+              >
+                {showTransferPreview ? "Ocultar origen y destino" : "Ver origen y destino"}
+              </button>
+
+              {showTransferPreview ? (
+                <div className="transfer-preview__split">
+                  <div className="transfer-preview__side transfer-preview__side--origin">
+                    <span className="transfer-preview__label">Origen</span>
+                    <strong className="transfer-preview__place">
+                      {selectedEstablishment?.name ?? "-"} / {transferOriginFieldName}
+                    </strong>
+                    <div className="transfer-preview__numbers">
+                      <span>Antes: {formatNumber(transferOriginCurrentQuantity, 0)}</span>
+                      <span className="tone-negative">Despues: {formatNumber(transferOriginAfterQuantity, 0)}</span>
+                    </div>
+                  </div>
+                  <div className="transfer-preview__arrow" aria-hidden="true">
+                    →
+                  </div>
+                  <div className="transfer-preview__side transfer-preview__side--destination">
+                    <span className="transfer-preview__label">Destino</span>
+                    <strong className="transfer-preview__place">
+                      {transferDestinationEstablishmentName} / {transferDestinationFieldName}
+                    </strong>
+                    <div className="transfer-preview__numbers">
+                      <span>Antes: {formatNumber(transferDestinationCurrentQuantity, 0)}</span>
+                      <span className="tone-positive">Despues: {formatNumber(transferDestinationAfterQuantity, 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {isCattleDeathWithEarTag ? (
             <label className={animalFormErrors.earTag ? "field-error" : undefined}>
               <span>Numero de caravana</span>
@@ -911,123 +1270,27 @@ export function AgroAnimalsSection({
         </form>
       </article>
 
-      <article className="panel wide">
-        <div className="panel-header">
-          <div>
-            <h2>Planilla de animales</h2>
-            <p>Vista de trabajo para revisar compras, ventas y movimientos del rodeo, filtrada por el campo/potrero seleccionado.</p>
-          </div>
-          <div className="table-actions">
-            <button
-              type="button"
-              className="ghost-button excel-button"
-              onClick={() => void exportAnimalLedgerToExcel()}
-              disabled={animalLedgerRows.length === 0}
-            >
-              Exportar a Excel
-            </button>
-            <button
-              type="button"
-              className="ghost-button pdf-button"
-              onClick={() => void exportAnimalLedgerToPdf()}
-              disabled={animalLedgerRows.length === 0}
-            >
-              Exportar a PDF
-            </button>
-          </div>
-        </div>
-        <div className="inline-metrics">
-          <span className="data-badge">Compras {animalLedgerSummary.purchases}</span>
-          <span className="data-badge">Ventas {animalLedgerSummary.sales}</span>
-          <span className="data-badge">Traslados {animalLedgerSummary.stockInternalMoves}</span>
-          <span className="data-badge">Nacimientos, muertes y faltantes {animalLedgerSummary.stockIncidents}</span>
-          <span className="data-badge accent">Relacionados a contabilidad {animalLedgerSummary.linkedCommercialRows}</span>
-        </div>
-        <label className="table-search">
-          <span>Buscar en animales</span>
-          <input
-            type="search"
-            placeholder="Campo, potrero, categoria, especie, fecha o nota..."
-            value={animalSearchTerm}
-            onChange={(event) => setAnimalSearchTerm(event.target.value)}
-          />
-        </label>
-        <div ref={animalTableWrapRef} className="table-wrap floating-scroll-host">
-          <table ref={animalTableRef} className="animal-ledger-table">
-            <thead>
-              <tr>
-                <th className="cell-date">Fecha</th>
-                <th className="cell-kind">Movimiento</th>
-                <th className="cell-field">Campo origen</th>
-                <th className="cell-field">Potrero origen</th>
-                <th className="cell-field">Campo destino</th>
-                <th className="cell-field">Potrero destino</th>
-                <th className="cell-description">Descripcion</th>
-                <th className="cell-number">Cantidad</th>
-                <th className="cell-category">Categoria</th>
-                <th className="cell-tag">Caravana</th>
-                <th className="cell-number">Peso</th>
-                <th className="cell-money">Precio</th>
-                <th className="cell-money">Flete</th>
-                <th className="cell-money">Comision</th>
-                <th className="cell-money">IVA</th>
-                <th className="cell-money">Monto total</th>
-                <th className="cell-link">Relacion contable</th>
-                <th className="cell-actions">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleFilteredMovements.length ? (
-                visibleFilteredMovements.map((movement) => renderLedgerRow(movement))
-              ) : (
-                <tr>
-                  <td className="cell-empty" colSpan={17}>
-                    No hay movimientos para este filtro.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div
-          ref={animalTableScrollbarRef}
-          className={showAnimalFloatingScrollbar ? "floating-table-scrollbar" : "floating-table-scrollbar hidden"}
-        >
-          <div ref={animalTableScrollbarInnerRef} className="floating-table-scrollbar-inner" />
-        </div>
-        {animalLedgerRows.length > LEDGER_PREVIEW_COUNT ? (
-          <div className="action-row">
-            {visibleFilteredCount < animalLedgerRows.length ? (
-              <>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => setVisibleFilteredCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, animalLedgerRows.length))}
-                >
-                  Ver 5 más
-                </button>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => setVisibleFilteredCount(animalLedgerRows.length)}
-                >
-                  Ver todos ({animalLedgerRows.length})
-                </button>
-              </>
-            ) : (
-              <button type="button" className="ghost-button" onClick={() => setVisibleFilteredCount(LEDGER_PREVIEW_COUNT)}>
-                Ver menos
-              </button>
-            )}
-          </div>
-        ) : null}
-      </article>
+      {/* Cuando el Movimiento elegido es "Correccion de stock", la Planilla
+          de stock pasa primera (antes que Planilla de animales) -- el
+          cliente pidio que la tabla que corresponde al tipo de movimiento
+          seleccionado quede a mano, arriba de las otras. */}
+      {isCorrectionAnimalMovement ? (
+        <>
+          {planillaDeStockPanel}
+          {planillaDeAnimalesPanel}
+        </>
+      ) : (
+        <>
+          {planillaDeAnimalesPanel}
+          {planillaDeStockPanel}
+        </>
+      )}
 
       <article className="panel wide">
         <div className="panel-header">
           <div>
             <h2>Movimientos recientes</h2>
-            <p>Todos los movimientos (compras, ventas, traslados, etc.), sin importar el campo filtrado arriba -- para ver ambas puntas de un traslado entre establecimientos sin tener que cambiar el filtro.</p>
+            <p>Compras, ventas, traslados, nacimientos, muertes y faltantes, sin importar el campo filtrado arriba -- para ver ambas puntas de un traslado entre establecimientos sin tener que cambiar el filtro. Las correcciones de stock estan en su propia Planilla de stock, arriba.</p>
           </div>
         </div>
         <div className="table-wrap floating-scroll-host">
@@ -1067,23 +1330,27 @@ export function AgroAnimalsSection({
             </tbody>
           </table>
         </div>
-        {globalAnimalLedgerRows.length > LEDGER_PREVIEW_COUNT ? (
+        {recentMovementsWithoutCorrections.length > LEDGER_PREVIEW_COUNT ? (
           <div className="action-row">
-            {visibleRecentCount < globalAnimalLedgerRows.length ? (
+            {visibleRecentCount < recentMovementsWithoutCorrections.length ? (
               <>
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => setVisibleRecentCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, globalAnimalLedgerRows.length))}
+                  onClick={() =>
+                    setVisibleRecentCount((current) =>
+                      Math.min(current + LEDGER_PREVIEW_STEP, recentMovementsWithoutCorrections.length)
+                    )
+                  }
                 >
                   Ver 5 más
                 </button>
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => setVisibleRecentCount(globalAnimalLedgerRows.length)}
+                  onClick={() => setVisibleRecentCount(recentMovementsWithoutCorrections.length)}
                 >
-                  Ver todos ({globalAnimalLedgerRows.length})
+                  Ver todos ({recentMovementsWithoutCorrections.length})
                 </button>
               </>
             ) : (
