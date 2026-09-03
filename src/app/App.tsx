@@ -4,18 +4,38 @@ import { AgroPersistenceMode } from "../features/agro/agro.client";
 import {
   AGRO_ACCESS_MODE_STORAGE_KEY,
   AGRO_AUTH_SESSION_STORAGE_KEY,
-  clearAgroSessionStorage
+  clearAgroSessionStorage,
+  readAgroAuthSession
 } from "../shared/auth/agroSession";
 import { changeAccountPassword, loginWithAccount } from "../shared/auth/auth.client";
-import { removeStorageItem, writeJsonStorage } from "../shared/lib/persistence";
+import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../shared/lib/persistence";
 
 const AGRO_DIRECT_ACCOUNT = "rosendo";
 const AGRO_DIRECT_PASSWORD = "lamilagrosa";
 
 type AgroAccessMode = "demo-local" | "backend";
 
+// Antes esto arrancaba siempre en null, mandando al login de cero en
+// cada F5 -- aunque la sesion (access mode + tokens) ya estuviera guardada
+// en localStorage desde antes (agroSession.ts la escribe ahi, sobrevive un
+// refresh sin problema). El estado de React nunca la volvia a leer al
+// arrancar. Ahora se hidrata del storage: si habia una sesion de backend
+// con token guardado, se retoma tal cual sin pedir contrasena de nuevo; si
+// el token vencio de verdad, el resto del flujo ya sabe mandarlo al login
+// (ver AgroHomePage.tsx, "No cerrar sesion sola").
+function readStoredAccessMode(): AgroAccessMode | null {
+  const storedMode = readJsonStorage<AgroAccessMode | null>(AGRO_ACCESS_MODE_STORAGE_KEY, null);
+
+  if (storedMode === "backend") {
+    const session = readAgroAuthSession();
+    return session?.tokens.accessToken?.trim() ? "backend" : null;
+  }
+
+  return storedMode === "demo-local" ? "demo-local" : null;
+}
+
 export function App() {
-  const [accessMode, setAccessMode] = useState<AgroAccessMode | null>(null);
+  const [accessMode, setAccessMode] = useState<AgroAccessMode | null>(readStoredAccessMode);
   const [loginIdentifier, setLoginIdentifier] = useState(AGRO_DIRECT_ACCOUNT);
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);

@@ -27,6 +27,7 @@ import {
   getFirstFieldIdForEstablishment,
   getIncomeCollectedAmount,
   getIncomeCollectionStatus,
+  compareRecordsByDateDesc,
   getIncomeExpectedAmount,
   getIncomePendingAmount,
   getMovementDirection,
@@ -1086,14 +1087,14 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const latestAnimalMovements = useMemo(() => {
     return [...animalMovements]
       .filter((movement) => selectedFieldIdSet.has(movement.fieldId))
-      .sort((left, right) => right.date.localeCompare(left.date))
+      .sort(compareRecordsByDateDesc)
       .slice(0, 6);
   }, [animalMovements, selectedFieldIdSet]);
 
   const latestAccountingEntries = useMemo(() => {
     return [...accountingEntries]
       .filter((entry) => establishmentFieldIdSet.has(entry.fieldId))
-      .sort((left, right) => right.date.localeCompare(left.date))
+      .sort(compareRecordsByDateDesc)
       .slice(0, 6);
   }, [accountingEntries, establishmentFieldIdSet]);
 
@@ -1145,7 +1146,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
         return searchBase.includes(animalSearchTerm.trim().toLowerCase());
       })
-      .sort((left, right) => right.date.localeCompare(left.date));
+      .sort(compareRecordsByDateDesc);
   }, [animalMovements, animalSearchTerm, establishments, fields, selectedFieldIdSet, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   // A diferencia de animalLedgerRows (filtrada por el campo seleccionado,
@@ -1160,7 +1161,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         (movement) =>
           movement.kind !== "transfer_in" && isDateWithinRange(movement.date, visibleMonthRange.startDate, visibleMonthRange.endDate)
       )
-      .sort((left, right) => right.date.localeCompare(left.date));
+      .sort(compareRecordsByDateDesc);
   }, [animalMovements, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   // Planilla de stock: solo las correcciones (correction_in/correction_out),
@@ -1172,7 +1173,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const stockCorrectionRows = useMemo(() => {
     return [...animalMovements]
       .filter((movement) => movement.kind === "correction_in" || movement.kind === "correction_out")
-      .sort((left, right) => right.date.localeCompare(left.date));
+      .sort(compareRecordsByDateDesc);
   }, [animalMovements]);
 
   // Planilla de "Resumen por establecimiento": mismos datos que el ledger de
@@ -1213,7 +1214,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         }
         return entry.concept === summaryAccountingConceptFilter;
       })
-      .sort((left, right) => right.date.localeCompare(left.date));
+      .sort(compareRecordsByDateDesc);
   }, [accountingEntries, selectedYear, summaryEstablishmentFilter, summaryAccountingConceptFilter]);
 
   // Resumen mes a mes del rubro elegido, cada mes con su total separado por
@@ -1252,7 +1253,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     return animalMovements
       .filter((movement) => isTransferMovementKind(movement.kind))
-      .sort((left, right) => right.date.localeCompare(left.date))
+      .sort(compareRecordsByDateDesc)
       .reduce<
         Array<{
           id: string;
@@ -1399,7 +1400,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
         return searchBase.includes(accountingSearchTerm.trim().toLowerCase());
       })
-      .sort((left, right) => right.date.localeCompare(left.date));
+      .sort(compareRecordsByDateDesc);
   }, [accountingEntries, accountingSearchTerm, establishmentFieldIdSet, establishments, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   const accountingLedgerWithConversions = useMemo(() => {
@@ -1533,7 +1534,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           return searchBase.includes(rainfallSearchTerm.trim().toLowerCase());
         }
       )
-      .sort((left, right) => right.date.localeCompare(left.date));
+      .sort(compareRecordsByDateDesc);
   }, [establishmentFieldIds, establishments, fields, rainfallRecords, rainfallSearchTerm, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   const sanitaryRows = useMemo(() => {
@@ -1569,7 +1570,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
         return searchBase.includes(sanitarySearchTerm.trim().toLowerCase());
       })
-      .sort((left, right) => right.date.localeCompare(left.date));
+      .sort(compareRecordsByDateDesc);
   }, [establishments, fields, sanitaryRecords, sanitarySearchTerm, selectedFieldIds, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
   const visibleExchangeRates = useMemo(() => {

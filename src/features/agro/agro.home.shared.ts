@@ -505,6 +505,27 @@ export function buildStockCorrectionMovement(params: {
   };
 }
 
+// Orden "mas nuevo primero" para cualquier planilla (Animales, Contabilidad,
+// Sanidad, Lluvia). Antes se ordenaba solo por `date` (la fecha de negocio,
+// que el usuario puede elegir libremente y solo tiene granularidad de dia)
+// -- dos movimientos del mismo dia quedaban en el orden en que estuvieran
+// en el array, que no necesariamente es el orden en que se cargaron de
+// verdad. El cliente reporto justo esto: "hago un movimiento y no aparece
+// primero en la lista, aparece mas abajo". Ahora, a igual fecha, desempata
+// por el timestamp de creacion real que llevan embebido los ids
+// (anm-<epoch>, acc-<epoch>, etc.) -- asi el ultimo que se cargo siempre
+// queda primero, sin importar en que orden haya quedado en el array.
+export function compareRecordsByDateDesc<T extends { id: string; date: string }>(a: T, b: T): number {
+  const dateCompare = b.date.localeCompare(a.date);
+  if (dateCompare !== 0) {
+    return dateCompare;
+  }
+
+  const aCreatedAt = Number(a.id.match(/\d{10,}/)?.[0] ?? 0);
+  const bCreatedAt = Number(b.id.match(/\d{10,}/)?.[0] ?? 0);
+  return bCreatedAt - aCreatedAt;
+}
+
 export function isTransferMovementKind(kind: AnimalMovementKind) {
   return kind === "transfer" || kind === "transfer_internal" || kind === "transfer_in" || kind === "transfer_out";
 }

@@ -225,6 +225,22 @@ export function AgroAnimalsSection({
   );
   const visibleRecentMovements = recentMovementsWithoutCorrections.slice(0, visibleRecentCount);
 
+  // Traslados, nacimientos y muertes -- los motivos "de campo" por los que
+  // cambia el rodeo de un potrero, a diferencia de compra/venta que son
+  // mas de oficina (el cliente pidio expresamente dejar afuera compra).
+  // Planilla chica, sin las columnas de precio/comision/IVA que lo
+  // obligaban a desplazar la pantalla para ver todo junto. Mismo alcance
+  // de fechas que "Movimientos recientes" (globalAnimalLedgerRows ya viene
+  // acotado al mes visible); transfer_in ya viene excluido ahi (es la otra
+  // mitad del mismo traslado).
+  const fieldMovementRows = globalAnimalLedgerRows.filter(
+    (movement) =>
+      movement.kind === "transfer_out" ||
+      movement.kind === "transfer_internal" ||
+      movement.kind === "birth" ||
+      movement.kind === "death"
+  );
+
   // Vuelve a la vista compacta cuando cambia la busqueda -- si no, el
   // usuario podia quedar viendo "todos" de una busqueda vieja mezclado con
   // los resultados nuevos.
@@ -634,7 +650,56 @@ export function AgroAnimalsSection({
     });
   }
 
-  // Las dos tablas de mas abajo se arman una sola vez aca (no directo en el
+  // Filas de la Planilla de movimientos de campo, compartidas entre la
+  // tabla y los dos exports.
+  function buildFieldMovementExportRows() {
+    return fieldMovementRows.map((movement) => {
+      const lugar = getOrigenDestino(movement);
+      const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+      const currency = movement.currency ?? "USD";
+      return [
+        movement.date,
+        getMovementLabel(movement),
+        `${lugar.campoOrigen} / ${lugar.potreroOrigen}`,
+        `${lugar.campoDestino} / ${lugar.potreroDestino}`,
+        `${speciesLabels[movement.species]} · ${category ? formatCategoryLabel(category.label) : movement.categoryCode}`,
+        movement.quantity,
+        movement.freightAmount !== undefined ? formatMoney(movement.freightAmount, currency) : "-"
+      ];
+    });
+  }
+
+  async function exportFieldMovementsToExcel() {
+    const { exportRowsToExcel } = await import("./agro.exportExcel");
+    await exportRowsToExcel({
+      sheetName: "Planilla de movimientos de campo",
+      columns: [
+        { header: "Fecha", width: 12, numFmt: "dd/mm/yyyy" },
+        { header: "Motivo", width: 14 },
+        { header: "Origen", width: 26 },
+        { header: "Destino", width: 26 },
+        { header: "Categoria", width: 28 },
+        { header: "Cantidad", width: 10, numFmt: "#,##0" },
+        { header: "Flete", width: 14 }
+      ],
+      rows: buildFieldMovementExportRows().map((row) => [new Date(`${row[0]}T00:00:00`), ...row.slice(1)]),
+      fileName: `planilla-movimientos-campo-${new Date().toISOString().slice(0, 10)}.xlsx`
+    });
+  }
+
+  async function exportFieldMovementsToPdf() {
+    const { exportRowsToPdf } = await import("./agro.exportPdf");
+    const rows = buildFieldMovementExportRows();
+    await exportRowsToPdf({
+      title: "Planilla de movimientos de campo",
+      subtitle: `${rows.length} movimiento(s)`,
+      columns: ["Fecha", "Motivo", "Origen", "Destino", "Categoria", "Cantidad", "Flete"],
+      rows: rows.map((row) => [formatShortDate(String(row[0])), ...row.slice(1)]),
+      fileName: `planilla-movimientos-campo-${new Date().toISOString().slice(0, 10)}.pdf`
+    });
+  }
+
+  // Las tres tablas de mas abajo se arman una sola vez aca (no directo en el
   // JSX del return) para poder reordenarlas segun el Movimiento elegido en
   // el formulario, sin duplicar el markup -- ver el uso mas abajo.
   const planillaDeAnimalesPanel = (
@@ -817,6 +882,99 @@ export function AgroAnimalsSection({
               <tr>
                 <td className="cell-empty" colSpan={9}>
                   Todavia no hay correcciones de stock cargadas.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+
+  const planillaDeMovimientosCampoPanel = (
+    <article className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Planilla de movimientos de campo</h2>
+          <p>Traslados, nacimientos y muertes: fecha, motivo, origen, destino y cantidad, sin compras ni ventas.</p>
+        </div>
+        <div className="table-actions">
+          <button
+            type="button"
+            className="ghost-button excel-button"
+            onClick={() => void exportFieldMovementsToExcel()}
+            disabled={fieldMovementRows.length === 0}
+          >
+            Excel
+          </button>
+          <button
+            type="button"
+            className="ghost-button pdf-button"
+            onClick={() => void exportFieldMovementsToPdf()}
+            disabled={fieldMovementRows.length === 0}
+          >
+            PDF
+          </button>
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table className="animal-ledger-table">
+          <thead>
+            <tr>
+              <th className="cell-date">Fecha</th>
+              <th className="cell-kind">Motivo</th>
+              <th className="cell-field">Origen</th>
+              <th className="cell-field">Destino</th>
+              <th className="cell-category">Categoria</th>
+              <th className="cell-number">Cantidad</th>
+              <th className="cell-money">Flete</th>
+              <th className="cell-actions">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fieldMovementRows.length ? (
+              fieldMovementRows.map((movement) => {
+                const lugar = getOrigenDestino(movement);
+                const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+                const currency = movement.currency ?? "USD";
+                return (
+                  <tr key={movement.id}>
+                    <td>{formatShortDate(movement.date)}</td>
+                    <td>{getMovementLabel(movement)}</td>
+                    <td>
+                      {lugar.campoOrigen} / {lugar.potreroOrigen}
+                    </td>
+                    <td>
+                      {lugar.campoDestino} / {lugar.potreroDestino}
+                    </td>
+                    <td>
+                      {speciesLabels[movement.species]} · {category ? formatCategoryLabel(category.label) : movement.categoryCode}
+                    </td>
+                    <td className="cell-number">{formatNumber(movement.quantity, 0)}</td>
+                    <td className="cell-money">
+                      {movement.freightAmount !== undefined ? formatMoney(movement.freightAmount, currency) : "-"}
+                    </td>
+                    <td className="cell-actions">
+                      <div className="table-actions">
+                        <button type="button" className="ghost-button" onClick={() => onEditMovement(movement.id)}>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button danger"
+                          onClick={() => requestDeleteAnimalMovement(movement.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td className="cell-empty" colSpan={8}>
+                  No hay traslados, nacimientos ni muertes en el rango de fechas visible.
                 </td>
               </tr>
             )}
@@ -1270,18 +1428,27 @@ export function AgroAnimalsSection({
         </form>
       </article>
 
-      {/* Cuando el Movimiento elegido es "Correccion de stock", la Planilla
-          de stock pasa primera (antes que Planilla de animales) -- el
-          cliente pidio que la tabla que corresponde al tipo de movimiento
-          seleccionado quede a mano, arriba de las otras. */}
+      {/* La planilla que corresponde al Movimiento elegido en el formulario
+          pasa primera -- Correccion de stock -> Planilla de stock,
+          Traslado/Nacimiento/Muerte -> Planilla de movimientos de campo,
+          cualquier otro -> Planilla de animales (la completa, con
+          compra/venta/etc). */}
       {isCorrectionAnimalMovement ? (
         <>
           {planillaDeStockPanel}
           {planillaDeAnimalesPanel}
+          {planillaDeMovimientosCampoPanel}
+        </>
+      ) : isTransferMovement || animalForm.kind === "birth" || animalForm.kind === "death" ? (
+        <>
+          {planillaDeMovimientosCampoPanel}
+          {planillaDeAnimalesPanel}
+          {planillaDeStockPanel}
         </>
       ) : (
         <>
           {planillaDeAnimalesPanel}
+          {planillaDeMovimientosCampoPanel}
           {planillaDeStockPanel}
         </>
       )}
