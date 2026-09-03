@@ -19,6 +19,11 @@ interface AgroSanitySectionProps {
   };
   sanitaryCategoryOptions: Array<{ categoryCode: string; quantity: number }>;
   sanitarySpeciesAvailableQuantity: Record<AgroSpecies, number>;
+  // Recalcular especie/categoria en el mismo tick que el cambio de
+  // Potrero/Especie (en vez de esperar al useEffect de AgroHomePage, un
+  // render despues) -- mismo bug intermitente "Esa categoria no tiene
+  // stock disponible" que se arreglo en Animales, encontrado tambien aca.
+  getSanitaryAvailabilityForField: (fieldId: string) => Map<AgroSpecies, Array<{ categoryCode: string; quantity: number }>>;
   sanitaryRows: Array<{
     id: string;
     date: string;
@@ -57,6 +62,7 @@ export function AgroSanitySection({
   sanitaryForm,
   sanitaryCategoryOptions,
   sanitarySpeciesAvailableQuantity,
+  getSanitaryAvailabilityForField,
   sanitaryRows,
   sanitarySearchTerm,
   resetSanitaryForm,
@@ -68,6 +74,20 @@ export function AgroSanitySection({
 }: AgroSanitySectionProps) {
   const selectedEstablishment = establishments.find((item) => item.id === sanitaryForm.establishmentId);
   const selectedFields = fields.filter((item) => item.establishmentId === sanitaryForm.establishmentId);
+
+  // Recalcula especie/categoria para el potrero que se acaba de elegir, en
+  // el mismo tick que el cambio de fieldId -- ver el comentario de
+  // getSanitaryAvailabilityForField en la interfaz de props de arriba.
+  function resolveSpeciesAndCategoryForField(nextFieldId: string, currentSpecies: AgroSpecies, currentCategoryCode: string) {
+    const availability = getSanitaryAvailabilityForField(nextFieldId);
+    const availableSpecies = Array.from(availability.keys());
+    const nextSpecies = availableSpecies.includes(currentSpecies) ? currentSpecies : availableSpecies[0] ?? currentSpecies;
+    const nextCategories = availability.get(nextSpecies) ?? [];
+    const nextCategoryCode = nextCategories.some((item) => item.categoryCode === currentCategoryCode)
+      ? currentCategoryCode
+      : nextCategories[0]?.categoryCode ?? "";
+    return { species: nextSpecies, categoryCode: nextCategoryCode };
+  }
 
   // Exporta exactamente lo que muestra "Planilla sanitaria" (ya filtrada
   // por "Buscar en sanidad").
@@ -146,7 +166,14 @@ export function AgroSanitySection({
             <span>Potrero</span>
             <select
               value={sanitaryForm.fieldId}
-              onChange={(event) => setSanitaryForm((current) => ({ ...current, fieldId: event.target.value }))}
+              onChange={(event) => {
+                const nextFieldId = event.target.value;
+                setSanitaryForm((current) => ({
+                  ...current,
+                  fieldId: nextFieldId,
+                  ...resolveSpeciesAndCategoryForField(nextFieldId, current.species, current.categoryCode)
+                }));
+              }}
             >
               {selectedFields.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -161,11 +188,16 @@ export function AgroSanitySection({
               value={sanitaryForm.species}
               onChange={(event) => {
                 const nextSpecies = event.target.value as AgroSpecies;
-                // La categoria la recalcula sola AgroHomePage (efecto de
-                // autocompletado) segun lo que realmente haya en el
-                // potrero para la especie nueva -- aca no se toca, para no
-                // dejarla un instante en la primera del catalogo fijo.
-                setSanitaryForm((current) => ({ ...current, species: nextSpecies }));
+                // La categoria se recalcula aca mismo (en el mismo tick que
+                // la especie), en vez de esperar al efecto de autocompletado
+                // de AgroHomePage -- ver getSanitaryAvailabilityForField.
+                setSanitaryForm((current) => {
+                  const nextCategories = getSanitaryAvailabilityForField(current.fieldId).get(nextSpecies) ?? [];
+                  const nextCategoryCode = nextCategories.some((item) => item.categoryCode === current.categoryCode)
+                    ? current.categoryCode
+                    : nextCategories[0]?.categoryCode ?? "";
+                  return { ...current, species: nextSpecies, categoryCode: nextCategoryCode };
+                });
               }}
             >
               {Object.entries(speciesLabels).map(([value, label]) => (

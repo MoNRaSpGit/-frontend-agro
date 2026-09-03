@@ -891,9 +891,21 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // seleccionada por defecto la primera categoria del catalogo aunque no
   // hubiera ni un animal de esa categoria en el potrero -- la sanidad
   // quedaba registrada con una categoria inventada.
+  //
+  // Parametrizado por fieldId (no solo el potrero actual del form) por el
+  // mismo motivo que buildTransferAvailabilityForField en Animales: el
+  // select de Potrero puede recalcular especie/categoria en el mismo
+  // cambio de estado que el fieldId, sin esperar al useEffect de abajo
+  // (mismo bug intermitente "Esa categoria no tiene stock disponible",
+  // encontrado tambien en Sanidad al auditar Ave Maria).
+  const getSanitaryAvailabilityForField = useCallback(
+    (fieldId: string) => computeFieldAvailability(stockBalanceMap, fieldId),
+    [stockBalanceMap]
+  );
+
   const sanitaryFieldAvailability = useMemo(
-    () => computeFieldAvailability(stockBalanceMap, sanitaryForm.fieldId),
-    [sanitaryForm.fieldId, stockBalanceMap]
+    () => getSanitaryAvailabilityForField(sanitaryForm.fieldId),
+    [getSanitaryAvailabilityForField, sanitaryForm.fieldId]
   );
 
   const sanitaryAvailableCategories = useMemo(
@@ -922,6 +934,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // si no hay ninguna), cada vez que cambia el potrero, la especie, o el
   // stock disponible deja invalida la categoria actual. No se toca
   // mientras se edita un registro existente (ver sanitaryCategoryOptions).
+  // Los onChange de Potrero y Especie en AgroSanitySection ya recalculan
+  // esto en el mismo tick (ver getSanitaryAvailabilityForField); este
+  // efecto queda como red de seguridad para otros casos (ej: el stock
+  // disponible cambia por otro motivo mientras el form esta abierto).
   useEffect(() => {
     if (editingSanitaryRecordId) return;
 
@@ -3045,6 +3061,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             sanitaryForm={sanitaryForm}
             sanitaryCategoryOptions={sanitaryCategoryOptions}
             sanitarySpeciesAvailableQuantity={sanitarySpeciesAvailableQuantity}
+            getSanitaryAvailabilityForField={getSanitaryAvailabilityForField}
             sanitaryRows={sanitaryRows}
             sanitarySearchTerm={sanitarySearchTerm}
             resetSanitaryForm={resetSanitaryForm}
