@@ -873,40 +873,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     [animalForm.species, transferOriginAvailability]
   );
 
-  // Stock actual en el potrero origen para el "Ver origen y destino" del
-  // traslado -- mismo numero que ya usa la validacion (transferOriginAvailability),
-  // solo expuesto directo para mostrarlo en la vista previa.
-  const transferOriginCurrentQuantity = useMemo(
-    () => transferAvailableCategories.find((item) => item.categoryCode === animalForm.categoryCode)?.quantity ?? 0,
-    [transferAvailableCategories, animalForm.categoryCode]
-  );
-
-  // Stock actual en el potrero destino, con el mismo criterio que
-  // transferOriginAvailability para no contar dos veces el movimiento que
-  // se esta editando (si se esta editando un traslado, su mitad de
-  // "entrada" en el destino no debe sumarse a si misma en la vista previa).
-  const transferDestinationCurrentQuantity = useMemo(() => {
-    const key = `${animalForm.transferDestinationFieldId}:${animalForm.species}:${animalForm.categoryCode}`;
-    let quantity = stockBalanceMap.get(key) ?? 0;
-
-    if (
-      currentEditingTransferMovement &&
-      currentEditingTransferMovement.destinationMovement.fieldId === animalForm.transferDestinationFieldId &&
-      currentEditingTransferMovement.destinationMovement.species === animalForm.species &&
-      currentEditingTransferMovement.destinationMovement.categoryCode === animalForm.categoryCode
-    ) {
-      quantity -= currentEditingTransferMovement.destinationMovement.quantity;
-    }
-
-    return quantity;
-  }, [
-    animalForm.transferDestinationFieldId,
-    animalForm.species,
-    animalForm.categoryCode,
-    stockBalanceMap,
-    currentEditingTransferMovement
-  ]);
-
   const editingAnimalMovement = useMemo(() => {
     if (!editingAnimalMovementId) {
       return null;
@@ -1164,6 +1130,31 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       .sort(compareRecordsByDateDesc);
   }, [animalMovements, visibleMonthRange.endDate, visibleMonthRange.startDate]);
 
+  // Igual criterio que animalLedgerRows (filtro de Campo/Potrero de arriba,
+  // con el mismo tratamiento de traslados para no repetir una vez por cada
+  // punta cuando las dos caen dentro del filtro), pero sin el termino de
+  // busqueda de "Planilla de animales" -- el cliente pidio que el filtro de
+  // potrero de arriba tambien acote la Planilla de stock y la de
+  // movimientos de campo, no solo la de animales.
+  const fieldScopedMovements = useMemo(() => {
+    return [...animalMovements]
+      .filter((movement) => {
+        if (!selectedFieldIdSet.has(movement.fieldId)) {
+          return false;
+        }
+
+        if (movement.kind === "transfer_in" && movement.pairedTransferMovementId) {
+          const pairedMovement = animalMovements.find((item) => item.id === movement.pairedTransferMovementId);
+          if (pairedMovement && selectedFieldIdSet.has(pairedMovement.fieldId)) {
+            return false;
+          }
+        }
+
+        return isDateWithinRange(movement.date, visibleMonthRange.startDate, visibleMonthRange.endDate);
+      })
+      .sort(compareRecordsByDateDesc);
+  }, [animalMovements, selectedFieldIdSet, visibleMonthRange.endDate, visibleMonthRange.startDate]);
+
   // Planilla de stock: solo las correcciones (correction_in/correction_out),
   // separadas de "Movimientos recientes" para que el cliente las vea de un
   // vistazo sin mezclarlas con compras/ventas/traslados. A diferencia de
@@ -1172,9 +1163,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // arriesgarse a que quede "escondida" al cambiar de mes.
   const stockCorrectionRows = useMemo(() => {
     return [...animalMovements]
-      .filter((movement) => movement.kind === "correction_in" || movement.kind === "correction_out")
+      .filter(
+        (movement) =>
+          (movement.kind === "correction_in" || movement.kind === "correction_out") &&
+          selectedFieldIdSet.has(movement.fieldId)
+      )
       .sort(compareRecordsByDateDesc);
-  }, [animalMovements]);
+  }, [animalMovements, selectedFieldIdSet]);
 
   // Planilla de "Resumen por establecimiento": mismos datos que el ledger de
   // Animales (globalAnimalLedgerRows, ya acotado al mes visible), filtrados
@@ -3124,6 +3119,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             animalLedgerRows={animalLedgerRows}
             globalAnimalLedgerRows={globalAnimalLedgerRows}
             stockCorrectionRows={stockCorrectionRows}
+            fieldScopedMovements={fieldScopedMovements}
+            visibleFields={establishmentFields}
+            selectedVisibleFieldId={selectedVisibleFieldId}
+            onVisibleFieldChange={setSelectedVisibleFieldId}
             stockBalanceMap={stockBalanceMap}
             animalLedgerSummary={animalLedgerSummary}
             animalSearchTerm={animalSearchTerm}
@@ -3143,8 +3142,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             projectedAnimalTotal={projectedAnimalTotal}
             transferAvailableSpecies={transferAvailableSpecies}
             transferAvailableCategories={transferAvailableCategories}
-            transferOriginCurrentQuantity={transferOriginCurrentQuantity}
-            transferDestinationCurrentQuantity={transferDestinationCurrentQuantity}
             getTransferAvailabilityForField={buildTransferAvailabilityForField}
             registerAnimalFieldRef={registerAnimalFieldRef}
             requestDeleteAnimalMovement={requestDeleteAnimalMovement}

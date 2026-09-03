@@ -47,8 +47,21 @@ interface AgroAnimalsSectionProps {
   // de un traslado entre establecimientos distintos.
   globalAnimalLedgerRows: AnimalMovementRecord[];
   // Solo correction_in/correction_out, de siempre (no acotado al mes
-  // visible) -- para la "Planilla de stock" separada.
+  // visible) -- para la "Planilla de stock" separada. Ya viene acotado
+  // por el filtro de Campo/Potrero de arriba.
   stockCorrectionRows: AnimalMovementRecord[];
+  // Igual que animalLedgerRows (filtro de Campo/Potrero + dedup de
+  // traslados) pero sin el termino de busqueda -- base para la Planilla
+  // de movimientos de campo.
+  fieldScopedMovements: AnimalMovementRecord[];
+  // Mismo filtro "Potrero visible" que ya esta arriba de toda la pantalla
+  // (AgroToolbar) -- se repite tambien aca, en Planilla de stock y
+  // Planilla de movimientos de campo, para no tener que subir a cambiarlo.
+  // Es el mismo estado: cambiarlo desde cualquiera de los dos lados actualiza
+  // el otro.
+  visibleFields: FieldUnit[];
+  selectedVisibleFieldId: string;
+  onVisibleFieldChange: (value: string) => void;
   // Stock real en vivo (fieldId:species:categoryCode -> cantidad), para la
   // columna "Actualidad" de la Planilla de stock -- asi esa columna
   // siempre muestra lo que el potrero tiene AHORA, no solo lo que quedo
@@ -81,10 +94,6 @@ interface AgroAnimalsSectionProps {
   projectedAnimalTotal: number;
   transferAvailableSpecies: AgroSpecies[];
   transferAvailableCategories: Array<{ categoryCode: string; quantity: number }>;
-  // Stock actual en origen/destino para el boton "Ver origen y destino"
-  // del traslado (vista previa antes/despues, pedida por el cliente).
-  transferOriginCurrentQuantity: number;
-  transferDestinationCurrentQuantity: number;
   // Igual que transferOriginAvailability (AgroHomePage) pero parametrizado
   // por un fieldId cualquiera -- hace falta para recalcular especie y
   // categoria EN EL MISMO cambio de estado que el potrero origen (ver
@@ -180,6 +189,10 @@ export function AgroAnimalsSection({
   animalLedgerRows,
   globalAnimalLedgerRows,
   stockCorrectionRows,
+  fieldScopedMovements,
+  visibleFields,
+  selectedVisibleFieldId,
+  onVisibleFieldChange,
   stockBalanceMap,
   animalLedgerSummary,
   animalSearchTerm,
@@ -199,8 +212,6 @@ export function AgroAnimalsSection({
   projectedAnimalTotal,
   transferAvailableSpecies,
   transferAvailableCategories,
-  transferOriginCurrentQuantity,
-  transferDestinationCurrentQuantity,
   getTransferAvailabilityForField,
   registerAnimalFieldRef,
   requestDeleteAnimalMovement,
@@ -214,7 +225,8 @@ export function AgroAnimalsSection({
   const LEDGER_PREVIEW_STEP = 5;
   const [visibleFilteredCount, setVisibleFilteredCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleRecentCount, setVisibleRecentCount] = useState(LEDGER_PREVIEW_COUNT);
-  const [showTransferPreview, setShowTransferPreview] = useState(false);
+  const [visibleStockCount, setVisibleStockCount] = useState(LEDGER_PREVIEW_COUNT);
+  const [visibleFieldMovementCount, setVisibleFieldMovementCount] = useState(LEDGER_PREVIEW_COUNT);
 
   const visibleFilteredMovements = animalLedgerRows.slice(0, visibleFilteredCount);
   // Las correcciones de stock ya no se muestran aca -- tienen su propia
@@ -229,17 +241,24 @@ export function AgroAnimalsSection({
   // cambia el rodeo de un potrero, a diferencia de compra/venta que son
   // mas de oficina (el cliente pidio expresamente dejar afuera compra).
   // Planilla chica, sin las columnas de precio/comision/IVA que lo
-  // obligaban a desplazar la pantalla para ver todo junto. Mismo alcance
-  // de fechas que "Movimientos recientes" (globalAnimalLedgerRows ya viene
-  // acotado al mes visible); transfer_in ya viene excluido ahi (es la otra
-  // mitad del mismo traslado).
-  const fieldMovementRows = globalAnimalLedgerRows.filter(
+  // obligaban a desplazar la pantalla para ver todo junto. Sale de
+  // fieldScopedMovements (ya acotado por el filtro de Campo/Potrero de
+  // arriba, con el mismo mes visible y el mismo dedup de traslados que
+  // "Planilla de animales") -- asi, si el cliente elige un potrero puntual,
+  // esta planilla tambien muestra solo las entradas y salidas de ese
+  // potrero. Aca si hace falta transfer_in (a diferencia de "Movimientos
+  // recientes"): es la unica fila que representa una entrada cuando el
+  // potrero elegido es el destino del traslado, no el origen.
+  const fieldMovementRows = fieldScopedMovements.filter(
     (movement) =>
       movement.kind === "transfer_out" ||
       movement.kind === "transfer_internal" ||
+      movement.kind === "transfer_in" ||
       movement.kind === "birth" ||
       movement.kind === "death"
   );
+  const visibleStockCorrectionRows = stockCorrectionRows.slice(0, visibleStockCount);
+  const visibleFieldMovementRows = fieldMovementRows.slice(0, visibleFieldMovementCount);
 
   // Vuelve a la vista compacta cuando cambia la busqueda -- si no, el
   // usuario podia quedar viendo "todos" de una busqueda vieja mezclado con
@@ -247,6 +266,14 @@ export function AgroAnimalsSection({
   useEffect(() => {
     setVisibleFilteredCount(LEDGER_PREVIEW_COUNT);
   }, [animalSearchTerm]);
+
+  // Mismo criterio al cambiar el Potrero visible: vuelve a mostrar solo
+  // los primeros 5 en Stock y Movimientos de campo, para no quedar viendo
+  // "todos" de un potrero anterior mezclado con el nuevo filtro.
+  useEffect(() => {
+    setVisibleStockCount(LEDGER_PREVIEW_COUNT);
+    setVisibleFieldMovementCount(LEDGER_PREVIEW_COUNT);
+  }, [selectedVisibleFieldId]);
 
   const isTransferMovement = animalForm.kind === "transfer";
   const isInternalTransfer = isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
@@ -258,22 +285,6 @@ export function AgroAnimalsSection({
       item.establishmentId === animalForm.transferDestinationEstablishmentId &&
       (!isInternalTransfer || item.id !== animalForm.fieldId)
   );
-
-  // Datos para el boton "Ver origen y destino": antes/despues de cada lado
-  // del traslado, partido a la mitad. "Despues" solo se calcula si ya hay
-  // una cantidad valida cargada -- si no, se muestra igual que "antes".
-  const transferPreviewQuantity = parseDecimalInput(animalForm.quantity);
-  const hasValidTransferPreviewQuantity = Number.isFinite(transferPreviewQuantity) && transferPreviewQuantity > 0;
-  const transferOriginAfterQuantity = hasValidTransferPreviewQuantity
-    ? transferOriginCurrentQuantity - transferPreviewQuantity
-    : transferOriginCurrentQuantity;
-  const transferDestinationAfterQuantity = hasValidTransferPreviewQuantity
-    ? transferDestinationCurrentQuantity + transferPreviewQuantity
-    : transferDestinationCurrentQuantity;
-  const transferOriginFieldName = fields.find((item) => item.id === animalForm.fieldId)?.name ?? "-";
-  const transferDestinationFieldName = fields.find((item) => item.id === animalForm.transferDestinationFieldId)?.name ?? "-";
-  const transferDestinationEstablishmentName =
-    establishments.find((item) => item.id === animalForm.transferDestinationEstablishmentId)?.name ?? "-";
 
   // Recalcula especie/categoria para el potrero origen que se acaba de
   // elegir, en el mismo tick que el cambio de fieldId -- ver el comentario
@@ -817,7 +828,7 @@ export function AgroAnimalsSection({
       <div className="panel-header">
         <div>
           <h2>Planilla de stock</h2>
-          <p>Correcciones de stock, de todos los campos.</p>
+          <p>Correcciones de stock.</p>
         </div>
         <div className="table-actions">
           <button
@@ -838,6 +849,17 @@ export function AgroAnimalsSection({
           </button>
         </div>
       </div>
+      <label className="table-search">
+        <span>Potrero</span>
+        <select value={selectedVisibleFieldId} onChange={(event) => onVisibleFieldChange(event.target.value)}>
+          <option value="">Todos</option>
+          {visibleFields.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="table-wrap">
         <table className="animal-ledger-table">
           <thead>
@@ -854,8 +876,8 @@ export function AgroAnimalsSection({
             </tr>
           </thead>
           <tbody>
-            {stockCorrectionRows.length ? (
-              stockCorrectionRows.map((movement) => {
+            {visibleStockCorrectionRows.length ? (
+              visibleStockCorrectionRows.map((movement) => {
                 const field = fields.find((item) => item.id === movement.fieldId);
                 const establishment = establishments.find((item) => item.id === field?.establishmentId);
                 const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
@@ -888,6 +910,28 @@ export function AgroAnimalsSection({
           </tbody>
         </table>
       </div>
+      {stockCorrectionRows.length > LEDGER_PREVIEW_COUNT ? (
+        <div className="action-row">
+          {visibleStockCount < stockCorrectionRows.length ? (
+            <>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setVisibleStockCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, stockCorrectionRows.length))}
+              >
+                Ver 5 más
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setVisibleStockCount(stockCorrectionRows.length)}>
+                Ver todos ({stockCorrectionRows.length})
+              </button>
+            </>
+          ) : (
+            <button type="button" className="ghost-button" onClick={() => setVisibleStockCount(LEDGER_PREVIEW_COUNT)}>
+              Ver menos
+            </button>
+          )}
+        </div>
+      ) : null}
     </article>
   );
 
@@ -917,6 +961,17 @@ export function AgroAnimalsSection({
           </button>
         </div>
       </div>
+      <label className="table-search">
+        <span>Potrero</span>
+        <select value={selectedVisibleFieldId} onChange={(event) => onVisibleFieldChange(event.target.value)}>
+          <option value="">Todos</option>
+          {visibleFields.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="table-wrap">
         <table className="animal-ledger-table">
           <thead>
@@ -932,8 +987,8 @@ export function AgroAnimalsSection({
             </tr>
           </thead>
           <tbody>
-            {fieldMovementRows.length ? (
-              fieldMovementRows.map((movement) => {
+            {visibleFieldMovementRows.length ? (
+              visibleFieldMovementRows.map((movement) => {
                 const lugar = getOrigenDestino(movement);
                 const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
                 const currency = movement.currency ?? "USD";
@@ -981,6 +1036,34 @@ export function AgroAnimalsSection({
           </tbody>
         </table>
       </div>
+      {fieldMovementRows.length > LEDGER_PREVIEW_COUNT ? (
+        <div className="action-row">
+          {visibleFieldMovementCount < fieldMovementRows.length ? (
+            <>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() =>
+                  setVisibleFieldMovementCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, fieldMovementRows.length))
+                }
+              >
+                Ver 5 más
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setVisibleFieldMovementCount(fieldMovementRows.length)}
+              >
+                Ver todos ({fieldMovementRows.length})
+              </button>
+            </>
+          ) : (
+            <button type="button" className="ghost-button" onClick={() => setVisibleFieldMovementCount(LEDGER_PREVIEW_COUNT)}>
+              Ver menos
+            </button>
+          )}
+        </div>
+      ) : null}
     </article>
   );
 
@@ -1229,45 +1312,6 @@ export function AgroAnimalsSection({
               </small>
             ) : null}
           </label>
-          {isTransferMovement ? (
-            <div className="span-2 transfer-preview">
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setShowTransferPreview((current) => !current)}
-              >
-                {showTransferPreview ? "Ocultar origen y destino" : "Ver origen y destino"}
-              </button>
-
-              {showTransferPreview ? (
-                <div className="transfer-preview__split">
-                  <div className="transfer-preview__side transfer-preview__side--origin">
-                    <span className="transfer-preview__label">Origen</span>
-                    <strong className="transfer-preview__place">
-                      {selectedEstablishment?.name ?? "-"} / {transferOriginFieldName}
-                    </strong>
-                    <div className="transfer-preview__numbers">
-                      <span>Antes: {formatNumber(transferOriginCurrentQuantity, 0)}</span>
-                      <span className="tone-negative">Despues: {formatNumber(transferOriginAfterQuantity, 0)}</span>
-                    </div>
-                  </div>
-                  <div className="transfer-preview__arrow" aria-hidden="true">
-                    →
-                  </div>
-                  <div className="transfer-preview__side transfer-preview__side--destination">
-                    <span className="transfer-preview__label">Destino</span>
-                    <strong className="transfer-preview__place">
-                      {transferDestinationEstablishmentName} / {transferDestinationFieldName}
-                    </strong>
-                    <div className="transfer-preview__numbers">
-                      <span>Antes: {formatNumber(transferDestinationCurrentQuantity, 0)}</span>
-                      <span className="tone-positive">Despues: {formatNumber(transferDestinationAfterQuantity, 0)}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
           {isCattleDeathWithEarTag ? (
             <label className={animalFormErrors.earTag ? "field-error" : undefined}>
               <span>Numero de caravana</span>
