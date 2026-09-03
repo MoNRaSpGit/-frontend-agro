@@ -179,6 +179,16 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     title: string;
     message: string;
   } | null>(null);
+  // Traslado entre establecimientos (campo A -> campo B, no solo entre
+  // potreros del mismo campo): el cliente pidio una confirmacion extra
+  // antes de guardarlo, para no cargarlo sin querer -- los traslados
+  // internos (mismo campo, distinto potrero) no piden esto.
+  const [pendingCrossEstablishmentTransfer, setPendingCrossEstablishmentTransfer] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    variant?: "neutral";
+  } | null>(null);
   const [animalMovements, setAnimalMovements] = useState<AnimalMovementRecord[]>([]);
   const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>([]);
   const [rainfallRecords, setRainfallRecords] = useState<RainfallRecord[]>([]);
@@ -2093,8 +2103,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     showSuccess("Potreros fusionados.");
   }
 
-  function handleAnimalSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function handleAnimalSubmit(
+    event?: React.FormEvent<HTMLFormElement>,
+    options?: { skipCrossEstablishmentConfirm?: boolean }
+  ) {
+    event?.preventDefault();
+    const skipCrossEstablishmentConfirm = options?.skipCrossEstablishmentConfirm ?? false;
 
     const quantity = parseDecimalInput(animalForm.quantity);
     const weightKg = parseDecimalInput(animalForm.weightKg);
@@ -2225,6 +2239,26 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     }
 
     setAnimalFormErrors({});
+
+    // Traslado entre campos distintos (no entre potreros del mismo campo):
+    // pide una confirmacion extra antes de guardar. Si ya se confirmo
+    // (skipCrossEstablishmentConfirm, seteado al reintentar desde el
+    // modal), sigue de largo.
+    if (isTransferMovement && !isInternalTransferMovement && !skipCrossEstablishmentConfirm) {
+      const originName =
+        establishments.find((item) => item.id === animalForm.establishmentId)?.name ?? animalForm.establishmentId;
+      const destinationName =
+        establishments.find((item) => item.id === animalForm.transferDestinationEstablishmentId)?.name ??
+        animalForm.transferDestinationEstablishmentId;
+
+      setPendingCrossEstablishmentTransfer({
+        title: "Confirmar traslado entre campos",
+        message: `¿Seguro que querés hacer un traslado de ${originName} a ${destinationName}?`,
+        confirmLabel: "Si, trasladar",
+        variant: "neutral"
+      });
+      return;
+    }
 
     const existingMovement = editingAnimalMovementId
       ? animalMovements.find((movement) => movement.id === editingAnimalMovementId)
@@ -2857,6 +2891,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setPendingDelete(null);
   }
 
+  function handleConfirmCrossEstablishmentTransfer() {
+    setPendingCrossEstablishmentTransfer(null);
+    handleAnimalSubmit(undefined, { skipCrossEstablishmentConfirm: true });
+  }
+
   const projectedNet = getNetAmount(
     accountingForm.type,
     parseDecimalInput(accountingForm.grossAmount) || 0,
@@ -3387,6 +3426,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           pendingDelete={pendingDelete}
           onCancel={() => setPendingDelete(null)}
           onConfirm={handleConfirmDelete}
+        />
+
+        <AgroDeleteConfirmModal
+          pendingDelete={pendingCrossEstablishmentTransfer}
+          onCancel={() => setPendingCrossEstablishmentTransfer(null)}
+          onConfirm={handleConfirmCrossEstablishmentTransfer}
         />
       </ProductShell>
     </main>

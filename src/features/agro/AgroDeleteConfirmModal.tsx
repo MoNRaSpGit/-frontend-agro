@@ -4,6 +4,11 @@ interface AgroDeleteConfirmModalProps {
         title: string;
         message: string;
         confirmLabel?: string;
+        // "danger" (por defecto) es para acciones destructivas (eliminar);
+        // "neutral" es para pedir confirmacion de algo no destructivo (ej:
+        // traslado entre establecimientos) sin pintarlo de rojo como si
+        // fuera a borrar algo.
+        variant?: "danger" | "neutral";
       }
     | null;
   onCancel: () => void;
@@ -14,6 +19,8 @@ export function AgroDeleteConfirmModal({ pendingDelete, onCancel, onConfirm }: A
   if (!pendingDelete) {
     return null;
   }
+
+  const variant = pendingDelete.variant ?? "danger";
 
   return (
     <div className="confirm-modal-backdrop" role="presentation">
@@ -26,7 +33,11 @@ export function AgroDeleteConfirmModal({ pendingDelete, onCancel, onConfirm }: A
           <button type="button" className="ghost-button" onClick={onCancel}>
             Cancelar
           </button>
-          <button type="button" className="ghost-button danger" onClick={onConfirm}>
+          <button
+            type="button"
+            className={variant === "danger" ? "ghost-button danger" : "primary-button"}
+            onClick={onConfirm}
+          >
             {pendingDelete.confirmLabel ?? "Eliminar"}
           </button>
         </div>
