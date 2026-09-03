@@ -63,6 +63,7 @@ import {
 import {
   AccountingEntry,
   AccountingEntryType,
+  AgroAuditEntry,
   AgroSpecies,
   AgroView,
   AnimalMovementKind,
@@ -205,6 +206,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   const [rainfallRecords, setRainfallRecords] = useState<RainfallRecord[]>([]);
   const [sanitaryRecords, setSanitaryRecords] = useState<SanitaryRecord[]>([]);
   const [monthlyExchangeRates, setMonthlyExchangeRates] = useState<MonthlyExchangeRate[]>([]);
+  // Auditoria de ediciones/borrados de movimientos de animales -- ver
+  // AgroAuditEntry (agro.types.ts). Se agrega una entrada cada vez que se
+  // edita o elimina un movimiento, nunca se borra sola.
+  const [auditLog, setAuditLog] = useState<AgroAuditEntry[]>([]);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
   const [workspaceSaveStatus, setWorkspaceSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
@@ -1669,6 +1674,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         setRainfallRecords(snapshot.data.rainfallRecords.map((record) => normalizeRainfallRecord(record, nextFields)));
         setSanitaryRecords(snapshot.data.sanitaryRecords.map((record) => normalizeSanitaryRecord(record, nextFields)));
         setMonthlyExchangeRates(snapshot.data.monthlyExchangeRates);
+        setAuditLog(Array.isArray(snapshot.data.auditLog) ? snapshot.data.auditLog : []);
         workspaceRowVersionRef.current = snapshot.rowVersion;
         setWorkspaceLoadError(null);
       } catch (error) {
@@ -1684,6 +1690,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         setRainfallRecords([]);
         setSanitaryRecords([]);
         setMonthlyExchangeRates([]);
+        setAuditLog([]);
         setWorkspaceLoadError(message);
         showError(message);
 
@@ -1722,7 +1729,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         accountingEntries,
         rainfallRecords,
         sanitaryRecords,
-        monthlyExchangeRates
+        monthlyExchangeRates,
+        auditLog
       });
     }, 350);
 
@@ -1730,6 +1738,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }, [
     accountingEntries,
     animalMovements,
+    auditLog,
     establishments,
     fields,
     monthlyExchangeRates,
@@ -2474,6 +2483,28 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       return [...nextMovements, ...baseRows];
     });
 
+    // Auditoria: si esto era una edicion, deja registrado como quedaba
+    // cada movimiento fisico tocado (uno solo, o los dos de un traslado)
+    // ANTES del cambio, y como quedo despues -- si algun lado se elimino en
+    // el proceso (ej: se edito un traslado y paso a ser Venta, la mitad
+    // vieja del par desaparece) el "after" queda null, igual que un
+    // borrado.
+    if (editingAnimalMovementId && existingMovement) {
+      const oldPairedMovement = existingMovement.pairedTransferMovementId
+        ? animalMovements.find((item) => item.id === existingMovement.pairedTransferMovementId)
+        : undefined;
+      const oldRecords = oldPairedMovement ? [existingMovement, oldPairedMovement] : [existingMovement];
+      const now = Date.now();
+      const editAuditEntries: AgroAuditEntry[] = oldRecords.map((oldRecord, index) => ({
+        id: `audit-${now}-${index}-${oldRecord.id}`,
+        action: "edit",
+        movementId: oldRecord.id,
+        before: oldRecord,
+        after: nextMovements.find((item) => item.id === oldRecord.id) ?? null
+      }));
+      setAuditLog((current) => [...editAuditEntries, ...current]);
+    }
+
     if (commercialMovement && nextAccountingId && totalAmount !== undefined) {
       const accountingEntry: AccountingEntry = {
         id: nextAccountingId,
@@ -2889,6 +2920,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   function handleDeleteAnimalMovement(movementId: string) {
     const movement = animalMovements.find((item) => item.id === movementId);
     const idsToDelete = new Set([movementId, movement?.pairedTransferMovementId].filter(Boolean) as string[]);
+    const deletedRecords = animalMovements.filter((item) => idsToDelete.has(item.id));
+
     setAnimalMovements((current) => current.filter((item) => !idsToDelete.has(item.id)));
     if (editingAnimalMovementId === movementId || editingAnimalMovementId === movement?.pairedTransferMovementId) {
       resetAnimalForm();
@@ -2896,6 +2929,21 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     if (movement?.linkedAccountingEntryId) {
       setAccountingEntries((current) => current.filter((item) => item.id !== movement.linkedAccountingEntryId));
+    }
+
+    // Auditoria: una entrada por cada movimiento fisico borrado (un
+    // traslado son dos), con el registro completo tal cual estaba, antes
+    // de que desaparezca para siempre.
+    const now = Date.now();
+    const deleteAuditEntries: AgroAuditEntry[] = deletedRecords.map((record, index) => ({
+      id: `audit-${now}-${index}-${record.id}`,
+      action: "delete",
+      movementId: record.id,
+      before: record,
+      after: null
+    }));
+    if (deleteAuditEntries.length > 0) {
+      setAuditLog((current) => [...deleteAuditEntries, ...current]);
     }
 
     showSuccess("Movimiento de animales eliminado.");

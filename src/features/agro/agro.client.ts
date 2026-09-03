@@ -4,6 +4,7 @@ import { readJsonStorage, writeJsonStorage } from "../../shared/lib/persistence"
 import { fetchWithAgroAuth } from "../../shared/auth/agroSession";
 import {
   AccountingEntry,
+  AgroAuditEntry,
   AnimalMovementRecord,
   Establishment,
   FieldUnit,
@@ -28,6 +29,7 @@ export type AgroWorkspaceSnapshot = {
     rainfallRecords: RainfallRecord[];
     sanitaryRecords: SanitaryRecord[];
     monthlyExchangeRates: MonthlyExchangeRate[];
+    auditLog: AgroAuditEntry[];
   };
   updatedAt: string | null;
   rowVersion: number;
@@ -44,7 +46,8 @@ function createDefaultDemoSnapshot(): AgroWorkspaceSnapshot {
       accountingEntries: [],
       rainfallRecords: [],
       sanitaryRecords: [],
-      monthlyExchangeRates: []
+      monthlyExchangeRates: [],
+      auditLog: []
     },
     updatedAt: null,
     rowVersion: 0

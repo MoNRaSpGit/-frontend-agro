@@ -335,6 +335,7 @@ export function AgroAnimalsSection({
     return stockBalanceMap.get(`${movement.fieldId}:${movement.species}:${movement.categoryCode}`) ?? 0;
   }
 
+
   // "Traslado" es la fila de salida (transfer_out) y "Ingreso" es la fila
   // de llegada (transfer_in) del mismo movimiento -- antes las dos decian
   // "Traslado" a secas, y sin mirar la fecha no se sabia si esa fila era

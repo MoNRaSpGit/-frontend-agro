@@ -93,6 +93,21 @@ export interface AnimalMovementRecord {
   notes: string;
 }
 
+// Rastro de cada edicion/borrado sobre un movimiento de animales -- antes
+// editar/eliminar sobreescribia o sacaba el registro sin dejar nada, asi
+// que no habia forma de saber que decia antes ni quien/cuando lo cambio.
+// "before" es siempre el registro tal cual estaba; "after" es el registro
+// nuevo (edicion) o null (borrado). Se guarda uno por cada movimiento
+// fisico tocado -- un traslado editado o borrado deja dos entradas (una
+// por cada mitad), no una.
+export interface AgroAuditEntry {
+  id: string;
+  action: "edit" | "delete";
+  movementId: string;
+  before: AnimalMovementRecord;
+  after: AnimalMovementRecord | null;
+}
+
 export interface AccountingEntry {
   id: string;
   date: string;
