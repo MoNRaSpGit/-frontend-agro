@@ -2939,10 +2939,30 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     });
   }
 
+  // Vuelve a poner exactamente los movimientos (y, si tenia, el
+  // movimiento contable vinculado) que se acaban de borrar -- se llama
+  // desde el boton "Deshacer" del cartelito de confirmacion, asi que solo
+  // hace falta mientras ese cartelito sigue en pantalla (unos segundos).
+  function handleUndoDeleteAnimalMovement(
+    deletedRecords: AnimalMovementRecord[],
+    deletedAccountingEntry: AccountingEntry | null
+  ) {
+    setAnimalMovements((current) => [...current, ...deletedRecords]);
+    if (deletedAccountingEntry) {
+      setAccountingEntries((current) => [...current, deletedAccountingEntry]);
+    }
+    showSuccess("Movimiento restaurado.");
+  }
+
   function handleDeleteAnimalMovement(movementId: string) {
     const movement = animalMovements.find((item) => item.id === movementId);
     const idsToDelete = new Set([movementId, movement?.pairedTransferMovementId].filter(Boolean) as string[]);
     const deletedRecords = animalMovements.filter((item) => idsToDelete.has(item.id));
+    // Se guarda ANTES de borrarlo, para poder devolverlo tal cual si se
+    // toca "Deshacer".
+    const deletedAccountingEntry = movement?.linkedAccountingEntryId
+      ? (accountingEntries.find((item) => item.id === movement.linkedAccountingEntryId) ?? null)
+      : null;
 
     setAnimalMovements((current) => current.filter((item) => !idsToDelete.has(item.id)));
     if (editingAnimalMovementId === movementId || editingAnimalMovementId === movement?.pairedTransferMovementId) {
@@ -2955,7 +2975,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     // Auditoria: una entrada por cada movimiento fisico borrado (un
     // traslado son dos), con el registro completo tal cual estaba, antes
-    // de que desaparezca para siempre.
+    // de que desaparezca para siempre. Si se deshace, el registro de que
+    // esto se borro en algun momento queda igual -- es historial, no se
+    // reescribe.
     const now = Date.now();
     const deleteAuditEntries: AgroAuditEntry[] = deletedRecords.map((record, index) => ({
       id: `audit-${now}-${index}-${record.id}`,
@@ -2968,7 +2990,27 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       setAuditLog((current) => [...deleteAuditEntries, ...current]);
     }
 
-    showSuccess("Movimiento de animales eliminado.");
+    // Cartelito de confirmacion con "Deshacer" al lado -- mismo patron que
+    // Gmail/Trello: queda unos segundos, y si se toca vuelve TODO (el/los
+    // movimiento/s y el vinculo contable) exactamente a como estaba.
+    toast.success(
+      ({ closeToast }: { closeToast: () => void }) => (
+        <span className="agro-toast-undo">
+          Movimiento de animales eliminado.
+          <button
+            type="button"
+            className="agro-toast-undo__button"
+            onClick={() => {
+              handleUndoDeleteAnimalMovement(deletedRecords, deletedAccountingEntry);
+              closeToast();
+            }}
+          >
+            Deshacer
+          </button>
+        </span>
+      ),
+      { autoClose: 6000 }
+    );
   }
 
   function handleDeleteAccountingEntry(entryId: string) {

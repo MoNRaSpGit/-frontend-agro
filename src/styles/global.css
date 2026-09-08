@@ -37,6 +37,29 @@ body {
   color: currentColor;
 }
 
+.agro-toast-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agro-toast-undo__button {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.agro-toast-undo__button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 button,
 input,
 select,
