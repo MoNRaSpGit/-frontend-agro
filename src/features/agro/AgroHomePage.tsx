@@ -2263,6 +2263,28 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       nextErrors.quantity = `Solo hay ${formatNumber(animalFormBaselineQuantity, 0)} disponibles en este potrero para esa especie y categoria.`;
     }
 
+    // Editar una ENTRADA ya guardada (nacimiento, compra, traslado de
+    // entrada, carga inicial) reduciendo su cantidad puede dejar el
+    // potrero en negativo si otros movimientos ya se apoyaban en la
+    // cantidad vieja completa -- a diferencia de cargar una entrada
+    // nueva (que nunca puede dar negativo, solo suma). animalFormBaselineQuantity
+    // ya excluye el efecto viejo de este mismo movimiento, asi que sumarle
+    // la cantidad nueva da exactamente el saldo que quedaria.
+    const isEntryMovementBeingEdited =
+      Boolean(editingAnimalMovement) &&
+      !isTransferMovement &&
+      !isCorrectionMovement &&
+      deriveMovementDirection(animalForm.kind) === "entry";
+
+    if (
+      isEntryMovementBeingEdited &&
+      Number.isFinite(quantity) &&
+      quantity > 0 &&
+      animalFormBaselineQuantity + quantity < 0
+    ) {
+      nextErrors.quantity = `Esto dejaria el potrero con ${formatNumber(animalFormBaselineQuantity + quantity, 0)} -- no puede quedar en negativo. Revisa los movimientos relacionados antes de guardar.`;
+    }
+
     if (isCattleDeathWithEarTag && !animalForm.earTag.trim()) {
       nextErrors.earTag = "Falta agregar el numero de caravana.";
     }
