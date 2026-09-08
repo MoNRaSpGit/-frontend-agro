@@ -2986,7 +2986,51 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     showSuccess("Tipo de cambio eliminado.");
   }
 
+  // Bloqueo duro: antes de dejar borrar un movimiento (o un traslado
+  // completo, que son dos movimientos), se calcula que quedaria cada
+  // potrero/especie/categoria afectada SIN ese movimiento -- si algun
+  // resultado da negativo, se corta ahi, ni se abre el cartel de
+  // confirmar. Nace del incidente del 08/09 en Aguila Blanca: se borro un
+  // nacimiento de mas sin darse cuenta de que rompia el saldo del
+  // potrero, y quedo en un numero imposible hasta que se audito a mano.
   function requestDeleteAnimalMovement(movementId: string) {
+    const movement = animalMovements.find((item) => item.id === movementId);
+    if (!movement) {
+      return;
+    }
+
+    const idsToDelete = new Set([movementId, movement.pairedTransferMovementId].filter(Boolean) as string[]);
+    const deletedRecords = animalMovements.filter((item) => idsToDelete.has(item.id));
+
+    const affectedKeys = new Set(
+      deletedRecords.map((record) => `${record.fieldId}:${record.species}:${record.categoryCode}`)
+    );
+    const brokenBalances: string[] = [];
+
+    for (const key of affectedKeys) {
+      const [fieldId, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
+      const currentBalance = stockBalanceMap.get(key) ?? 0;
+      const removedEffect = deletedRecords
+        .filter((record) => `${record.fieldId}:${record.species}:${record.categoryCode}` === key)
+        .reduce((sum, record) => sum + (getMovementDirection(record) === "entry" ? record.quantity : -record.quantity), 0);
+      const resultingBalance = currentBalance - removedEffect;
+
+      if (resultingBalance < 0) {
+        const fieldName = fields.find((item) => item.id === fieldId)?.name ?? fieldId;
+        const categoryLabel = categoryCatalog[species]?.find((item) => item.code === categoryCode)?.label ?? categoryCode;
+        brokenBalances.push(
+          `${fieldName} (${speciesLabels[species]}, ${categoryLabel}): quedaria en ${formatNumber(resultingBalance, 0)}`
+        );
+      }
+    }
+
+    if (brokenBalances.length > 0) {
+      showError(
+        `No se puede borrar: dejaria un saldo imposible. ${brokenBalances.join(" · ")}. Revisa el movimiento antes de continuar.`
+      );
+      return;
+    }
+
     setPendingDelete({
       kind: "animal",
       id: movementId,
