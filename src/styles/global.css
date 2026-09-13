@@ -971,6 +971,17 @@ button {
   gap: 8px;
 }
 
+/* Fila extra de "Vencido, ¿se cobro?" (ver AgroAccountingSection) --
+   separada de Editar/Eliminar para que no se confundan entre si. */
+.due-actions-row,
+.due-postpone-row {
+  margin-top: 6px;
+}
+
+.due-postpone-row input[type="date"] {
+  min-width: 0;
+}
+
 .inline-metrics {
   display: flex;
   flex-wrap: wrap;

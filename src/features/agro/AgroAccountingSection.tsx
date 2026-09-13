@@ -40,6 +40,7 @@ interface AgroAccountingSectionProps {
     commissionAmount: string;
     taxAmount: string;
     collectedAmount: string;
+    dueDate: string;
     notes: string;
   };
   exchangeRateForm: {
@@ -53,6 +54,7 @@ interface AgroAccountingSectionProps {
       collectedAmount: number;
       pendingAmount: number;
       collectionStatus: string | null;
+      isDue: boolean;
       exchangeRateAverage: number | null;
       usdEquivalent: number | null;
     }
@@ -94,6 +96,7 @@ interface AgroAccountingSectionProps {
       commissionAmount: string;
       taxAmount: string;
       collectedAmount: string;
+      dueDate: string;
       notes: string;
     }>
   >;
@@ -102,6 +105,8 @@ interface AgroAccountingSectionProps {
   setAccountingConceptFilter: (value: string) => void;
   setAccountingSearchTerm: (value: string) => void;
   onEditEntry: (entryId: string) => void;
+  onMarkEntryCollected: (entryId: string) => void;
+  onPostponeEntryDueDate: (entryId: string, newDueDate: string) => void;
   onEditExchangeRate: (rateId: string) => void;
   onDeleteExchangeRate: (rateId: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -135,6 +140,8 @@ export function AgroAccountingSection({
   setAccountingConceptFilter,
   setAccountingSearchTerm,
   onEditEntry,
+  onMarkEntryCollected,
+  onPostponeEntryDueDate,
   onEditExchangeRate,
   onDeleteExchangeRate,
   onSubmit,
@@ -145,6 +152,11 @@ export function AgroAccountingSection({
   const accountingTableRef = useRef<HTMLTableElement | null>(null);
   const [showExchangeRateEditModal, setShowExchangeRateEditModal] = useState(false);
   const [pendingExchangeRateDelete, setPendingExchangeRateDelete] = useState<MonthlyExchangeRate | null>(null);
+  // Fila que esta en medio de "Sigue en deuda": muestra un mini-form con
+  // la fecha nueva antes de confirmar, en vez de posponer con un solo
+  // click (asi no se manda una fecha vacia/sin elegir por error).
+  const [postponingEntryId, setPostponingEntryId] = useState<string | null>(null);
+  const [postponeDate, setPostponeDate] = useState("");
 
   useEffect(() => {
     function syncAccountingScrollbarMetrics() {
@@ -194,6 +206,25 @@ export function AgroAccountingSection({
 
     onDeleteExchangeRate(pendingExchangeRateDelete.id);
     setPendingExchangeRateDelete(null);
+  }
+
+  function handleStartPostpone(entryId: string) {
+    setPostponingEntryId(entryId);
+    setPostponeDate("");
+  }
+
+  function handleCancelPostpone() {
+    setPostponingEntryId(null);
+    setPostponeDate("");
+  }
+
+  function handleConfirmPostpone(entryId: string) {
+    if (!postponeDate) {
+      return;
+    }
+    onPostponeEntryDueDate(entryId, postponeDate);
+    setPostponingEntryId(null);
+    setPostponeDate("");
   }
 
   // Exporta exactamente lo que muestra "Planilla contable" en este momento
@@ -438,6 +469,17 @@ export function AgroAccountingSection({
                 value={accountingForm.collectedAmount}
                 onChange={(event) => setAccountingForm((current) => ({ ...current, collectedAmount: event.target.value }))}
               />
+            </label>
+          ) : null}
+          {accountingForm.type === "income" ? (
+            <label>
+              <span>Fecha de vencimiento (opcional)</span>
+              <input
+                type="date"
+                value={accountingForm.dueDate}
+                onChange={(event) => setAccountingForm((current) => ({ ...current, dueDate: event.target.value }))}
+              />
+              <small>Venta a plazo: al llegar esta fecha, pide confirmar si se cobro.</small>
             </label>
           ) : null}
           <label className="span-2">
@@ -695,7 +737,15 @@ export function AgroAccountingSection({
                     <td>{formatMoney(entry.netAmount, entry.currency)}</td>
                     <td>{entry.type === "income" ? formatMoney(entry.collectedAmount, entry.currency) : "-"}</td>
                     <td>{entry.type === "income" ? formatMoney(entry.pendingAmount, entry.currency) : "-"}</td>
-                    <td>{entry.collectionStatus ?? "-"}</td>
+                    <td>
+                      {entry.isDue ? <span className="data-badge compact warning">Vencido</span> : entry.collectionStatus ?? "-"}
+                      {entry.type === "income" && entry.dueDate ? (
+                        <>
+                          <br />
+                          <small>Vto: {formatShortDate(entry.dueDate)}</small>
+                        </>
+                      ) : null}
+                    </td>
                     <td>{entry.usdEquivalent !== null ? formatMoney(entry.usdEquivalent, "USD") : "-"}</td>
                     <td>{entry.linkedAnimalMovementId ? "Si" : "No"}</td>
                     <td>
@@ -711,6 +761,41 @@ export function AgroAccountingSection({
                           Eliminar
                         </button>
                       </div>
+                      {entry.isDue ? (
+                        postponingEntryId === entry.id ? (
+                          <div className="table-actions due-postpone-row">
+                            <input
+                              type="date"
+                              value={postponeDate}
+                              onChange={(event) => setPostponeDate(event.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              disabled={!postponeDate}
+                              onClick={() => handleConfirmPostpone(entry.id)}
+                            >
+                              Confirmar nueva fecha
+                            </button>
+                            <button type="button" className="ghost-button" onClick={handleCancelPostpone}>
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="table-actions due-actions-row">
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => onMarkEntryCollected(entry.id)}
+                            >
+                              Pago
+                            </button>
+                            <button type="button" className="ghost-button danger" onClick={() => handleStartPostpone(entry.id)}>
+                              Sigue en deuda
+                            </button>
+                          </div>
+                        )
+                      ) : null}
                     </td>
                   </tr>
                 );

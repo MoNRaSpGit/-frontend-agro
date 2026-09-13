@@ -396,6 +396,25 @@ export function getIncomeCollectionStatus(entry: AccountingEntry) {
   return "Cobrado";
 }
 
+// Una venta a plazo "vencio" cuando: es un ingreso, tiene algo pendiente de
+// cobrar, tiene una fecha de vencimiento cargada, y esa fecha ya llego o
+// paso. Ahi es cuando la planilla tiene que pedir confirmar si se cobro o
+// si hay que posponerla -- comparacion de strings "YYYY-MM-DD", igual
+// que el resto de las fechas de la app (nunca Date crudo, para no
+// arrastrar problemas de zona horaria).
+export function isIncomeEntryDue(entry: AccountingEntry, todayIso: string): boolean {
+  if (entry.type !== "income") {
+    return false;
+  }
+  if (!entry.dueDate) {
+    return false;
+  }
+  if (getIncomePendingAmount(entry) <= 0) {
+    return false;
+  }
+  return entry.dueDate <= todayIso;
+}
+
 export function isInitialStockLoad(movement: AnimalMovementRecord) {
   return movement.kind === "adjustment" && movement.notes.startsWith("Carga inicial:");
 }

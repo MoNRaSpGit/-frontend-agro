@@ -137,6 +137,12 @@ export interface AccountingEntry {
   netAmount: number;
   expectedAmount?: number;
   collectedAmount?: number;
+  // Fecha en la que se espera cobrar el saldo pendiente (ventas a plazo).
+  // Solo aplica a ingresos con algo pendiente -- ver isIncomeEntryDue en
+  // agro.home.shared.ts. Al llegar (o pasar) esta fecha, la venta se
+  // marca como "vencida" en la planilla y pide confirmar si se cobro o
+  // si hay que posponerla a una fecha nueva.
+  dueDate?: string;
   linkedAnimalMovementId?: string;
   notes: string;
 }

@@ -30,6 +30,7 @@ import {
   compareRecordsByDateDesc,
   getIncomeExpectedAmount,
   getIncomePendingAmount,
+  isIncomeEntryDue,
   getMovementDirection,
   getNetAmount,
   getTodayDate,
@@ -253,6 +254,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     commissionAmount: "",
     taxAmount: "",
     collectedAmount: "",
+    dueDate: "",
     notes: ""
   });
 
@@ -473,6 +475,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       commissionAmount: "",
       taxAmount: "",
       collectedAmount: "",
+      // Nunca se preserva entre cargas: la fecha de vencimiento es
+      // especifica de cada venta, no algo que tenga sentido repetir en la
+      // proxima carga aunque se preserve el resto del contexto.
+      dueDate: "",
       notes: ""
     }));
     setEditingAccountingEntryId(null);
@@ -1413,6 +1419,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       const collectedAmount = getIncomeCollectedAmount(entry);
       const pendingAmount = getIncomePendingAmount(entry);
       const collectionStatus = getIncomeCollectionStatus(entry);
+      const isDue = isIncomeEntryDue(entry, today);
 
       if (entry.type !== "expense" || entry.currency !== "UYU") {
         return {
@@ -1421,6 +1428,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           collectedAmount,
           pendingAmount,
           collectionStatus,
+          isDue,
           exchangeRateAverage: null,
           usdEquivalent: null
         };
@@ -1434,11 +1442,12 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         collectedAmount,
         pendingAmount,
         collectionStatus,
+        isDue,
         exchangeRateAverage,
         usdEquivalent: exchangeRateAverage ? entry.netAmount / exchangeRateAverage : null
       };
     });
-  }, [accountingLedgerRows, exchangeRateByMonth]);
+  }, [accountingLedgerRows, exchangeRateByMonth, today]);
 
   const visibleAccountingLedgerWithConversions = useMemo(() => {
     return accountingLedgerWithConversions.filter((entry) => {
@@ -2630,6 +2639,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       netAmount,
       expectedAmount: accountingForm.type === "income" ? netAmount : undefined,
       collectedAmount,
+      dueDate: accountingForm.type === "income" ? accountingForm.dueDate.trim() || undefined : undefined,
       notes: accountingForm.notes.trim()
     };
 
@@ -2905,6 +2915,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       commissionAmount: `${entry.commissionAmount}`,
       taxAmount: `${entry.taxAmount}`,
       collectedAmount: entry.type === "income" ? `${getIncomeCollectedAmount(entry)}` : "",
+      dueDate: entry.dueDate ?? "",
       notes: entry.notes
     });
     accountingFormPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3062,6 +3073,55 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
     }
     showSuccess("Movimiento contable eliminado.");
+  }
+
+  // Las dos acciones del cartel "Vencido, ¿se cobro?" (ver
+  // isIncomeEntryDue): igual que el resto de los cambios a un movimiento
+  // contable, quedan registrados en accountingAuditLog.
+  function handleMarkAccountingEntryCollected(entryId: string) {
+    const existingEntry = accountingEntries.find((item) => item.id === entryId);
+    if (!existingEntry) {
+      return;
+    }
+
+    const updatedEntry: AccountingEntry = {
+      ...existingEntry,
+      collectedAmount: getIncomeExpectedAmount(existingEntry),
+      dueDate: undefined
+    };
+
+    setAccountingEntries((current) => current.map((item) => (item.id === entryId ? updatedEntry : item)));
+
+    const accountingAuditEntry: AgroAccountingAuditEntry = {
+      id: `audit-acc-${Date.now()}`,
+      action: "edit",
+      entryId,
+      before: existingEntry,
+      after: updatedEntry
+    };
+    setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
+    showSuccess("Venta marcada como cobrada.");
+  }
+
+  function handlePostponeAccountingEntryDueDate(entryId: string, newDueDate: string) {
+    const existingEntry = accountingEntries.find((item) => item.id === entryId);
+    if (!existingEntry) {
+      return;
+    }
+
+    const updatedEntry: AccountingEntry = { ...existingEntry, dueDate: newDueDate };
+
+    setAccountingEntries((current) => current.map((item) => (item.id === entryId ? updatedEntry : item)));
+
+    const accountingAuditEntry: AgroAccountingAuditEntry = {
+      id: `audit-acc-${Date.now()}`,
+      action: "edit",
+      entryId,
+      before: existingEntry,
+      after: updatedEntry
+    };
+    setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
+    showSuccess("Nueva fecha de vencimiento guardada.");
   }
 
   function handleDeleteRainfallRecord(recordId: string) {
@@ -3377,6 +3437,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             setAccountingConceptFilter={setAccountingConceptFilter}
             setAccountingSearchTerm={setAccountingSearchTerm}
             onEditEntry={handleEditAccountingEntry}
+            onMarkEntryCollected={handleMarkAccountingEntryCollected}
+            onPostponeEntryDueDate={handlePostponeAccountingEntryDueDate}
             onEditExchangeRate={handleEditExchangeRate}
             onDeleteExchangeRate={handleDeleteExchangeRate}
             onSubmit={handleAccountingSubmit}
