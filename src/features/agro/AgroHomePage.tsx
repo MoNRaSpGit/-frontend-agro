@@ -63,6 +63,7 @@ import {
 import {
   AccountingEntry,
   AccountingEntryType,
+  AgroAccountingAuditEntry,
   AgroAuditEntry,
   AgroSpecies,
   AgroView,
@@ -210,6 +211,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // AgroAuditEntry (agro.types.ts). Se agrega una entrada cada vez que se
   // edita o elimina un movimiento, nunca se borra sola.
   const [auditLog, setAuditLog] = useState<AgroAuditEntry[]>([]);
+  // Mismo criterio, pero para Contabilidad (ventas/gastos) -- ver
+  // AgroAccountingAuditEntry (agro.types.ts).
+  const [accountingAuditLog, setAccountingAuditLog] = useState<AgroAccountingAuditEntry[]>([]);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
   const [workspaceSaveStatus, setWorkspaceSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
@@ -1675,6 +1679,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         setSanitaryRecords(snapshot.data.sanitaryRecords.map((record) => normalizeSanitaryRecord(record, nextFields)));
         setMonthlyExchangeRates(snapshot.data.monthlyExchangeRates);
         setAuditLog(Array.isArray(snapshot.data.auditLog) ? snapshot.data.auditLog : []);
+        setAccountingAuditLog(Array.isArray(snapshot.data.accountingAuditLog) ? snapshot.data.accountingAuditLog : []);
         workspaceRowVersionRef.current = snapshot.rowVersion;
         setWorkspaceLoadError(null);
       } catch (error) {
@@ -1691,6 +1696,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         setSanitaryRecords([]);
         setMonthlyExchangeRates([]);
         setAuditLog([]);
+        setAccountingAuditLog([]);
         setWorkspaceLoadError(message);
         showError(message);
 
@@ -1730,12 +1736,14 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         rainfallRecords,
         sanitaryRecords,
         monthlyExchangeRates,
-        auditLog
+        auditLog,
+        accountingAuditLog
       });
     }, 350);
 
     return () => window.clearTimeout(timeoutId);
   }, [
+    accountingAuditLog,
     accountingEntries,
     animalMovements,
     auditLog,
@@ -2630,6 +2638,22 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         ? current.map((item) => (item.id === editingAccountingEntryId ? entry : item))
         : [entry, ...current]
     );
+    // Auditoria: si esto era una edicion (no un alta nueva), deja
+    // registrado como quedaba el movimiento contable ANTES del cambio y
+    // como quedo despues -- pedido explicito del cliente, porque a
+    // diferencia de un alta nueva (que ya se ve en la propia planilla),
+    // una edicion pisa el numero anterior sin dejar rastro si no se guarda
+    // aca.
+    if (editingAccountingEntryId && existingEntry) {
+      const accountingAuditEntry: AgroAccountingAuditEntry = {
+        id: `audit-acc-${Date.now()}`,
+        action: "edit",
+        entryId: existingEntry.id,
+        before: existingEntry,
+        after: entry
+      };
+      setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
+    }
     if (existingEntry?.linkedAnimalMovementId) {
       setAnimalMovements((current) =>
         current.map((movement) =>
@@ -3014,6 +3038,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   }
 
   function handleDeleteAccountingEntry(entryId: string) {
+    const deletedEntry = accountingEntries.find((item) => item.id === entryId);
     setAccountingEntries((current) => current.filter((item) => item.id !== entryId));
     if (editingAccountingEntryId === entryId) {
       resetAccountingForm();
@@ -3023,6 +3048,19 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         movement.linkedAccountingEntryId === entryId ? { ...movement, linkedAccountingEntryId: undefined } : movement
       )
     );
+    // Auditoria: deja registrado tal cual estaba el movimiento contable
+    // borrado -- sin esto, un movimiento eliminado desaparecia sin dejar
+    // ningun rastro de que existio ni de cuanto era.
+    if (deletedEntry) {
+      const accountingAuditEntry: AgroAccountingAuditEntry = {
+        id: `audit-acc-${Date.now()}`,
+        action: "delete",
+        entryId: deletedEntry.id,
+        before: deletedEntry,
+        after: null
+      };
+      setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
+    }
     showSuccess("Movimiento contable eliminado.");
   }
 

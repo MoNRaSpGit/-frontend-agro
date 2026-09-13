@@ -108,6 +108,21 @@ export interface AgroAuditEntry {
   after: AnimalMovementRecord | null;
 }
 
+// Mismo criterio que AgroAuditEntry pero para Contabilidad (ventas/gastos):
+// antes no quedaba ningun rastro de que decia un movimiento contable editado
+// o eliminado -- pedido explicito del cliente (11/09/2026), porque a
+// diferencia de los movimientos de animales, aca se maneja plata real y
+// quiere poder ver todo lo que se hizo. Se guarda en su propio arreglo
+// (accountingAuditLog), separado del de animales, porque el formato de
+// registro es distinto (AccountingEntry, no AnimalMovementRecord).
+export interface AgroAccountingAuditEntry {
+  id: string;
+  action: "edit" | "delete";
+  entryId: string;
+  before: AccountingEntry;
+  after: AccountingEntry | null;
+}
+
 export interface AccountingEntry {
   id: string;
   date: string;
