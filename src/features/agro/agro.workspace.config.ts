@@ -49,11 +49,5 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     label: "Resumen",
     description: "Control por establecimiento, categorias y alertas",
     persistence: "future"
-  },
-  {
-    key: "receivables",
-    label: "Cuentas por cobrar",
-    description: "Ventas a plazo: cliente, vencimiento, cobrado o en deuda",
-    persistence: "local"
   }
 ];

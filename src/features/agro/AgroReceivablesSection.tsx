@@ -9,11 +9,12 @@ interface AgroReceivablesSectionProps {
   onPostponeEntryDueDate: (entryId: string, newDueDate: string) => void;
 }
 
-// Planilla simple, separada de la Contabilidad grande: solo ventas a
-// plazo (tienen cliente + vencimiento cargados), pensada para responder
-// una sola pregunta de un vistazo -- "quien me debe, cuanto, y desde
-// cuando" -- sin tener que ir a buscarlo mezclado entre gastos, rubros y
-// filtros de la planilla contable. Pedido explicito del cliente
+// Planilla "Clientes": va DEBAJO de la planilla contable comun, dentro
+// de la misma pantalla de Contabilidad (no es un tab propio) -- pero
+// separada visualmente, con su propia info (cliente, vencimiento,
+// pendiente) que la planilla contable de arriba ya NO muestra. Pensada
+// para responder de un vistazo "quien me debe, cuanto, y desde cuando",
+// sin mezclarlo con gastos/rubros/filtros. Pedido explicito del cliente
 // (12/09/2026).
 export function AgroReceivablesSection({
   establishments,
@@ -51,7 +52,7 @@ export function AgroReceivablesSection({
       <article className="panel wide">
         <div className="panel-header">
           <div>
-            <h2>Cuentas por cobrar</h2>
+            <h2>Clientes</h2>
             <p>Ventas a plazo con cliente y fecha de vencimiento cargados -- de todos los meses, no solo el visible.</p>
           </div>
         </div>

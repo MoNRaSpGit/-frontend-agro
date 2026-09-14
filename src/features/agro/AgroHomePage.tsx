@@ -3467,12 +3467,19 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             setAccountingConceptFilter={setAccountingConceptFilter}
             setAccountingSearchTerm={setAccountingSearchTerm}
             onEditEntry={handleEditAccountingEntry}
-            onMarkEntryCollected={handleMarkAccountingEntryCollected}
-            onPostponeEntryDueDate={handlePostponeAccountingEntryDueDate}
             onEditExchangeRate={handleEditExchangeRate}
             onDeleteExchangeRate={handleDeleteExchangeRate}
             onSubmit={handleAccountingSubmit}
             onSubmitExchangeRate={handleExchangeRateSubmit}
+          />
+        ) : null}
+
+        {activeView === "accounting" ? (
+          <AgroReceivablesSection
+            establishments={establishments}
+            receivableEntries={receivableEntries}
+            onMarkEntryCollected={handleMarkAccountingEntryCollected}
+            onPostponeEntryDueDate={handlePostponeAccountingEntryDueDate}
           />
         ) : null}
 
@@ -3821,15 +3828,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
               </article>
             )}
           </section>
-        ) : null}
-
-        {activeView === "receivables" ? (
-          <AgroReceivablesSection
-            establishments={establishments}
-            receivableEntries={receivableEntries}
-            onMarkEntryCollected={handleMarkAccountingEntryCollected}
-            onPostponeEntryDueDate={handlePostponeAccountingEntryDueDate}
-          />
         ) : null}
 
         <AgroDeleteConfirmModal
