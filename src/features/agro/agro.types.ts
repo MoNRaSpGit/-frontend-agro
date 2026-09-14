@@ -1,4 +1,4 @@
-export type AgroView = "overview" | "setup" | "animals" | "accounting" | "sanity" | "rainfall" | "summary";
+export type AgroView = "overview" | "setup" | "animals" | "accounting" | "sanity" | "rainfall" | "summary" | "receivables";
 
 export type AgroSpecies = "vacunos" | "ovinos" | "equinos";
 
@@ -143,6 +143,12 @@ export interface AccountingEntry {
   // marca como "vencida" en la planilla y pide confirmar si se cobro o
   // si hay que posponerla a una fecha nueva.
   dueDate?: string;
+  // Nombre del cliente al que se le vendio (texto libre, sin lista de
+  // clientes ni historial por cliente -- a proposito, version simple
+  // pedida por el cliente 12/09/2026). Solo tiene sentido en ingresos con
+  // vencimiento; es lo que permite armar la planilla de "Cuentas por
+  // cobrar" (ver AgroReceivablesSection).
+  clientName?: string;
   linkedAnimalMovementId?: string;
   notes: string;
 }

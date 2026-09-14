@@ -41,6 +41,7 @@ interface AgroAccountingSectionProps {
     taxAmount: string;
     collectedAmount: string;
     dueDate: string;
+    clientName: string;
     notes: string;
   };
   exchangeRateForm: {
@@ -97,6 +98,7 @@ interface AgroAccountingSectionProps {
       taxAmount: string;
       collectedAmount: string;
       dueDate: string;
+      clientName: string;
       notes: string;
     }>
   >;
@@ -473,6 +475,17 @@ export function AgroAccountingSection({
           ) : null}
           {accountingForm.type === "income" ? (
             <label>
+              <span>Cliente (opcional)</span>
+              <input
+                type="text"
+                placeholder="Ej: Maria"
+                value={accountingForm.clientName}
+                onChange={(event) => setAccountingForm((current) => ({ ...current, clientName: event.target.value }))}
+              />
+            </label>
+          ) : null}
+          {accountingForm.type === "income" ? (
+            <label>
               <span>Fecha de vencimiento (opcional)</span>
               <input
                 type="date"
@@ -743,6 +756,12 @@ export function AgroAccountingSection({
                         <>
                           <br />
                           <small>Vto: {formatShortDate(entry.dueDate)}</small>
+                        </>
+                      ) : null}
+                      {entry.type === "income" && entry.clientName ? (
+                        <>
+                          <br />
+                          <small>Cliente: {entry.clientName}</small>
                         </>
                       ) : null}
                     </td>

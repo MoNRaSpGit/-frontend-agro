@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ProductShell } from "../../shared/components/ProductShell";
 import { AgroAccountingSection } from "./AgroAccountingSection";
+import { AgroReceivablesSection } from "./AgroReceivablesSection";
 import { AgroAnimalsSection } from "./AgroAnimalsSection";
 import { AgroDeleteConfirmModal } from "./AgroDeleteConfirmModal";
 import { AgroMetricsGrid, AgroToolbar } from "./AgroHomeChrome";
@@ -255,6 +256,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     taxAmount: "",
     collectedAmount: "",
     dueDate: "",
+    clientName: "",
     notes: ""
   });
 
@@ -479,6 +481,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       // especifica de cada venta, no algo que tenga sentido repetir en la
       // proxima carga aunque se preserve el resto del contexto.
       dueDate: "",
+      clientName: "",
       notes: ""
     }));
     setEditingAccountingEntryId(null);
@@ -1448,6 +1451,31 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       };
     });
   }, [accountingLedgerRows, exchangeRateByMonth, today]);
+
+  // Planilla de "Cuentas por cobrar": a diferencia del resto de
+  // Contabilidad, NO se filtra por mes visible ni por establecimiento --
+  // una venta a plazo de hace dos meses que sigue sin cobrarse tiene que
+  // seguir apareciendo aca hasta que se resuelva. Solo entran las que
+  // tienen cliente Y vencimiento cargados (si no, no hay nada que
+  // mostrar en esta planilla en particular). Vencidas primero, despues
+  // por fecha de vencimiento mas proxima.
+  const receivableEntries = useMemo(() => {
+    return accountingEntries
+      .filter(
+        (entry) => entry.type === "income" && entry.clientName?.trim() && entry.dueDate && getIncomePendingAmount(entry) > 0
+      )
+      .map((entry) => ({
+        ...entry,
+        pendingAmount: getIncomePendingAmount(entry),
+        isDue: isIncomeEntryDue(entry, today)
+      }))
+      .sort((a, b) => {
+        if (a.isDue !== b.isDue) {
+          return a.isDue ? -1 : 1;
+        }
+        return (a.dueDate ?? "").localeCompare(b.dueDate ?? "");
+      });
+  }, [accountingEntries, today]);
 
   const visibleAccountingLedgerWithConversions = useMemo(() => {
     return accountingLedgerWithConversions.filter((entry) => {
@@ -2640,6 +2668,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       expectedAmount: accountingForm.type === "income" ? netAmount : undefined,
       collectedAmount,
       dueDate: accountingForm.type === "income" ? accountingForm.dueDate.trim() || undefined : undefined,
+      clientName: accountingForm.type === "income" ? accountingForm.clientName.trim() || undefined : undefined,
       notes: accountingForm.notes.trim()
     };
 
@@ -2916,6 +2945,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       taxAmount: `${entry.taxAmount}`,
       collectedAmount: entry.type === "income" ? `${getIncomeCollectedAmount(entry)}` : "",
       dueDate: entry.dueDate ?? "",
+      clientName: entry.clientName ?? "",
       notes: entry.notes
     });
     accountingFormPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3791,6 +3821,15 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
               </article>
             )}
           </section>
+        ) : null}
+
+        {activeView === "receivables" ? (
+          <AgroReceivablesSection
+            establishments={establishments}
+            receivableEntries={receivableEntries}
+            onMarkEntryCollected={handleMarkAccountingEntryCollected}
+            onPostponeEntryDueDate={handlePostponeAccountingEntryDueDate}
+          />
         ) : null}
 
         <AgroDeleteConfirmModal

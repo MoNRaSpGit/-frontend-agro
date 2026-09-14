@@ -998,6 +998,50 @@ button {
   font-weight: 700;
 }
 
+/* Cuentas por cobrar (ver AgroReceivablesSection) */
+.empty-hint {
+  color: #5a6a52;
+  font-style: italic;
+}
+
+.receivables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.receivable-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(64, 88, 52, 0.06);
+}
+
+.receivable-card.due {
+  background: rgba(167, 112, 44, 0.1);
+}
+
+.receivable-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+}
+
+.receivable-card-concept {
+  font-size: 0.88rem;
+  color: #5a6a52;
+}
+
+.receivable-card-notes {
+  font-size: 0.82rem;
+  color: #7a8a72;
+}
+
 .data-badge.accent {
   background: rgba(73, 107, 58, 0.18);
   color: #22411a;
