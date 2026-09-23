@@ -317,18 +317,43 @@ button {
   display: none;
 }
 
+/* Boton de sesion compacto en PC (22/09/2026): solo el avatar, sin texto
+   -- el boton ancho con "Cerrar sesion" le sacaba lugar a la barra de
+   pestanas (ver .product-shell-nav) y empujaba las ultimas fuera de la
+   vista. Al tocarlo abre .product-shell-session-dropdown, mas abajo. */
+.product-shell-session-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .product-shell-session-button {
   border: 1px solid rgba(56, 72, 49, 0.24);
-  border-radius: 14px;
+  border-radius: 999px;
   background: rgba(255, 252, 245, 0.92);
-  padding: 10px 14px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-width: 148px;
-  color: #182316;
-  flex-shrink: 0;
+}
+
+.product-shell-session-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: max-content;
+  min-width: 170px;
+  border: 1px solid rgba(35, 48, 31, 0.22);
+  border-radius: 16px;
+  background: #f6efe2;
+  box-shadow: 0 18px 40px rgba(28, 33, 22, 0.18);
+  padding: 6px;
+  z-index: 20;
+}
+
+.product-shell-session-dropdown .product-shell-dropdown-item.signout {
+  margin-top: 0;
+  border-top: none;
+  border-radius: 12px;
 }
 
 .product-shell-session-label {
@@ -1482,7 +1507,7 @@ th {
     justify-content: flex-end;
   }
 
-  .product-shell-session-button {
+  .product-shell-session-wrap {
     display: none;
   }
 

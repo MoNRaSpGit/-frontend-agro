@@ -33,17 +33,28 @@ export function ProductShell({
 }: ProductShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  // Boton chico (solo el avatar) para "Cerrar sesion" en PC -- pedido
+  // explicito (22/09/2026): el boton ancho con el texto "Cerrar sesion" le
+  // sacaba lugar a la barra de pestanas y empujaba las ultimas (ej
+  // "Resumen") fuera de la vista. Mismo patron de popover que el menu de
+  // arriba, pero separado (ese es el menu completo de mobile).
+  const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
+  const sessionMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
         setMenuOpen(false);
       }
+      if (!sessionMenuRef.current?.contains(event.target as Node)) {
+        setIsSessionMenuOpen(false);
+      }
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setMenuOpen(false);
+        setIsSessionMenuOpen(false);
       }
     }
 
@@ -85,15 +96,36 @@ export function ProductShell({
         </div>
 
         {onSignOut ? (
-          <button type="button" className="product-shell-session-button" onClick={onSignOut} aria-label="Cerrar sesion">
-            <span className="product-shell-avatar">
-              <UserRound size={18} strokeWidth={2.1} />
-            </span>
-            <span className="product-shell-session-label">Cerrar sesion</span>
-            <span className="product-shell-session-icon">
-              <LogOut size={16} strokeWidth={2.2} />
-            </span>
-          </button>
+          <div className="product-shell-session-wrap" ref={sessionMenuRef}>
+            <button
+              type="button"
+              className="product-shell-session-button"
+              onClick={() => setIsSessionMenuOpen((current) => !current)}
+              aria-haspopup="menu"
+              aria-expanded={isSessionMenuOpen}
+              aria-label="Menu de usuario"
+            >
+              <span className="product-shell-avatar">
+                <UserRound size={18} strokeWidth={2.1} />
+              </span>
+            </button>
+
+            {isSessionMenuOpen ? (
+              <div className="product-shell-session-dropdown" role="menu" aria-label="Menu de usuario">
+                <button
+                  type="button"
+                  className="product-shell-dropdown-item signout"
+                  onClick={() => {
+                    onSignOut();
+                    setIsSessionMenuOpen(false);
+                  }}
+                >
+                  <LogOut size={16} strokeWidth={2.2} />
+                  <span>Cerrar sesion</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="product-shell-menu-wrap" ref={menuRef}>
