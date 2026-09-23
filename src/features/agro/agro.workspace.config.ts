@@ -15,6 +15,12 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     persistence: "local"
   },
   {
+    key: "voz",
+    label: "Voz",
+    description: "Simulacion de traslados por voz (beta, no guarda nada)",
+    persistence: "local"
+  },
+  {
     key: "setup",
     label: "Carga inicial",
     description: "Base para cargar stock y saldos viejos sin rehacer todo",
@@ -49,11 +55,5 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     label: "Resumen",
     description: "Control por establecimiento, categorias y alertas",
     persistence: "future"
-  },
-  {
-    key: "voz",
-    label: "Voz",
-    description: "Simulacion de traslados por voz (beta, no guarda nada)",
-    persistence: "local"
   }
 ];
