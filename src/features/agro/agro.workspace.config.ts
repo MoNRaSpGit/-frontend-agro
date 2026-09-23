@@ -49,5 +49,11 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     label: "Resumen",
     description: "Control por establecimiento, categorias y alertas",
     persistence: "future"
+  },
+  {
+    key: "voz",
+    label: "Voz",
+    description: "Simulacion de traslados por voz (beta, no guarda nada)",
+    persistence: "local"
   }
 ];

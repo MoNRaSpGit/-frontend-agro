@@ -1518,3 +1518,98 @@ th {
     grid-column: auto;
   }
 }
+
+/* Pestana "Voz" (22/09/2026): simulacion de traslados por voz -- ver
+   AgroVoiceSection.tsx. Reusa .panel/.confirm-modal/.ghost-button/
+   .primary-button de mas arriba para que se vea igual que el resto de la
+   app; solo se agrega lo especifico de esta pantalla. */
+.voice-banner p {
+  color: #3a4738;
+  line-height: 1.5;
+}
+
+.voice-example {
+  border-radius: 16px;
+  background: rgba(64, 88, 52, 0.08);
+  padding: 12px 16px;
+  color: #2d3d2a;
+}
+
+.voice-controls {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.voice-mic-button {
+  min-width: 220px;
+}
+
+.voice-mic-button.is-listening {
+  background: #a7442c;
+  animation: voice-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(167, 68, 44, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(167, 68, 44, 0);
+  }
+}
+
+.voice-transcript {
+  color: #3a4738;
+}
+
+.voice-status {
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 0.92rem;
+}
+
+.voice-status-info {
+  background: rgba(64, 88, 52, 0.1);
+  color: #2d3d2a;
+}
+
+.voice-status-warning {
+  background: rgba(167, 112, 44, 0.16);
+  color: #6b4413;
+}
+
+.voice-status-error {
+  background: rgba(167, 44, 44, 0.14);
+  color: #7a1f1f;
+}
+
+.voice-confirm-summary {
+  border-radius: 16px;
+  background: rgba(64, 88, 52, 0.08);
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.voice-confirm-quantity {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.voice-confirm-place {
+  color: #2d3d2a;
+}
+
+.voice-confirm-arrow {
+  font-size: 1.2rem;
+  color: #6b4413;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-mic-button.is-listening {
+    animation: none;
+  }
+}

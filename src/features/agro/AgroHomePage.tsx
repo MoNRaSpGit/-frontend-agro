@@ -10,6 +10,7 @@ import { AgroOverviewSection } from "./AgroOverviewSection";
 import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
+import { AgroVoiceSection } from "./AgroVoiceSection";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { AgroApiError } from "../../shared/errors/agroApiError";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
@@ -3829,6 +3830,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             )}
           </section>
         ) : null}
+
+        {activeView === "voz" ? <AgroVoiceSection establishments={establishments} fields={fields} /> : null}
 
         <AgroDeleteConfirmModal
           pendingDelete={pendingDelete}
