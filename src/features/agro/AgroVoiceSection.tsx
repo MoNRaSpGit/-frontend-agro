@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatCategoryLabel, formatShortDate, getTodayDate } from "./agro.home.shared";
 import { AgroSpecies, Establishment, FieldUnit } from "./agro.types";
 import { parseVoiceTransferCommand, VoiceTransferReady } from "./agro.voice";
@@ -52,14 +52,58 @@ function getSpeechRecognitionConstructor(): SpeechRecognitionConstructorLike | n
   return win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null;
 }
 
+// "de" antes de un nombre que arranca con articulo se dice contraido
+// ("del Ombú"), salvo "la/las" que no se contrae ("de la Milagrosa"). "a"
+// nunca se contrae. Se usa para armar el ejemplo de la pantalla tal como
+// se diria en voz alta (y que ademas el parser lo entienda igual).
+function toSpokenEstablishmentPhrase(name: string, precedingWord: "de" | "a"): string {
+  if (precedingWord === "a") return `a ${name}`;
+  if (/^el\s/i.test(name)) return `del ${name.slice(3)}`;
+  if (/^los\s/i.test(name)) return `de los ${name.slice(4)}`;
+  if (/^las\s/i.test(name)) return `de las ${name.slice(4)}`;
+  if (/^la\s/i.test(name)) return `de la ${name.slice(3)}`;
+  return `de ${name}`;
+}
+
+// Pedido explicito (22/09/2026): mostrar un ejemplo con datos que existan
+// de verdad (no inventados), para poder leerlo y probarlo tal cual.
+function buildExamplePhrase(establishments: Establishment[], fields: FieldUnit[]): string | null {
+  const origin = establishments.find((establishment) => fields.some((field) => field.establishmentId === establishment.id));
+  if (!origin) return null;
+
+  const destination =
+    establishments.find(
+      (establishment) => establishment.id !== origin.id && fields.some((field) => field.establishmentId === establishment.id)
+    ) ?? origin;
+
+  const originField = fields.find((field) => field.establishmentId === origin.id);
+  const destinationField = fields.find(
+    (field) => field.establishmentId === destination.id && field.id !== originField?.id
+  ) ?? fields.find((field) => field.establishmentId === destination.id);
+
+  if (!originField || !destinationField) return null;
+
+  const category = categoryCatalog.vacunos[0];
+  const categoryLabel = category ? formatCategoryLabel(category.label) : "vacas de cria";
+
+  return `Traslado ${toSpokenEstablishmentPhrase(origin.name, "de")} ${toSpokenEstablishmentPhrase(destination.name, "a")}, del potrero ${originField.name} al potrero ${destinationField.name}, 5 ${categoryLabel}.`;
+}
+
 export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionProps) {
   const [isSupported, setIsSupported] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [statusMessage, setStatusMessage] = useState<{ tone: "info" | "warning" | "error"; text: string } | null>(null);
   const [pendingTransfer, setPendingTransfer] = useState<VoiceTransferReady | null>(null);
+  // La parte que mas se confunde el reconocimiento de voz es un numero
+  // dicho solo (pedido explicito: "dije 5 y entendio 95... dije 5 y
+  // entendio 35") -- por eso la cantidad se puede corregir a mano antes de
+  // confirmar, sin tener que repetir toda la frase de nuevo.
+  const [editedQuantity, setEditedQuantity] = useState("");
   const [simulatedRows, setSimulatedRows] = useState<SimulatedTransferRow[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  const examplePhrase = useMemo(() => buildExamplePhrase(establishments, fields), [establishments, fields]);
 
   useEffect(() => {
     setIsSupported(getSpeechRecognitionConstructor() !== null);
@@ -128,17 +172,21 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
 
     setStatusMessage(null);
     setPendingTransfer(result);
+    setEditedQuantity(String(result.quantity));
   }
 
+  const parsedEditedQuantity = Number(editedQuantity.replace(",", "."));
+  const isEditedQuantityValid = Number.isFinite(parsedEditedQuantity) && parsedEditedQuantity > 0;
+
   function handleConfirmTransfer() {
-    if (!pendingTransfer) return;
+    if (!pendingTransfer || !isEditedQuantityValid) return;
 
     const row: SimulatedTransferRow = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       date: getTodayDate(),
       origin: pendingTransfer.origin,
       destination: pendingTransfer.destination,
-      quantity: pendingTransfer.quantity,
+      quantity: parsedEditedQuantity,
       species: pendingTransfer.species,
       categoryLabel: formatCategoryLabel(pendingTransfer.category.label)
     };
@@ -169,9 +217,11 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
             </p>
           </div>
         </div>
-        <p className="voice-example">
-          Decí: <em>"Traslado del Ombú a La Milagrosa, del potrero Zanja al potrero 3, cinco vacas de cría."</em>
-        </p>
+        {examplePhrase ? (
+          <p className="voice-example">
+            Decí: <em>"{examplePhrase}"</em>
+          </p>
+        ) : null}
 
         {!isSupported ? (
           <p className="voice-status voice-status-error">
@@ -266,9 +316,19 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
               <span>Esto es solo una simulacion, no se va a guardar nada real.</span>
             </div>
             <div className="voice-confirm-summary">
-              <p className="voice-confirm-quantity">
-                {pendingTransfer.quantity} {speciesLabels[pendingTransfer.species]} · {formatCategoryLabel(pendingTransfer.category.label)}
-              </p>
+              <label className="voice-confirm-quantity-field">
+                <span>Cantidad</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={editedQuantity}
+                  onChange={(event) => setEditedQuantity(event.target.value)}
+                  autoFocus
+                />
+                <span>{speciesLabels[pendingTransfer.species]} · {formatCategoryLabel(pendingTransfer.category.label)}</span>
+              </label>
+              {!isEditedQuantityValid ? <p className="voice-status voice-status-error">Ingresa una cantidad valida mayor a 0.</p> : null}
               <p className="voice-confirm-place">
                 {pendingTransfer.origin.establishment.name} — Potrero {pendingTransfer.origin.field.name}
               </p>
@@ -281,7 +341,7 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
               <button type="button" className="ghost-button" onClick={handleCancelTransfer}>
                 Cancelar
               </button>
-              <button type="button" className="primary-button" onClick={handleConfirmTransfer}>
+              <button type="button" className="primary-button" disabled={!isEditedQuantityValid} onClick={handleConfirmTransfer}>
                 Confirmar (simulado)
               </button>
             </div>

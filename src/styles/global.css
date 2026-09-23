@@ -1619,9 +1619,24 @@ th {
   text-align: center;
 }
 
-.voice-confirm-quantity {
+.voice-confirm-quantity-field {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
   font-weight: 700;
   font-size: 1.05rem;
+}
+
+.voice-confirm-quantity-field input {
+  width: 90px;
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 72, 49, 0.3);
+  background: #fffdf7;
+  color: #182316;
 }
 
 .voice-confirm-place {
