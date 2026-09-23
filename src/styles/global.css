@@ -1560,6 +1560,15 @@ th {
   color: #2d3d2a;
 }
 
+/* Palabras clave del comando (22/09/2026, pedido explicito): resaltadas
+   en mayuscula y en rojo para diferenciarlas de los datos (nombres,
+   numero, categoria) dentro del ejemplo. */
+.voice-keyword {
+  color: #8c3e2c;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .voice-controls {
   display: grid;
   gap: 10px;

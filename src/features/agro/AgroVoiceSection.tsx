@@ -52,22 +52,29 @@ function getSpeechRecognitionConstructor(): SpeechRecognitionConstructorLike | n
   return win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null;
 }
 
+// Ejemplo de la pantalla (22/09/2026, pedido explicito): en vez de un
+// string suelto, un array de "partes" para poder resaltar las palabras
+// clave estructurales (Traslado, a, del potrero, al potrero, cantidad)
+// distinto de los datos (nombres, numero, categoria) -- ver ExamplePart
+// y el render mas abajo.
+type ExamplePart = { text: string; keyword: boolean };
+
 // "de" antes de un nombre que arranca con articulo se dice contraido
 // ("del Ombú"), salvo "la/las" que no se contrae ("de la Milagrosa"). "a"
-// nunca se contrae. Se usa para armar el ejemplo de la pantalla tal como
-// se diria en voz alta (y que ademas el parser lo entienda igual).
-function toSpokenEstablishmentPhrase(name: string, precedingWord: "de" | "a"): string {
-  if (precedingWord === "a") return `a ${name}`;
-  if (/^el\s/i.test(name)) return `del ${name.slice(3)}`;
-  if (/^los\s/i.test(name)) return `de los ${name.slice(4)}`;
-  if (/^las\s/i.test(name)) return `de las ${name.slice(4)}`;
-  if (/^la\s/i.test(name)) return `de la ${name.slice(3)}`;
-  return `de ${name}`;
+// nunca se contrae. Se usa para armar el ejemplo tal como se diria en voz
+// alta (y que ademas el parser lo entienda igual).
+function spokenEstablishmentParts(name: string, precedingWord: "de" | "a"): ExamplePart[] {
+  if (precedingWord === "a") return [{ text: "a", keyword: true }, { text: ` ${name}`, keyword: false }];
+  if (/^el\s/i.test(name)) return [{ text: "del", keyword: true }, { text: ` ${name.slice(3)}`, keyword: false }];
+  if (/^los\s/i.test(name)) return [{ text: "de los", keyword: true }, { text: ` ${name.slice(4)}`, keyword: false }];
+  if (/^las\s/i.test(name)) return [{ text: "de las", keyword: true }, { text: ` ${name.slice(4)}`, keyword: false }];
+  if (/^la\s/i.test(name)) return [{ text: "de la", keyword: true }, { text: ` ${name.slice(3)}`, keyword: false }];
+  return [{ text: "de", keyword: true }, { text: ` ${name}`, keyword: false }];
 }
 
 // Pedido explicito (22/09/2026): mostrar un ejemplo con datos que existan
 // de verdad (no inventados), para poder leerlo y probarlo tal cual.
-function buildExamplePhrase(establishments: Establishment[], fields: FieldUnit[]): string | null {
+function buildExampleParts(establishments: Establishment[], fields: FieldUnit[]): ExamplePart[] | null {
   const origin = establishments.find((establishment) => fields.some((field) => field.establishmentId === establishment.id));
   if (!origin) return null;
 
@@ -86,7 +93,20 @@ function buildExamplePhrase(establishments: Establishment[], fields: FieldUnit[]
   const category = categoryCatalog.vacunos[0];
   const categoryLabel = category ? formatCategoryLabel(category.label) : "vacas de cria";
 
-  return `Traslado ${toSpokenEstablishmentPhrase(origin.name, "de")} ${toSpokenEstablishmentPhrase(destination.name, "a")}, del potrero ${originField.name} al potrero ${destinationField.name}, cantidad 5, ${categoryLabel}.`;
+  return [
+    { text: "Traslado", keyword: true },
+    { text: " ", keyword: false },
+    ...spokenEstablishmentParts(origin.name, "de"),
+    { text: " ", keyword: false },
+    ...spokenEstablishmentParts(destination.name, "a"),
+    { text: ", ", keyword: false },
+    { text: "del potrero", keyword: true },
+    { text: ` ${originField.name} `, keyword: false },
+    { text: "al potrero", keyword: true },
+    { text: ` ${destinationField.name}, `, keyword: false },
+    { text: "cantidad", keyword: true },
+    { text: ` 5, ${categoryLabel}.`, keyword: false }
+  ];
 }
 
 export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionProps) {
@@ -103,7 +123,7 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
   const [simulatedRows, setSimulatedRows] = useState<SimulatedTransferRow[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
-  const examplePhrase = useMemo(() => buildExamplePhrase(establishments, fields), [establishments, fields]);
+  const exampleParts = useMemo(() => buildExampleParts(establishments, fields), [establishments, fields]);
 
   useEffect(() => {
     setIsSupported(getSpeechRecognitionConstructor() !== null);
@@ -217,9 +237,9 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
             </p>
           </div>
         </div>
-        {examplePhrase ? (
+        {exampleParts ? (
           <p className="voice-example">
-            Decí: <em>"{examplePhrase}"</em>
+            Decí: <em>"{exampleParts.map((part, index) => (part.keyword ? <span key={index} className="voice-keyword">{part.text}</span> : <span key={index}>{part.text}</span>))}"</em>
           </p>
         ) : null}
 
