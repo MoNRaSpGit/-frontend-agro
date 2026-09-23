@@ -8,15 +8,23 @@
 // Frase esperada (orden fijo, ver AgroVoiceSection.tsx):
 //   "Traslado del [establecimiento origen] a [establecimiento destino],
 //    del potrero [potrero origen] al potrero [potrero destino],
-//    [cantidad] [categoria de animal]."
+//    cantidad [numero], [categoria de animal]."
 //
-// Ejemplo: "Traslado del Ombu a La Milagrosa, del potrero Zanja al
-// potrero 3, cinco vacas de cria."
+// Ejemplo: "Traslado del Ombu a La Milagrosa, del potrero 1 al
+// potrero 5, cantidad 5, toros."
+//
+// La palabra "cantidad" antes del numero es obligatoria (pedido explicito,
+// 22/09/2026: "hay potrero con numero, digo del potrero 1 al potrero 5, 5
+// toros y entiende potrero 55... debemos poner un diferenciador"). Sin esa
+// palabra en el medio, el reconocimiento de voz puede escuchar el numero
+// del potrero destino pegado al numero de la cantidad y entenderlos como
+// uno solo (potrero "5" + cantidad "5" -> "55"). "Cantidad" le da un corte
+// audible entre los dos numeros.
 //
 // Diseno: "traslado" activa la interpretacion (si no arranca con esa
 // palabra, no se interpreta nada). Las palabras clave estructurales (a,
-// del potrero, al potrero) se buscan como texto exacto; los nombres
-// propios (establecimientos, potreros, categorias) se buscan por
+// del potrero, al potrero, cantidad) se buscan como texto exacto; los
+// nombres propios (establecimientos, potreros, categorias) se buscan por
 // similitud contra los datos reales, no por texto exacto -- la voz puede
 // reconocer un nombre un poco distinto. Ante cualquier duda (no se
 // encontro algo, o hay mas de una opcion igual de parecida) se devuelve
@@ -342,9 +350,17 @@ export function parseVoiceTransferCommand(transcript: string, data: VoiceTransfe
   }
   cursor += destinationFieldMatch.consumed;
 
+  // Obligatoria: separa audiblemente el numero del potrero destino del
+  // numero de la cantidad -- sin esta palabra en el medio, la voz puede
+  // escuchar los dos numeros pegados como uno solo (ver comentario arriba).
+  if (tokens[cursor] !== "cantidad") {
+    return { status: "incomplete", message: "Despues del potrero de destino falta decir \"cantidad\" antes del numero (ej: \"...al potrero 5, cantidad 5, toros\")." };
+  }
+  cursor += 1;
+
   const quantity = parseQuantity(tokens, cursor);
   if (!quantity || quantity.value <= 0) {
-    return { status: "incomplete", message: "No entendi la cantidad de animales. Decila justo despues del potrero de destino." };
+    return { status: "incomplete", message: "No entendi la cantidad de animales. Decila justo despues de la palabra \"cantidad\"." };
   }
   cursor += quantity.consumed;
 

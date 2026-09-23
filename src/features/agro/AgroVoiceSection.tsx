@@ -86,7 +86,7 @@ function buildExamplePhrase(establishments: Establishment[], fields: FieldUnit[]
   const category = categoryCatalog.vacunos[0];
   const categoryLabel = category ? formatCategoryLabel(category.label) : "vacas de cria";
 
-  return `Traslado ${toSpokenEstablishmentPhrase(origin.name, "de")} ${toSpokenEstablishmentPhrase(destination.name, "a")}, del potrero ${originField.name} al potrero ${destinationField.name}, 5 ${categoryLabel}.`;
+  return `Traslado ${toSpokenEstablishmentPhrase(origin.name, "de")} ${toSpokenEstablishmentPhrase(destination.name, "a")}, del potrero ${originField.name} al potrero ${destinationField.name}, cantidad 5, ${categoryLabel}.`;
 }
 
 export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionProps) {
