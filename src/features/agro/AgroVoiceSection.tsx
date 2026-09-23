@@ -28,8 +28,15 @@ type SimulatedTransferRow = {
 
 // Tipado minimo de la Web Speech API (todavia no forma parte de las libs
 // estandar de TypeScript) -- solo lo que este componente usa.
-type SpeechRecognitionResultLike = { transcript: string };
-type SpeechRecognitionEventLike = { results: ArrayLike<ArrayLike<SpeechRecognitionResultLike>> };
+type SpeechRecognitionAlternativeLike = { transcript: string };
+// "isFinal": Chrome corta sola la escucha apenas detecta silencio, pero
+// Safari/iOS no lo hace de forma confiable (pedido explicito, 23/09/2026:
+// "mi cliente tiene iPhone... le pide que pare, sigue escuchando") -- por
+// eso se pide interimResults y se corta a mano con un timer propio (ver
+// SILENCE_TIMEOUT_MS mas abajo), en vez de confiar en que el navegador
+// avise solo.
+type SpeechRecognitionResultLike = ArrayLike<SpeechRecognitionAlternativeLike> & { isFinal: boolean };
+type SpeechRecognitionEventLike = { results: ArrayLike<SpeechRecognitionResultLike> };
 type SpeechRecognitionErrorEventLike = { error: string };
 interface SpeechRecognitionLike {
   lang: string;
@@ -43,6 +50,12 @@ interface SpeechRecognitionLike {
   stop: () => void;
 }
 type SpeechRecognitionConstructorLike = new () => SpeechRecognitionLike;
+
+// Sin palabras nuevas durante este tiempo, se da la frase por terminada
+// (ver el timer de silencio propio en handleStartListening).
+const SILENCE_TIMEOUT_MS = 2500;
+// Tope duro por si nunca hay un hueco de silencio.
+const MAX_LISTENING_TIMEOUT_MS = 15000;
 
 function getSpeechRecognitionConstructor(): SpeechRecognitionConstructorLike | null {
   const win = window as unknown as {
@@ -122,12 +135,36 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
   const [editedQuantity, setEditedQuantity] = useState("");
   const [simulatedRows, setSimulatedRows] = useState<SimulatedTransferRow[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const silenceTimeoutRef = useRef<number | null>(null);
+  const maxListeningTimeoutRef = useRef<number | null>(null);
 
   const exampleParts = useMemo(() => buildExampleParts(establishments, fields), [establishments, fields]);
 
   useEffect(() => {
     setIsSupported(getSpeechRecognitionConstructor() !== null);
   }, []);
+
+  // Si se sale de esta pestana con el microfono abierto, se corta y se
+  // limpian los timers -- que no quede escuchando de fondo en otra
+  // pantalla de Agro.
+  useEffect(() => {
+    return () => {
+      if (silenceTimeoutRef.current !== null) window.clearTimeout(silenceTimeoutRef.current);
+      if (maxListeningTimeoutRef.current !== null) window.clearTimeout(maxListeningTimeoutRef.current);
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
+  function clearListeningTimers() {
+    if (silenceTimeoutRef.current !== null) {
+      window.clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+    if (maxListeningTimeoutRef.current !== null) {
+      window.clearTimeout(maxListeningTimeoutRef.current);
+      maxListeningTimeoutRef.current = null;
+    }
+  }
 
   function handleStartListening() {
     const Recognition = getSpeechRecognitionConstructor();
@@ -142,16 +179,40 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
     const recognition = new Recognition();
     recognition.lang = "es-UY";
     recognition.continuous = false;
-    recognition.interimResults = false;
+    // interimResults=true: asi llegan avisos MIENTRAS la persona habla
+    // (no solo al terminar), y se puede reiniciar el reloj de silencio
+    // propio cada vez que hay actividad -- ver resetSilenceTimer.
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
+    // Si no hay palabras nuevas en SILENCE_TIMEOUT_MS, se da la frase por
+    // terminada y se corta sola (en Chrome esto ya lo hace el navegador,
+    // pero no hay que depender de eso -- ver el comentario en el tipo de
+    // arriba). MAX_LISTENING_TIMEOUT_MS es un tope duro por si nunca hay
+    // un hueco de silencio (ruido de fondo constante, etc.).
+    function resetSilenceTimer() {
+      if (silenceTimeoutRef.current !== null) window.clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = window.setTimeout(() => recognition.stop(), SILENCE_TIMEOUT_MS);
+    }
+
+    maxListeningTimeoutRef.current = window.setTimeout(() => recognition.stop(), MAX_LISTENING_TIMEOUT_MS);
+
     recognition.onresult = (event) => {
-      const heard = event.results[0]?.[0]?.transcript ?? "";
+      // Llego algo (parcial o final): hubo actividad, se reinicia el
+      // reloj de silencio.
+      resetSilenceTimer();
+
+      const lastResult = event.results[event.results.length - 1];
+      if (!lastResult?.isFinal) return;
+
+      clearListeningTimers();
+      const heard = lastResult[0]?.transcript ?? "";
       setTranscript(heard);
       handleTranscript(heard);
     };
 
     recognition.onerror = (event) => {
+      clearListeningTimers();
       setIsListening(false);
       if (event.error === "no-speech") {
         setStatusMessage({ tone: "warning", text: "No se escucho nada. Proba de nuevo." });
@@ -163,6 +224,7 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
     };
 
     recognition.onend = () => {
+      clearListeningTimers();
       setIsListening(false);
     };
 
@@ -172,6 +234,7 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
   }
 
   function handleStopListening() {
+    clearListeningTimers();
     recognitionRef.current?.stop();
   }
 
