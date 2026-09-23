@@ -222,6 +222,84 @@ function parseQuantity(tokens: string[], index: number): { value: number; consum
   return { value: base, consumed: 1 };
 }
 
+// Inverso de NUMBER_WORDS: para reconocer potreros con nombre numerico
+// (pedido explicito, 23/09/2026: "en vez de 9 dice nueve, no encuentra el
+// potrero nueve"). Chrome convierte los numeros dichos a digitos solo,
+// pero Safari/iOS los deja como palabra tal cual se escucharon -- asi que
+// un potrero "9" hay que poder reconocerlo diga lo que diga el
+// transcriptor, "9" o "nueve".
+const NUMBER_TO_WORD: Record<number, string> = {
+  0: "cero",
+  1: "uno",
+  2: "dos",
+  3: "tres",
+  4: "cuatro",
+  5: "cinco",
+  6: "seis",
+  7: "siete",
+  8: "ocho",
+  9: "nueve",
+  10: "diez",
+  11: "once",
+  12: "doce",
+  13: "trece",
+  14: "catorce",
+  15: "quince",
+  16: "dieciseis",
+  17: "diecisiete",
+  18: "dieciocho",
+  19: "diecinueve",
+  20: "veinte",
+  21: "veintiuno",
+  22: "veintidos",
+  23: "veintitres",
+  24: "veinticuatro",
+  25: "veinticinco",
+  26: "veintiseis",
+  27: "veintisiete",
+  28: "veintiocho",
+  29: "veintinueve",
+  30: "treinta",
+  40: "cuarenta",
+  50: "cincuenta",
+  60: "sesenta",
+  70: "setenta",
+  80: "ochenta",
+  90: "noventa",
+  100: "cien"
+};
+
+function numberToWord(value: number): string | null {
+  if (NUMBER_TO_WORD[value]) return NUMBER_TO_WORD[value];
+  if (value > 30 && value < 100) {
+    const tens = Math.floor(value / 10) * 10;
+    const unit = value % 10;
+    if (NUMBER_TO_WORD[tens] && unit >= 1 && unit <= 9) {
+      return `${NUMBER_TO_WORD[tens]} y ${NUMBER_TO_WORD[unit]}`;
+    }
+  }
+  return null;
+}
+
+// Candidatos de potrero: ademas del nombre tal cual, si es un numero puro
+// (ej "9") se agrega tambien su forma en palabra ("nueve") como candidato
+// valido -- ver comentario de NUMBER_TO_WORD arriba.
+function buildFieldCandidates(fields: FieldUnit[]): EntityCandidate<FieldUnit>[] {
+  const candidates: EntityCandidate<FieldUnit>[] = [];
+  for (const field of fields) {
+    const trimmedName = field.name.trim();
+    candidates.push({ normalizedName: normalize(trimmedName), label: field.name, value: field });
+
+    if (/^\d+$/.test(trimmedName)) {
+      const asWord = numberToWord(Number(trimmedName));
+      if (asWord) {
+        candidates.push({ normalizedName: asWord, label: field.name, value: field });
+      }
+    }
+  }
+  return candidates;
+}
+
 // ---------- Categoria de animal ----------
 
 function stripCategoryPrefix(label: string): string {
@@ -319,9 +397,7 @@ export function parseVoiceTransferCommand(transcript: string, data: VoiceTransfe
   }
   cursor += 2;
 
-  const originFieldCandidates: EntityCandidate<FieldUnit>[] = data.fields
-    .filter((field) => field.establishmentId === originMatch.value.id)
-    .map((field) => ({ normalizedName: normalize(field.name), label: field.name, value: field }));
+  const originFieldCandidates = buildFieldCandidates(data.fields.filter((field) => field.establishmentId === originMatch.value.id));
 
   const originFieldMatch = matchEntity(tokens, cursor, originFieldCandidates);
   if (!originFieldMatch) {
@@ -337,9 +413,9 @@ export function parseVoiceTransferCommand(transcript: string, data: VoiceTransfe
   }
   cursor += 2;
 
-  const destinationFieldCandidates: EntityCandidate<FieldUnit>[] = data.fields
-    .filter((field) => field.establishmentId === destinationMatch.value.id)
-    .map((field) => ({ normalizedName: normalize(field.name), label: field.name, value: field }));
+  const destinationFieldCandidates = buildFieldCandidates(
+    data.fields.filter((field) => field.establishmentId === destinationMatch.value.id)
+  );
 
   const destinationFieldMatch = matchEntity(tokens, cursor, destinationFieldCandidates);
   if (!destinationFieldMatch) {
