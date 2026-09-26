@@ -1,6 +1,10 @@
 /* global self, caches, fetch, URL */
 
-const CACHE_NAME = "saaspro-agro-v3";
+// v4 (26/09/2026): los iconos de la PWA cambiaron (logo del cliente) y las
+// imagenes se sirven "cache primero, nunca se revisa de nuevo" -- sin subir
+// la version aca, el navegador sigue mostrando los iconos viejos para
+// siempre aunque el archivo en el servidor ya haya cambiado.
+const CACHE_NAME = "saaspro-agro-v4";
 
 function isStaticAssetRequest(request) {
   return ["script", "style", "worker"].includes(request.destination);
