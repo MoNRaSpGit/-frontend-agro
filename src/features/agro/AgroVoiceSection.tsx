@@ -4,19 +4,26 @@ import { AgroSpecies, Establishment, FieldUnit } from "./agro.types";
 import { parseVoiceTransferCommand, VoiceTransferReady } from "./agro.voice";
 import { categoryCatalog, speciesLabels } from "./agro.demo.data";
 
-// Pestana "Voz" (22/09/2026, pedido explicito): SIMULACION VISUAL
-// SOLAMENTE. Interpreta una orden de traslado hablada y, si el usuario
-// confirma, agrega una fila a una tabla que vive SOLO en el estado de este
-// componente (se pierde al recargar la pagina). En ningun momento se llama
-// al backend ni se toca la app real -- los establecimientos/potreros que
-// usa para reconocer son los mismos de la app (props, solo lectura), pero
-// nunca se manda nada de vuelta.
+// Pestana "Voz" (22/09/2026, pasada a produccion 26/09/2026, pedido
+// explicito: "que si guarde en la BDD, que no sea una demo"). Interpreta
+// una orden de traslado hablada y, si el usuario confirma, se guarda de
+// verdad -- mismo camino y mismas validaciones de stock que el
+// formulario manual de "Animales" (ver AgroHomePage#submitVoiceTransfer,
+// que este componente llama via onSubmitTransfer, sin duplicar logica).
+// Si el traslado no se puede hacer (stock insuficiente, categoria sin
+// stock en el potrero, etc.) sale un modal informativo prolijo en vez de
+// un mensaje suelto -- pedido explicito, para que quede bien claro por
+// que no se hizo.
 type AgroVoiceSectionProps = {
   establishments: Establishment[];
   fields: FieldUnit[];
+  onSubmitTransfer: (
+    transfer: VoiceTransferReady,
+    quantity: number
+  ) => Promise<{ ok: true } | { ok: false; message: string }>;
 };
 
-type SimulatedTransferRow = {
+type ConfirmedTransferRow = {
   id: string;
   date: string;
   origin: { establishment: Establishment; field: FieldUnit };
@@ -122,7 +129,7 @@ function buildExampleParts(establishments: Establishment[], fields: FieldUnit[])
   ];
 }
 
-export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionProps) {
+export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: AgroVoiceSectionProps) {
   const [isSupported, setIsSupported] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -133,7 +140,12 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
   // entendio 35") -- por eso la cantidad se puede corregir a mano antes de
   // confirmar, sin tener que repetir toda la frase de nuevo.
   const [editedQuantity, setEditedQuantity] = useState("");
-  const [simulatedRows, setSimulatedRows] = useState<SimulatedTransferRow[]>([]);
+  const [confirmedRows, setConfirmedRows] = useState<ConfirmedTransferRow[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Modal informativo (pedido explicito, 26/09/2026): en vez de un mensaje
+  // suelto cuando el traslado no se puede hacer, un modal prolijo como el
+  // de confirmar, explicando el motivo.
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const maxListeningTimeoutRef = useRef<number | null>(null);
@@ -261,10 +273,24 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
   const parsedEditedQuantity = Number(editedQuantity.replace(",", "."));
   const isEditedQuantityValid = Number.isFinite(parsedEditedQuantity) && parsedEditedQuantity > 0;
 
-  function handleConfirmTransfer() {
-    if (!pendingTransfer || !isEditedQuantityValid) return;
+  async function handleConfirmTransfer() {
+    if (!pendingTransfer || !isEditedQuantityValid || isSubmitting) return;
 
-    const row: SimulatedTransferRow = {
+    setIsSubmitting(true);
+    const result = await onSubmitTransfer(pendingTransfer, parsedEditedQuantity);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      // El traslado no se hizo -- modal informativo con el motivo (mismas
+      // validaciones que el formulario manual: stock, categoria, etc.). El
+      // modal de confirmacion se cierra: para reintentar, se vuelve a
+      // hablar (asi se puede corregir cantidad/categoria/potrero).
+      setPendingTransfer(null);
+      setBlockedMessage(result.message);
+      return;
+    }
+
+    const row: ConfirmedTransferRow = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       date: getTodayDate(),
       origin: pendingTransfer.origin,
@@ -274,17 +300,18 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
       categoryLabel: formatCategoryLabel(pendingTransfer.category.label)
     };
 
-    setSimulatedRows((current) => [row, ...current]);
+    setConfirmedRows((current) => [row, ...current]);
     setPendingTransfer(null);
     setTranscript("");
   }
 
   function handleCancelTransfer() {
+    if (isSubmitting) return;
     setPendingTransfer(null);
   }
 
   function handleRemoveRow(id: string) {
-    setSimulatedRows((current) => current.filter((row) => row.id !== id));
+    setConfirmedRows((current) => current.filter((row) => row.id !== id));
   }
 
   return (
@@ -294,9 +321,9 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
           <div>
             <h2>🎙️ Voz</h2>
             <p>
-              <strong>Beta / Simulacion:</strong> esta pestana interpreta ordenes de traslado habladas a modo de prueba.{" "}
-              <strong>No guarda nada en la base de datos ni afecta al resto de la app.</strong> Los traslados reales se
-              siguen cargando desde "Animales".
+              <strong>Beta:</strong> interpreta una orden de traslado hablada y, si confirmas, la guarda de verdad,{" "}
+              igual que cargarla a mano desde "Animales". Si la cantidad, la categoria o el potrero no tienen stock
+              suficiente, no se guarda nada y se avisa por que.
             </p>
           </div>
         </div>
@@ -332,12 +359,15 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
       <article className="panel wide">
         <div className="panel-header">
           <div>
-            <h2>Traslados simulados</h2>
-            <p>Solo en esta pantalla, se pierden al recargar la pagina. Nunca se guardaron de verdad.</p>
+            <h2>Traslados por voz de esta sesion</h2>
+            <p>
+              Ya quedaron guardados de verdad (se ven tambien en "Animales"). Esta lista es solo un repaso rapido y se
+              pierde al recargar la pagina.
+            </p>
           </div>
-          {simulatedRows.length ? (
+          {confirmedRows.length ? (
             <div className="table-actions">
-              <button type="button" className="ghost-button" onClick={() => setSimulatedRows([])}>
+              <button type="button" className="ghost-button" onClick={() => setConfirmedRows([])}>
                 Vaciar
               </button>
             </div>
@@ -357,11 +387,11 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
               </tr>
             </thead>
             <tbody>
-              {simulatedRows.length ? (
-                simulatedRows.map((row) => (
+              {confirmedRows.length ? (
+                confirmedRows.map((row) => (
                   <tr key={row.id}>
                     <td>{formatShortDate(row.date)}</td>
-                    <td>Traslado (voz, simulado)</td>
+                    <td>Traslado (voz)</td>
                     <td>
                       {row.origin.establishment.name} / {row.origin.field.name}
                     </td>
@@ -374,7 +404,7 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
                     <td className="cell-number">{row.quantity}</td>
                     <td className="cell-actions">
                       <button type="button" className="ghost-button danger" onClick={() => handleRemoveRow(row.id)}>
-                        Quitar
+                        Quitar de esta lista
                       </button>
                     </td>
                   </tr>
@@ -382,7 +412,7 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
               ) : (
                 <tr>
                   <td className="cell-empty" colSpan={7}>
-                    Todavia no probaste ningun traslado por voz.
+                    Todavia no hiciste ningun traslado por voz.
                   </td>
                 </tr>
               )}
@@ -396,7 +426,7 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-confirm-title">
             <div className="confirm-modal-copy">
               <strong id="voice-confirm-title">¿Confirmar traslado?</strong>
-              <span>Esto es solo una simulacion, no se va a guardar nada real.</span>
+              <span>Se va a guardar de verdad, igual que cargarlo a mano desde "Animales".</span>
             </div>
             <div className="voice-confirm-summary">
               <label className="voice-confirm-quantity-field">
@@ -407,6 +437,7 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
                   step="1"
                   value={editedQuantity}
                   onChange={(event) => setEditedQuantity(event.target.value)}
+                  disabled={isSubmitting}
                   autoFocus
                 />
                 <span>{speciesLabels[pendingTransfer.species]} · {formatCategoryLabel(pendingTransfer.category.label)}</span>
@@ -421,11 +452,32 @@ export function AgroVoiceSection({ establishments, fields }: AgroVoiceSectionPro
               </p>
             </div>
             <div className="action-row">
-              <button type="button" className="ghost-button" onClick={handleCancelTransfer}>
+              <button type="button" className="ghost-button" onClick={handleCancelTransfer} disabled={isSubmitting}>
                 Cancelar
               </button>
-              <button type="button" className="primary-button" disabled={!isEditedQuantityValid} onClick={handleConfirmTransfer}>
-                Confirmar (simulado)
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!isEditedQuantityValid || isSubmitting}
+                onClick={handleConfirmTransfer}
+              >
+                {isSubmitting ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {blockedMessage ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-blocked-title">
+            <div className="confirm-modal-copy">
+              <strong id="voice-blocked-title">No se pudo hacer el traslado</strong>
+              <span>{blockedMessage}</span>
+            </div>
+            <div className="action-row">
+              <button type="button" className="primary-button" onClick={() => setBlockedMessage(null)}>
+                Entendido
               </button>
             </div>
           </div>

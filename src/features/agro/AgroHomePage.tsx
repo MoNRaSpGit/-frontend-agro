@@ -11,6 +11,7 @@ import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
 import { AgroVoiceSection } from "./AgroVoiceSection";
+import type { VoiceTransferReady } from "./agro.voice";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { AgroApiError } from "../../shared/errors/agroApiError";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
@@ -116,6 +117,13 @@ function matchesSummaryMovementFilterKind(kind: AnimalMovementKind, filterKind: 
 
 export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) {
   const today = getTodayDate();
+  // Traslado por voz (26/09/2026, pedido explicito: "que si guarde en la
+  // BDD, no que sea una demo"): en vez de duplicar la logica de guardado,
+  // la voz carga animalForm con los datos del traslado y dispara
+  // handleAnimalSubmit -- EXACTAMENTE el mismo camino y las mismas
+  // validaciones de stock que el formulario manual de "Animales" (ver
+  // submitVoiceTransfer y el useEffect que lo dispara, mas abajo).
+  const voiceSubmitCallbackRef = useRef<{ onBlocked: (message: string) => void; onSaved: () => void } | null>(null);
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
   const accountingFormPanelRef = useRef<HTMLElement | null>(null);
   const animalTableWrapRef = useRef<HTMLDivElement | null>(null);
@@ -2243,7 +2251,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
   function handleAnimalSubmit(
     event?: React.FormEvent<HTMLFormElement>,
-    options?: { skipCrossEstablishmentConfirm?: boolean; skipCorrectionConfirm?: boolean }
+    options?: { skipCrossEstablishmentConfirm?: boolean; skipCorrectionConfirm?: boolean },
+    callbacks?: { onBlocked?: (message: string) => void; onSaved?: () => void }
   ) {
     event?.preventDefault();
     const skipCrossEstablishmentConfirm = options?.skipCrossEstablishmentConfirm ?? false;
@@ -2394,8 +2403,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     if (Object.keys(nextErrors).length > 0) {
       setAnimalFormErrors(nextErrors);
       const firstErrorField = Object.keys(nextErrors)[0];
-      showError(nextErrors[firstErrorField] ?? "Faltan datos obligatorios.");
+      const firstErrorMessage = nextErrors[firstErrorField] ?? "Faltan datos obligatorios.";
+      showError(firstErrorMessage);
       focusAnimalField(firstErrorField);
+      callbacks?.onBlocked?.(firstErrorMessage);
       return;
     }
 
@@ -2607,7 +2618,64 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setSelectedEstablishmentId(animalForm.establishmentId);
     resetAnimalForm(true);
     showSuccess(editingAnimalMovementId ? "Movimiento de animales actualizado." : "Movimiento de animales guardado.");
+    callbacks?.onSaved?.();
   }
+
+  // Puente entre la pestana Voz y handleAnimalSubmit de arriba: carga
+  // animalForm con los datos del traslado escuchado y dispara el submit
+  // real apenas el estado se actualiza (el useEffect de mas abajo).
+  // Devuelve una promesa para que AgroVoiceSection pueda mostrar su propio
+  // modal de error prolijo (en vez del toast que usa el formulario manual)
+  // sin duplicar ninguna validacion.
+  function submitVoiceTransfer(
+    transfer: VoiceTransferReady,
+    quantity: number
+  ): Promise<{ ok: true } | { ok: false; message: string }> {
+    return new Promise((resolve) => {
+      voiceSubmitCallbackRef.current = {
+        onBlocked: (message) => resolve({ ok: false, message }),
+        onSaved: () => resolve({ ok: true })
+      };
+
+      setEditingAnimalMovementId(null);
+      setAnimalFormErrors({});
+      setAnimalForm({
+        date: today,
+        establishmentId: transfer.origin.establishment.id,
+        fieldId: transfer.origin.field.id,
+        transferDestinationEstablishmentId: transfer.destination.establishment.id,
+        transferDestinationFieldId: transfer.destination.field.id,
+        species: transfer.species,
+        categoryCode: transfer.category.code,
+        kind: "transfer",
+        quantity: String(quantity),
+        earTag: "",
+        pricingMode: "kilo",
+        weightKg: "",
+        unitPrice: "",
+        freightAmount: "",
+        commissionAmount: "",
+        taxAmount: "",
+        collectedAmount: "",
+        currency: "USD",
+        notes: "Traslado cargado por voz"
+      });
+    });
+  }
+
+  // Dispara el submit real recien cuando animalForm ya tiene los datos del
+  // traslado de voz cargados (setAnimalForm es asincronico -- no se puede
+  // llamar a handleAnimalSubmit en el mismo tick porque leeria el estado
+  // viejo). El "skipCrossEstablishmentConfirm: true" evita un segundo
+  // modal generico de confirmacion: el de la pestana Voz ya mostro origen,
+  // destino y cantidad antes de llegar aca.
+  useEffect(() => {
+    const callbacks = voiceSubmitCallbackRef.current;
+    if (!callbacks) return;
+    voiceSubmitCallbackRef.current = null;
+    handleAnimalSubmit(undefined, { skipCrossEstablishmentConfirm: true }, callbacks);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animalForm]);
 
   function handleAccountingSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3831,7 +3899,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           </section>
         ) : null}
 
-        {activeView === "voz" ? <AgroVoiceSection establishments={establishments} fields={fields} /> : null}
+        {activeView === "voz" ? (
+          <AgroVoiceSection establishments={establishments} fields={fields} onSubmitTransfer={submitVoiceTransfer} />
+        ) : null}
 
         <AgroDeleteConfirmModal
           pendingDelete={pendingDelete}
