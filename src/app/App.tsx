@@ -10,7 +10,11 @@ import {
 import { changeAccountPassword, loginWithAccount } from "../shared/auth/auth.client";
 import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../shared/lib/persistence";
 
-const AGRO_DIRECT_ACCOUNT = "rosendo";
+// Pedido explicito (26/09/2026): el cliente quiere ver/escribir "Rosendo"
+// con mayuscula en el login. Es solo visual -- el usuario real en la BDD
+// sigue en minuscula, por eso se normaliza a minuscula justo antes de
+// autenticar (ver authenticateWithCredentials), sin tocar nada mas.
+const AGRO_DIRECT_ACCOUNT = "Rosendo";
 const AGRO_DIRECT_PASSWORD = "lamilagrosa";
 
 type AgroAccessMode = "demo-local" | "backend";
@@ -55,7 +59,7 @@ export function App() {
   }
 
   async function authenticateWithCredentials(identifier: string, secret: string) {
-    const session = await loginWithAccount(identifier, secret);
+    const session = await loginWithAccount(identifier.trim().toLowerCase(), secret);
     writeJsonStorage(AGRO_AUTH_SESSION_STORAGE_KEY, session);
     writeJsonStorage(AGRO_ACCESS_MODE_STORAGE_KEY, "backend");
     return session;
