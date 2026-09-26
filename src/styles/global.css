@@ -98,6 +98,14 @@ button {
     linear-gradient(160deg, #d8cfbe 0%, #c4baa5 48%, #b9ceb0 100%);
 }
 
+.access-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  margin-bottom: 10px;
+}
+
 .access-card {
   width: min(760px, 100%);
   border: 1px solid rgba(35, 48, 31, 0.22);
@@ -259,11 +267,23 @@ button {
 }
 
 .product-shell-home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: 0;
   background: transparent;
   padding: 0;
   color: inherit;
   text-align: left;
+}
+
+/* Logo del cliente (26/09/2026), servido directo desde /public. */
+.product-shell-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .product-shell-title-group {

@@ -12,6 +12,10 @@ interface ProductShellProps {
   title: string;
   subtitle: string;
   badge: string;
+  // Logo del cliente (26/09/2026, pedido explicito): se sirve directo
+  // desde /public, sin importarlo como modulo -- por eso es una URL
+  // (string), no un asset de build.
+  logoSrc?: string;
   navItems: ProductShellNavItem[];
   activeKey: string | null;
   onSelect: (key: string) => void;
@@ -24,6 +28,7 @@ export function ProductShell({
   title,
   subtitle,
   badge,
+  logoSrc,
   navItems,
   activeKey,
   onSelect,
@@ -75,6 +80,7 @@ export function ProductShell({
         <div className="product-shell-copy">
           {badge ? <span className="eyebrow">{badge}</span> : null}
           <button type="button" className="product-shell-home" onClick={onTitleClick}>
+            {logoSrc ? <img src={logoSrc} alt="" className="product-shell-logo" /> : null}
             <div className="product-shell-title-group">
               <strong>{title}</strong>
               <small>{subtitle}</small>

@@ -3379,6 +3379,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         title="Agro"
         subtitle="Control del establecimiento"
         badge=""
+        logoSrc={`${import.meta.env.BASE_URL}LogoRosendo.jpeg`}
         navItems={agroWorkspaceSections}
         activeKey={activeView}
         onSelect={(key) => setActiveView(key as AgroView)}

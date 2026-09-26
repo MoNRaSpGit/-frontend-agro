@@ -139,6 +139,7 @@ export function App() {
     return (
       <main className="access-shell">
         <section className="access-card">
+          <img src={`${import.meta.env.BASE_URL}LogoRosendo.jpeg`} alt="" className="access-logo" />
           <span className="eyebrow">Agro</span>
           <h1>Ingreso cliente</h1>
           <p>Rosendo mantiene el mismo usuario y sus mismos datos. Ahora puede entrar con su propia contrasena.</p>
