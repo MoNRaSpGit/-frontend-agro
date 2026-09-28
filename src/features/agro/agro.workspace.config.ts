@@ -51,6 +51,12 @@ export const agroWorkspaceSections: AgroWorkspaceSection[] = [
     persistence: "local"
   },
   {
+    key: "fieldStock",
+    label: "Potrero",
+    description: "Cuantos animales hay hoy en un potrero, por categoria",
+    persistence: "local"
+  },
+  {
     key: "summary",
     label: "Resumen",
     description: "Control por establecimiento, categorias y alertas",

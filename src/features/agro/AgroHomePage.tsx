@@ -4,6 +4,7 @@ import { ProductShell } from "../../shared/components/ProductShell";
 import { AgroAccountingSection } from "./AgroAccountingSection";
 import { AgroReceivablesSection } from "./AgroReceivablesSection";
 import { AgroAnimalsSection } from "./AgroAnimalsSection";
+import { AgroFieldStockSection } from "./AgroFieldStockSection";
 import { AgroDeleteConfirmModal } from "./AgroDeleteConfirmModal";
 import { AgroMetricsGrid, AgroToolbar } from "./AgroHomeChrome";
 import { AgroOverviewSection } from "./AgroOverviewSection";
@@ -3389,7 +3390,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     <main className="app-shell">
       <ProductShell
         title="Agro"
-        subtitle="Control del establecimiento"
+        subtitle=""
         badge=""
         logoSrc={`${import.meta.env.BASE_URL}LogoRosendo.jpeg`}
         navItems={agroWorkspaceSections}
@@ -3600,6 +3601,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             onEditSanitaryRecord={handleEditSanitaryRecord}
             onSubmit={handleSanitarySubmit}
           />
+        ) : null}
+
+        {activeView === "fieldStock" ? (
+          <AgroFieldStockSection establishments={establishments} fields={fields} stockBalanceMap={stockBalanceMap} />
         ) : null}
 
         {activeView === "summary" ? (
