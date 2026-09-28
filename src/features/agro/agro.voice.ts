@@ -1,34 +1,31 @@
 // Interprete de comandos de voz para traslados (22/09/2026, pedido
-// explicito). Pestana "Voz": SIMULACION VISUAL SOLAMENTE -- este archivo
-// solo interpreta texto y devuelve una estructura; nunca llama al backend
-// ni modifica nada de la app real. Lee establecimientos/potreros/
-// categorias YA CARGADOS (para que el reconocimiento tenga sentido y
-// valide contra datos reales) pero no los toca.
+// explicito; version tolerante 28/09/2026, pedido explicito: "sin
+// importar si falta algo al principio o al final, que pueda seguir y
+// completar"). Este archivo solo interpreta texto y devuelve una
+// estructura; no llama al backend ni modifica nada -- eso lo hace
+// AgroVoiceSection.tsx a traves de AgroHomePage#submitVoiceTransfer.
 //
-// Frase esperada (orden fijo, ver AgroVoiceSection.tsx):
+// Frase esperada (orden fijo, pero CUALQUIER parte puede faltar):
 //   "Traslado del [establecimiento origen] a [establecimiento destino],
 //    del potrero [potrero origen] al potrero [potrero destino],
 //    cantidad [numero], [categoria de animal]."
 //
-// Ejemplo: "Traslado del Ombu a La Milagrosa, del potrero 1 al
+// Ejemplo completo: "Traslado del Ombu a La Milagrosa, del potrero 1 al
 // potrero 5, cantidad 5, toros."
+// Ejemplo incompleto: "Traslado de la Milagrosa del potrero Costa
+// cantidad 5" -> entiende campo origen + potrero origen + cantidad,
+// y devuelve como faltantes: campo destino, potrero destino, categoria.
 //
-// La palabra "cantidad" antes del numero es obligatoria (pedido explicito,
-// 22/09/2026: "hay potrero con numero, digo del potrero 1 al potrero 5, 5
-// toros y entiende potrero 55... debemos poner un diferenciador"). Sin esa
-// palabra en el medio, el reconocimiento de voz puede escuchar el numero
-// del potrero destino pegado al numero de la cantidad y entenderlos como
-// uno solo (potrero "5" + cantidad "5" -> "55"). "Cantidad" le da un corte
-// audible entre los dos numeros.
-//
-// Diseno: "traslado" activa la interpretacion (si no arranca con esa
-// palabra, no se interpreta nada). Las palabras clave estructurales (a,
-// del potrero, al potrero, cantidad) se buscan como texto exacto; los
-// nombres propios (establecimientos, potreros, categorias) se buscan por
-// similitud contra los datos reales, no por texto exacto -- la voz puede
-// reconocer un nombre un poco distinto. Ante cualquier duda (no se
-// encontro algo, o hay mas de una opcion igual de parecida) se devuelve
-// "incomplete" con un mensaje para pedir aclaracion, nunca se adivina.
+// DISEÑO (28/09/2026): en vez de un cursor que avanza en orden estricto y
+// frena en el primer dato que no reconoce (perdiendo todo lo que venia
+// despues en la frase), se buscan primero las palabras clave "ancla" --
+// " a " (separador de establecimientos), "del potrero", "al potrero",
+// "cantidad" -- SEA QUE APAREZCAN O NO. Cada dato (establecimiento
+// origen/destino, potrero origen/destino, cantidad, categoria) se busca
+// despues en la "ventana" de texto entre dos anclas consecutivas. Si una
+// ancla no aparece, esa ventana queda vacia y ese dato se marca como
+// faltante -- pero el resto de las ventanas se siguen resolviendo igual,
+// sin importar en que posicion de la frase esten.
 import { AgroSpecies, CategoryDefinition, Establishment, FieldUnit } from "./agro.types";
 
 export type VoiceTransferData = {
@@ -46,7 +43,33 @@ export type VoiceTransferReady = {
   category: CategoryDefinition;
 };
 
-export type VoiceTransferParseResult = { status: "no_intent" } | { status: "incomplete"; message: string } | VoiceTransferReady;
+// Lo que se pudo entender de la frase, sea que este completo o no --
+// cualquier campo puede venir vacio (null) si no se reconocio.
+export type VoiceTransferSlots = {
+  originEstablishment: Establishment | null;
+  originField: FieldUnit | null;
+  destinationEstablishment: Establishment | null;
+  destinationField: FieldUnit | null;
+  quantity: number | null;
+  species: AgroSpecies | null;
+  category: CategoryDefinition | null;
+};
+
+export type VoiceTransferMissingSlot =
+  | "originEstablishment"
+  | "originField"
+  | "destinationEstablishment"
+  | "destinationField"
+  | "quantity"
+  | "category";
+
+export type VoiceTransferPartial = {
+  status: "partial";
+  slots: VoiceTransferSlots;
+  missing: VoiceTransferMissingSlot[];
+};
+
+export type VoiceTransferParseResult = { status: "no_intent" } | VoiceTransferPartial | VoiceTransferReady;
 
 // ---------- Normalizacion y similitud (para tolerar variaciones de la voz) ----------
 
@@ -82,20 +105,18 @@ function similarity(a: string, b: string): number {
 
 const ENTITY_MATCH_THRESHOLD = 0.72;
 // Si el mejor candidato y el segundo quedan mas cerca que esto, se
-// considera ambiguo (mejor preguntar que arriesgar el establecimiento o
-// potrero equivocado).
+// considera ambiguo -- mejor pedirlo a mano que arriesgar el
+// establecimiento/potrero equivocado (se trata igual que "faltante").
 const AMBIGUITY_GAP = 0.05;
 
 type EntityCandidate<T> = { normalizedName: string; label: string; value: T };
-type EntityMatch<T> = { value: T; consumed: number; score: number; ambiguousLabels: string[] };
 
 const LEADING_ARTICLES = ["el ", "la ", "los ", "las "];
 
 // "El Ombu" / "La Milagrosa": el articulo casi siempre se dice pegado a
 // "del"/"de la" (que ya lo contrae -- "del" = "de" + "el"), asi que lo que
 // se escucha despues es el nombre SIN el articulo. Se agrega ademas esa
-// variante (nombre sin el articulo) como candidato valido, para que
-// "traslado del Ombu..." matchee igual que "traslado de El Ombu...".
+// variante (nombre sin el articulo) como candidato valido.
 function buildEstablishmentCandidates(establishments: Establishment[]): EntityCandidate<Establishment>[] {
   const candidates: EntityCandidate<Establishment>[] = [];
   for (const establishment of establishments) {
@@ -110,31 +131,34 @@ function buildEstablishmentCandidates(establishments: Establishment[]): EntityCa
   return candidates;
 }
 
-// Busca, arrancando en `startIndex`, el candidato que mejor coincide.
-// Importante: a cada candidato se lo compara contra EXACTAMENTE su propia
-// cantidad de palabras (no una ventana comun para todos) -- comparar
-// contra una ventana mas larga hacia que, por ejemplo, "la milagrosa del"
-// (con la palabra clave "del" pegada) puntuara casi tan bien como "la
-// milagrosa" sola por ser parecida en longitud, y se "comia" la palabra
-// clave siguiente.
-function matchEntity<T>(tokens: string[], startIndex: number, candidates: EntityCandidate<T>[]): EntityMatch<T> | null {
-  const scoredByValue = new Map<string, { value: T; label: string; score: number; consumed: number }>();
+// Busca el candidato que mejor coincide, tomando de la ventana SOLO la
+// cantidad de palabras que ese candidato necesita, arrancando desde el
+// principio de la ventana (igual criterio que el parser original -- cada
+// candidato se compara contra su propia longitud, nunca contra toda la
+// ventana entera). Esto es clave cuando la ventana quedo "sucia" con
+// palabras de mas porque el ancla siguiente no se encontro (ver
+// parseVoiceTransferCommand, el tramo final cuando falta "cantidad").
+// Ambiguedad (dos candidatos casi iguales de parecidos) se trata igual
+// que "no encontrado" -- se pide a mano, nunca se adivina.
+function matchEntityAtStart<T>(
+  windowTokens: string[],
+  candidates: EntityCandidate<T>[]
+): { value: T; consumed: number } | null {
+  if (!windowTokens.length) return null;
 
+  const scoredByValue = new Map<string, { value: T; score: number; consumed: number }>();
   for (const candidate of candidates) {
     const wordCount = candidate.normalizedName.split(" ").length;
-    if (startIndex + wordCount > tokens.length) continue;
+    if (wordCount > windowTokens.length) continue;
 
-    const phrase = tokens.slice(startIndex, startIndex + wordCount).join(" ");
+    const phrase = windowTokens.slice(0, wordCount).join(" ");
     const score = similarity(phrase, candidate.normalizedName);
     if (score < ENTITY_MATCH_THRESHOLD) continue;
 
-    // Un mismo establecimiento puede tener mas de un candidato (con y sin
-    // articulo, ver buildEstablishmentCandidates) -- se queda con el mejor
-    // puntaje de cada uno, para no marcarlo como "ambiguo contra si mismo".
     const key = JSON.stringify(candidate.value);
     const existing = scoredByValue.get(key);
     if (!existing || score > existing.score) {
-      scoredByValue.set(key, { value: candidate.value, label: candidate.label, score, consumed: wordCount });
+      scoredByValue.set(key, { value: candidate.value, score, consumed: wordCount });
     }
   }
 
@@ -143,12 +167,18 @@ function matchEntity<T>(tokens: string[], startIndex: number, candidates: Entity
 
   const [top, ...rest] = scored;
   const ambiguous = rest.length > 0 && top.score - rest[0].score < AMBIGUITY_GAP;
-  return {
-    value: top.value,
-    consumed: top.consumed,
-    score: top.score,
-    ambiguousLabels: ambiguous ? [top.label, ...rest.map((r) => r.label)] : []
-  };
+  return ambiguous ? null : { value: top.value, consumed: top.consumed };
+}
+
+// Dentro de una ventana acotada por anclas, el establecimiento puede venir
+// con un articulo/preposicion pegado adelante ("del", "de la", "de") --
+// se intenta sacarlo antes de buscar el nombre. Si no hay preposicion (o
+// la ventana esta vacia), se prueba tal cual.
+function stripEstablishmentPreposition(windowTokens: string[]): string[] {
+  if (windowTokens[0] === "del") return windowTokens.slice(1);
+  if (windowTokens[0] === "de" && windowTokens[1] === "la") return windowTokens.slice(2);
+  if (windowTokens[0] === "de") return windowTokens.slice(1);
+  return windowTokens;
 }
 
 // ---------- Numeros hablados ----------
@@ -225,9 +255,7 @@ function parseQuantity(tokens: string[], index: number): { value: number; consum
 // Inverso de NUMBER_WORDS: para reconocer potreros con nombre numerico
 // (pedido explicito, 23/09/2026: "en vez de 9 dice nueve, no encuentra el
 // potrero nueve"). Chrome convierte los numeros dichos a digitos solo,
-// pero Safari/iOS los deja como palabra tal cual se escucharon -- asi que
-// un potrero "9" hay que poder reconocerlo diga lo que diga el
-// transcriptor, "9" o "nueve".
+// pero Safari/iOS los deja como palabra tal cual se escucharon.
 const NUMBER_TO_WORD: Record<number, string> = {
   0: "cero",
   1: "uno",
@@ -311,39 +339,53 @@ function stripCategoryPrefix(label: string): string {
     .trim();
 }
 
-type CategoryMatch = { status: "matched"; species: AgroSpecies; category: CategoryDefinition } | { status: "ambiguous"; options: string[] } | { status: "not_found" };
-
-function matchCategory(tailText: string, categoryCatalog: Record<AgroSpecies, CategoryDefinition[]>): CategoryMatch {
+function matchCategory(
+  tailText: string,
+  categoryCatalog: Record<AgroSpecies, CategoryDefinition[]>
+): { species: AgroSpecies; category: CategoryDefinition } | null {
   const normalizedTail = normalize(tailText);
-  if (!normalizedTail) return { status: "not_found" };
+  if (!normalizedTail) return null;
 
-  const candidates: Array<{ species: AgroSpecies; category: CategoryDefinition; coreLabel: string }> = [];
+  const candidates: Array<{ species: AgroSpecies; category: CategoryDefinition; score: number }> = [];
 
   for (const species of Object.keys(categoryCatalog) as AgroSpecies[]) {
     for (const category of categoryCatalog[species]) {
       const coreLabel = normalize(stripCategoryPrefix(category.label));
 
-      // Coincidencia exacta: gana directo, no hace falta seguir buscando.
       if (coreLabel === normalizedTail) {
-        return { status: "matched", species, category };
+        return { species, category };
       }
 
       const isPrefixMatch = coreLabel.startsWith(normalizedTail) || normalizedTail.startsWith(coreLabel);
-      if (isPrefixMatch || similarity(normalizedTail, coreLabel) >= ENTITY_MATCH_THRESHOLD) {
-        candidates.push({ species, category, coreLabel });
+      const score = similarity(normalizedTail, coreLabel);
+      if (isPrefixMatch || score >= ENTITY_MATCH_THRESHOLD) {
+        candidates.push({ species, category, score: isPrefixMatch ? 1 : score });
       }
     }
   }
 
+  // Igual que con establecimientos/potreros: ambiguedad se trata como "no
+  // encontrado" -- se pide a mano en vez de arriesgar la categoria.
   if (candidates.length === 1) {
-    return { status: "matched", species: candidates[0].species, category: candidates[0].category };
+    return { species: candidates[0].species, category: candidates[0].category };
   }
-  if (candidates.length > 1) {
-    // Ej: decir solo "novillos" -- hay 3 tipos de novillo, no se puede
-    // adivinar cual sin arriesgar el dato.
-    return { status: "ambiguous", options: candidates.map((c) => stripCategoryPrefix(c.category.label)) };
+  return null;
+}
+
+// ---------- Busqueda de anclas (palabras clave estructurales) ----------
+
+function indexOfToken(tokens: string[], token: string, from: number): number {
+  for (let i = from; i < tokens.length; i++) {
+    if (tokens[i] === token) return i;
   }
-  return { status: "not_found" };
+  return -1;
+}
+
+function indexOfPhrase(tokens: string[], words: string[], from: number): number {
+  for (let i = from; i <= tokens.length - words.length; i++) {
+    if (words.every((word, offset) => tokens[i + offset] === word)) return i;
+  }
+  return -1;
 }
 
 // ---------- Parser principal ----------
@@ -355,110 +397,115 @@ export function parseVoiceTransferCommand(transcript: string, data: VoiceTransfe
     return { status: "no_intent" };
   }
 
-  let cursor = 1;
-  if (tokens[cursor] === "del") {
-    cursor += 1;
-  } else if (tokens[cursor] === "de" && tokens[cursor + 1] === "la") {
-    cursor += 2;
-  } else if (tokens[cursor] === "de") {
-    cursor += 1;
-  }
+  // Anclas, buscadas SIEMPRE sobre el texto crudo (nunca se "adivina" de
+  // antemano que el establecimiento origen esta ahi -- si se asumiera que
+  // el "del" de la posicion 1 es siempre la preposicion del establecimiento,
+  // se lo comeria por error cuando en realidad es el "del" de "del potrero"
+  // de una frase que se salteo el campo). Cada ancla se busca desde donde
+  // termino la anterior SI se encontro -- si no se encontro, se sigue
+  // buscando la siguiente desde el mismo punto, sin trabarse.
+  const aIdx = indexOfToken(tokens, "a", 1);
+  const afterA = aIdx !== -1 ? aIdx + 1 : 1;
 
+  const delPotreroIdx = indexOfPhrase(tokens, ["del", "potrero"], afterA);
+  const afterDelPotrero = delPotreroIdx !== -1 ? delPotreroIdx + 2 : afterA;
+
+  const alPotreroIdx = indexOfPhrase(tokens, ["al", "potrero"], afterDelPotrero);
+  const afterAlPotrero = alPotreroIdx !== -1 ? alPotreroIdx + 2 : afterDelPotrero;
+
+  const cantidadIdx = indexOfToken(tokens, "cantidad", afterAlPotrero);
+
+  // ---- Ventanas de texto entre anclas consecutivas ----
+  const originEstablishmentEnd = [aIdx, delPotreroIdx, alPotreroIdx, cantidadIdx, tokens.length].find((value) => value >= 1) ?? tokens.length;
+  const originEstablishmentTokens = stripEstablishmentPreposition(tokens.slice(1, originEstablishmentEnd));
+
+  const destinationEstablishmentTokens =
+    aIdx !== -1 ? tokens.slice(afterA, [delPotreroIdx, alPotreroIdx, cantidadIdx, tokens.length].find((value) => value >= afterA) ?? tokens.length) : [];
+
+  const originFieldTokens =
+    delPotreroIdx !== -1 ? tokens.slice(afterDelPotrero, [alPotreroIdx, cantidadIdx, tokens.length].find((value) => value >= afterDelPotrero) ?? tokens.length) : [];
+
+  const destinationFieldTokens =
+    alPotreroIdx !== -1 ? tokens.slice(afterAlPotrero, [cantidadIdx, tokens.length].find((value) => value >= afterAlPotrero) ?? tokens.length) : [];
+
+  // ---- Resolver cada dato dentro de su ventana ----
   const establishmentCandidates = buildEstablishmentCandidates(data.establishments);
+  const originEstablishment = matchEntityAtStart(originEstablishmentTokens, establishmentCandidates)?.value ?? null;
+  const destinationEstablishment = matchEntityAtStart(destinationEstablishmentTokens, establishmentCandidates)?.value ?? null;
 
-  const originMatch = matchEntity(tokens, cursor, establishmentCandidates);
-  if (!originMatch) {
-    return {
-      status: "incomplete",
-      message: "No reconoci el establecimiento de origen. Repeti la frase asi: \"Traslado del [establecimiento] a [otro establecimiento]...\"."
-    };
-  }
-  if (originMatch.ambiguousLabels.length) {
-    return { status: "incomplete", message: `El establecimiento de origen es ambiguo, podria ser: ${originMatch.ambiguousLabels.join(", ")}. Decilo mas claro.` };
-  }
-  cursor += originMatch.consumed;
-
-  if (tokens[cursor] !== "a") {
-    return { status: "incomplete", message: "Despues del establecimiento de origen falta la palabra \"a\" seguida del destino." };
-  }
-  cursor += 1;
-
-  const destinationMatch = matchEntity(tokens, cursor, establishmentCandidates);
-  if (!destinationMatch) {
-    return { status: "incomplete", message: "No reconoci el establecimiento de destino." };
-  }
-  if (destinationMatch.ambiguousLabels.length) {
-    return { status: "incomplete", message: `El establecimiento de destino es ambiguo, podria ser: ${destinationMatch.ambiguousLabels.join(", ")}. Decilo mas claro.` };
-  }
-  cursor += destinationMatch.consumed;
-
-  if (tokens[cursor] !== "del" || tokens[cursor + 1] !== "potrero") {
-    return { status: "incomplete", message: "Despues del destino falta decir \"del potrero [nombre]\"." };
-  }
-  cursor += 2;
-
-  const originFieldCandidates = buildFieldCandidates(data.fields.filter((field) => field.establishmentId === originMatch.value.id));
-
-  const originFieldMatch = matchEntity(tokens, cursor, originFieldCandidates);
-  if (!originFieldMatch) {
-    return { status: "incomplete", message: `No encontre ese potrero en ${originMatch.value.name}.` };
-  }
-  if (originFieldMatch.ambiguousLabels.length) {
-    return { status: "incomplete", message: `El potrero de origen es ambiguo, podria ser: ${originFieldMatch.ambiguousLabels.join(", ")}. Decilo mas claro.` };
-  }
-  cursor += originFieldMatch.consumed;
-
-  if (tokens[cursor] !== "al" || tokens[cursor + 1] !== "potrero") {
-    return { status: "incomplete", message: "Despues del potrero de origen falta decir \"al potrero [nombre]\"." };
-  }
-  cursor += 2;
+  // Si se conoce el establecimiento correspondiente, el potrero se busca
+  // SOLO entre los potreros de ese establecimiento (evita confundir un
+  // potrero "5" de un campo con el "5" de otro). Si no se conoce, se
+  // busca entre TODOS los potreros -- si da unico, ademas se infiere de
+  // regalo el establecimiento al que pertenece.
+  const originFieldCandidates = buildFieldCandidates(
+    originEstablishment ? data.fields.filter((field) => field.establishmentId === originEstablishment.id) : data.fields
+  );
+  const originFieldMatch = matchEntityAtStart(originFieldTokens, originFieldCandidates);
+  const originField = originFieldMatch?.value ?? null;
+  const inferredOriginEstablishment =
+    originEstablishment ?? (originField ? data.establishments.find((item) => item.id === originField.establishmentId) ?? null : null);
 
   const destinationFieldCandidates = buildFieldCandidates(
-    data.fields.filter((field) => field.establishmentId === destinationMatch.value.id)
+    destinationEstablishment ? data.fields.filter((field) => field.establishmentId === destinationEstablishment.id) : data.fields
   );
+  const destinationFieldMatch = matchEntityAtStart(destinationFieldTokens, destinationFieldCandidates);
+  const destinationField = destinationFieldMatch?.value ?? null;
+  const inferredDestinationEstablishment =
+    destinationEstablishment ?? (destinationField ? data.establishments.find((item) => item.id === destinationField.establishmentId) ?? null : null);
 
-  const destinationFieldMatch = matchEntity(tokens, cursor, destinationFieldCandidates);
-  if (!destinationFieldMatch) {
-    return { status: "incomplete", message: `No encontre ese potrero en ${destinationMatch.value.name}.` };
-  }
-  if (destinationFieldMatch.ambiguousLabels.length) {
-    return { status: "incomplete", message: `El potrero de destino es ambiguo, podria ser: ${destinationFieldMatch.ambiguousLabels.join(", ")}. Decilo mas claro.` };
-  }
-  cursor += destinationFieldMatch.consumed;
+  // El tramo final (cantidad + categoria) no tiene una ancla que lo cierre
+  // -- si ademas falta "cantidad", la ventana de la categoria arrancaria
+  // pisando las mismas palabras que ya uso el potrero destino (ej: "al
+  // potrero 5 toros" sin "cantidad" -- "5" es del potrero, "toros" es la
+  // categoria). Por eso se arrastra cuanto consumio EFECTIVAMENTE el
+  // potrero destino (no la posicion fija del ancla) para saber donde
+  // arranca lo que sigue.
+  const afterDestinationField = alPotreroIdx !== -1 ? afterAlPotrero + (destinationFieldMatch?.consumed ?? 0) : afterAlPotrero;
 
-  // Obligatoria: separa audiblemente el numero del potrero destino del
-  // numero de la cantidad -- sin esta palabra en el medio, la voz puede
-  // escuchar los dos numeros pegados como uno solo (ver comentario arriba).
-  if (tokens[cursor] !== "cantidad") {
-    return { status: "incomplete", message: "Despues del potrero de destino falta decir \"cantidad\" antes del numero (ej: \"...al potrero 5, cantidad 5, toros\")." };
-  }
-  cursor += 1;
-
-  const quantity = parseQuantity(tokens, cursor);
-  if (!quantity || quantity.value <= 0) {
-    return { status: "incomplete", message: "No entendi la cantidad de animales. Decila justo despues de la palabra \"cantidad\"." };
-  }
-  cursor += quantity.consumed;
-
-  const categoryTail = tokens.slice(cursor).join(" ");
-  if (!categoryTail) {
-    return { status: "incomplete", message: "Falta decir la categoria de animal (por ejemplo \"vacas de cria\")." };
+  let quantity: number | null = null;
+  let quantityEnd = afterDestinationField;
+  if (cantidadIdx !== -1) {
+    const parsedQuantity = parseQuantity(tokens, cantidadIdx + 1);
+    if (parsedQuantity && parsedQuantity.value > 0) {
+      quantity = parsedQuantity.value;
+      quantityEnd = cantidadIdx + 1 + parsedQuantity.consumed;
+    } else {
+      quantityEnd = cantidadIdx + 1;
+    }
   }
 
-  const categoryMatch = matchCategory(categoryTail, data.categoryCatalog);
-  if (categoryMatch.status === "ambiguous") {
-    return { status: "incomplete", message: `La categoria "${categoryTail}" es ambigua, podria ser: ${categoryMatch.options.join(", ")}. Decila mas completa.` };
-  }
-  if (categoryMatch.status === "not_found") {
-    return { status: "incomplete", message: `No reconoci la categoria de animal "${categoryTail}". Decila tal como esta en el sistema (ej "vacas de cria", "terneros").` };
+  const categoryTail = tokens.slice(quantityEnd).join(" ");
+  const categoryMatch = categoryTail ? matchCategory(categoryTail, data.categoryCatalog) : null;
+
+  const slots: VoiceTransferSlots = {
+    originEstablishment: inferredOriginEstablishment,
+    originField,
+    destinationEstablishment: inferredDestinationEstablishment,
+    destinationField,
+    quantity,
+    species: categoryMatch?.species ?? null,
+    category: categoryMatch?.category ?? null
+  };
+
+  const missing: VoiceTransferMissingSlot[] = [];
+  if (!slots.originEstablishment) missing.push("originEstablishment");
+  if (!slots.originField) missing.push("originField");
+  if (!slots.destinationEstablishment) missing.push("destinationEstablishment");
+  if (!slots.destinationField) missing.push("destinationField");
+  if (!slots.quantity) missing.push("quantity");
+  if (!slots.category) missing.push("category");
+
+  if (missing.length > 0) {
+    return { status: "partial", slots, missing };
   }
 
   return {
     status: "ready",
-    origin: { establishment: originMatch.value, field: originFieldMatch.value },
-    destination: { establishment: destinationMatch.value, field: destinationFieldMatch.value },
-    quantity: quantity.value,
-    species: categoryMatch.species,
-    category: categoryMatch.category
+    origin: { establishment: slots.originEstablishment!, field: slots.originField! },
+    destination: { establishment: slots.destinationEstablishment!, field: slots.destinationField! },
+    quantity: slots.quantity!,
+    species: slots.species!,
+    category: slots.category!
   };
 }

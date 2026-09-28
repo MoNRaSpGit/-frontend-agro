@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatCategoryLabel, formatShortDate, getTodayDate } from "./agro.home.shared";
 import { AgroSpecies, Establishment, FieldUnit } from "./agro.types";
-import { parseVoiceTransferCommand, VoiceTransferReady } from "./agro.voice";
+import { parseVoiceTransferCommand, VoiceTransferReady, VoiceTransferSlots } from "./agro.voice";
 import { categoryCatalog, speciesLabels } from "./agro.demo.data";
 
 // Pestana "Voz" (22/09/2026, pasada a produccion 26/09/2026, pedido
@@ -134,7 +134,14 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [statusMessage, setStatusMessage] = useState<{ tone: "info" | "warning" | "error"; text: string } | null>(null);
-  const [pendingTransfer, setPendingTransfer] = useState<VoiceTransferReady | null>(null);
+  // "draft" reemplaza al viejo "pendingTransfer" (28/09/2026, pedido
+  // explicito: "sin importar si falta algo al principio o al final, que
+  // pueda seguir y completar"). Antes, si algo de la frase no se
+  // reconocia, se descartaba TODO y habia que repetir de cero. Ahora
+  // parseVoiceTransferCommand devuelve lo que SI se entendio (aunque sea
+  // parcial) en `slots`, y el modal completa a mano solo lo que falta --
+  // nunca se pierde lo que ya se dijo bien.
+  const [draft, setDraft] = useState<VoiceTransferSlots | null>(null);
   // La parte que mas se confunde el reconocimiento de voz es un numero
   // dicho solo (pedido explicito: "dije 5 y entendio 95... dije 5 y
   // entendio 35") -- por eso la cantidad se puede corregir a mano antes de
@@ -260,24 +267,70 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
       return;
     }
 
-    if (result.status === "incomplete") {
-      setStatusMessage({ tone: "warning", text: result.message });
+    setStatusMessage(null);
+
+    if (result.status === "ready") {
+      setDraft({
+        originEstablishment: result.origin.establishment,
+        originField: result.origin.field,
+        destinationEstablishment: result.destination.establishment,
+        destinationField: result.destination.field,
+        quantity: result.quantity,
+        species: result.species,
+        category: result.category
+      });
+      setEditedQuantity(String(result.quantity));
       return;
     }
 
-    setStatusMessage(null);
-    setPendingTransfer(result);
-    setEditedQuantity(String(result.quantity));
+    // "partial": se guarda tal cual lo que se entendio -- los campos en
+    // null se completan a mano en el modal (ver mas abajo).
+    setDraft(result.slots);
+    setEditedQuantity(result.slots.quantity ? String(result.slots.quantity) : "");
+  }
+
+  function updateDraft(patch: Partial<VoiceTransferSlots>) {
+    setDraft((current) => (current ? { ...current, ...patch } : current));
   }
 
   const parsedEditedQuantity = Number(editedQuantity.replace(",", "."));
   const isEditedQuantityValid = Number.isFinite(parsedEditedQuantity) && parsedEditedQuantity > 0;
+  const isDraftComplete = Boolean(
+    draft &&
+      draft.originEstablishment &&
+      draft.originField &&
+      draft.destinationEstablishment &&
+      draft.destinationField &&
+      draft.species &&
+      draft.category
+  );
+
+  // Campos disponibles para elegir a mano: si ya se sabe el establecimiento
+  // (por voz o porque se acaba de elegir), se filtra a los potreros de ese
+  // establecimiento -- si todavia no se sabe, se dejan todos (recien se
+  // acotan cuando se elija el establecimiento).
+  const originFieldOptions = draft?.originEstablishment
+    ? fields.filter((field) => field.establishmentId === draft.originEstablishment!.id)
+    : fields;
+  const destinationFieldOptions = draft?.destinationEstablishment
+    ? fields.filter((field) => field.establishmentId === draft.destinationEstablishment!.id)
+    : fields;
+  const categoryOptionsForSpecies = draft?.species ? categoryCatalog[draft.species] : [];
 
   async function handleConfirmTransfer() {
-    if (!pendingTransfer || !isEditedQuantityValid || isSubmitting) return;
+    if (!draft || !isDraftComplete || !isEditedQuantityValid || isSubmitting) return;
+
+    const readyTransfer: VoiceTransferReady = {
+      status: "ready",
+      origin: { establishment: draft.originEstablishment!, field: draft.originField! },
+      destination: { establishment: draft.destinationEstablishment!, field: draft.destinationField! },
+      quantity: parsedEditedQuantity,
+      species: draft.species!,
+      category: draft.category!
+    };
 
     setIsSubmitting(true);
-    const result = await onSubmitTransfer(pendingTransfer, parsedEditedQuantity);
+    const result = await onSubmitTransfer(readyTransfer, parsedEditedQuantity);
     setIsSubmitting(false);
 
     if (!result.ok) {
@@ -285,7 +338,7 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
       // validaciones que el formulario manual: stock, categoria, etc.). El
       // modal de confirmacion se cierra: para reintentar, se vuelve a
       // hablar (asi se puede corregir cantidad/categoria/potrero).
-      setPendingTransfer(null);
+      setDraft(null);
       setBlockedMessage(result.message);
       return;
     }
@@ -293,21 +346,21 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
     const row: ConfirmedTransferRow = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       date: getTodayDate(),
-      origin: pendingTransfer.origin,
-      destination: pendingTransfer.destination,
+      origin: readyTransfer.origin,
+      destination: readyTransfer.destination,
       quantity: parsedEditedQuantity,
-      species: pendingTransfer.species,
-      categoryLabel: formatCategoryLabel(pendingTransfer.category.label)
+      species: readyTransfer.species,
+      categoryLabel: formatCategoryLabel(readyTransfer.category.label)
     };
 
     setConfirmedRows((current) => [row, ...current]);
-    setPendingTransfer(null);
+    setDraft(null);
     setTranscript("");
   }
 
   function handleCancelTransfer() {
     if (isSubmitting) return;
-    setPendingTransfer(null);
+    setDraft(null);
   }
 
   function handleRemoveRow(id: string) {
@@ -421,14 +474,112 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
         </div>
       </article>
 
-      {pendingTransfer ? (
+      {draft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-confirm-title">
             <div className="confirm-modal-copy">
               <strong id="voice-confirm-title">¿Confirmar traslado?</strong>
-              <span>Se va a guardar de verdad, igual que cargarlo a mano desde "Animales".</span>
+              <span>
+                {isDraftComplete
+                  ? "Se va a guardar de verdad, igual que cargarlo a mano desde \"Animales\"."
+                  : "Entendi parte de la frase -- completa lo que falta antes de confirmar."}
+              </span>
             </div>
             <div className="voice-confirm-summary">
+              <label className="voice-confirm-field">
+                <span>Campo origen</span>
+                {draft.originEstablishment ? (
+                  <strong>{draft.originEstablishment.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      const establishment = establishments.find((item) => item.id === event.target.value) ?? null;
+                      updateDraft({ originEstablishment: establishment, originField: null });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-field">
+                <span>Potrero origen</span>
+                {draft.originField ? (
+                  <strong>{draft.originField.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting || !draft.originEstablishment}
+                    onChange={(event) => {
+                      const field = originFieldOptions.find((item) => item.id === event.target.value) ?? null;
+                      updateDraft({ originField: field });
+                    }}
+                  >
+                    <option value="">{draft.originEstablishment ? "Elegir..." : "Elegi el campo primero"}</option>
+                    {originFieldOptions.map((field) => (
+                      <option key={field.id} value={field.id}>
+                        {field.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <p className="voice-confirm-arrow">↓</p>
+
+              <label className="voice-confirm-field">
+                <span>Campo destino</span>
+                {draft.destinationEstablishment ? (
+                  <strong>{draft.destinationEstablishment.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      const establishment = establishments.find((item) => item.id === event.target.value) ?? null;
+                      updateDraft({ destinationEstablishment: establishment, destinationField: null });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-field">
+                <span>Potrero destino</span>
+                {draft.destinationField ? (
+                  <strong>{draft.destinationField.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting || !draft.destinationEstablishment}
+                    onChange={(event) => {
+                      const field = destinationFieldOptions.find((item) => item.id === event.target.value) ?? null;
+                      updateDraft({ destinationField: field });
+                    }}
+                  >
+                    <option value="">{draft.destinationEstablishment ? "Elegir..." : "Elegi el campo primero"}</option>
+                    {destinationFieldOptions.map((field) => (
+                      <option key={field.id} value={field.id}>
+                        {field.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
               <label className="voice-confirm-quantity-field">
                 <span>Cantidad</span>
                 <input
@@ -440,16 +591,48 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
                   disabled={isSubmitting}
                   autoFocus
                 />
-                <span>{speciesLabels[pendingTransfer.species]} · {formatCategoryLabel(pendingTransfer.category.label)}</span>
               </label>
               {!isEditedQuantityValid ? <p className="voice-status voice-status-error">Ingresa una cantidad valida mayor a 0.</p> : null}
-              <p className="voice-confirm-place">
-                {pendingTransfer.origin.establishment.name} — Potrero {pendingTransfer.origin.field.name}
-              </p>
-              <p className="voice-confirm-arrow">↓</p>
-              <p className="voice-confirm-place">
-                {pendingTransfer.destination.establishment.name} — Potrero {pendingTransfer.destination.field.name}
-              </p>
+
+              <label className="voice-confirm-field">
+                <span>Categoria</span>
+                {draft.category ? (
+                  <strong>{speciesLabels[draft.species!]} · {formatCategoryLabel(draft.category.label)}</strong>
+                ) : (
+                  <div className="voice-confirm-category-pickers">
+                    <select
+                      value={draft.species ?? ""}
+                      disabled={isSubmitting}
+                      onChange={(event) => {
+                        const species = (event.target.value || null) as AgroSpecies | null;
+                        updateDraft({ species, category: null });
+                      }}
+                    >
+                      <option value="">Especie...</option>
+                      {(Object.keys(speciesLabels) as AgroSpecies[]).map((species) => (
+                        <option key={species} value={species}>
+                          {speciesLabels[species]}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value=""
+                      disabled={isSubmitting || !draft.species}
+                      onChange={(event) => {
+                        const category = categoryOptionsForSpecies.find((item) => item.code === event.target.value) ?? null;
+                        updateDraft({ category });
+                      }}
+                    >
+                      <option value="">{draft.species ? "Categoria..." : "Elegi la especie primero"}</option>
+                      {categoryOptionsForSpecies.map((category) => (
+                        <option key={category.code} value={category.code}>
+                          {formatCategoryLabel(category.label)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </label>
             </div>
             <div className="action-row">
               <button type="button" className="ghost-button" onClick={handleCancelTransfer} disabled={isSubmitting}>
@@ -458,7 +641,7 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
               <button
                 type="button"
                 className="primary-button"
-                disabled={!isEditedQuantityValid || isSubmitting}
+                disabled={!isDraftComplete || !isEditedQuantityValid || isSubmitting}
                 onClick={handleConfirmTransfer}
               >
                 {isSubmitting ? "Guardando..." : "Confirmar"}

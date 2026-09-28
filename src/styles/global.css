@@ -1688,6 +1688,34 @@ th {
   color: #6b4413;
 }
 
+/* Modal tolerante a frases incompletas (28/09/2026, pedido explicito): lo
+   que la voz entendio se muestra fijo (strong), lo que falta se completa
+   con un select -- mismos estilos que el resto del formulario. */
+.voice-confirm-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.95rem;
+}
+
+.voice-confirm-field select {
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 72, 49, 0.3);
+  background: #fffdf7;
+  color: #182316;
+}
+
+.voice-confirm-category-pickers {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.voice-confirm-category-pickers select {
+  flex: 1;
+  min-width: 140px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .voice-mic-button.is-listening {
     animation: none;
