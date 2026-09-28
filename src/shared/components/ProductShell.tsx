@@ -83,7 +83,7 @@ export function ProductShell({
             {logoSrc ? <img src={logoSrc} alt="" className="product-shell-logo" /> : null}
             <div className="product-shell-title-group">
               <strong>{title}</strong>
-              {subtitle ? <small>{subtitle}</small> : null}
+              <small>{subtitle}</small>
             </div>
           </button>
         </div>
