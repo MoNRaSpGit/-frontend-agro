@@ -98,12 +98,18 @@ button {
     linear-gradient(160deg, #d8cfbe 0%, #c4baa5 48%, #b9ceb0 100%);
 }
 
+.access-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .access-logo {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   border-radius: 12px;
   object-fit: cover;
-  margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .access-card {
@@ -498,6 +504,11 @@ button {
 
 .eyebrow {
   display: inline-flex;
+  /* Dentro de un contenedor grid (como .access-card, el login) los items
+     se estiran a todo el ancho por defecto -- sin esto, la etiqueta
+     chiquita "Agro" quedaba como una barra larga que ocupaba todo. */
+  justify-self: start;
+  width: fit-content;
   padding: 5px 10px;
   border-radius: 999px;
   background: rgba(53, 87, 41, 0.22);
