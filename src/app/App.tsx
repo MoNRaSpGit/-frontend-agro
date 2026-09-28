@@ -144,7 +144,6 @@ export function App() {
             <span className="eyebrow">Agro</span>
           </div>
           <h1>Ingreso cliente</h1>
-          <p>Rosendo mantiene el mismo usuario y sus mismos datos. Ahora puede entrar con su propia contrasena.</p>
 
           <form className="access-login-form" onSubmit={(event) => void handleDirectLogin(event)}>
             <label className="access-field">
