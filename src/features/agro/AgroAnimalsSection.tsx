@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { animalMovementFormKinds, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
+import { animalMovementFormKinds, BIRTH_CATEGORY_CODE, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
 import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate, parseDecimalInput } from "./agro.home.shared";
 import {
   AgroSpecies,
@@ -1273,6 +1273,9 @@ export function AgroAnimalsSection({
                 clearAnimalFieldError("species");
                 const nextSpecies = event.target.value as AgroSpecies;
                 setAnimalForm((current) => {
+                  if (current.kind === "birth") {
+                    return { ...current, species: nextSpecies, categoryCode: BIRTH_CATEGORY_CODE[nextSpecies] };
+                  }
                   if (!isTransferMovement) {
                     return { ...current, species: nextSpecies, categoryCode: categoryCatalog[nextSpecies][0]?.code ?? "" };
                   }
@@ -1313,6 +1316,10 @@ export function AgroAnimalsSection({
                       label: category ? `${category.label} (${formatNumber(entry.quantity, 0)} disponibles)` : entry.categoryCode
                     };
                   })
+                : animalForm.kind === "birth"
+                ? categoryCatalog[animalForm.species]
+                    .filter((category) => category.code === BIRTH_CATEGORY_CODE[animalForm.species])
+                    .map((category) => ({ code: category.code, label: category.label }))
                 : categoryCatalog[animalForm.species].map((category) => ({
                     code: category.code,
                     label: isCorrectionAnimalMovement

@@ -16,6 +16,19 @@ export const speciesLabels = {
   equinos: "Equinos"
 } as const;
 
+// Categoria unica permitida al cargar un "Nacimiento" (28/09/2026, pedido
+// explicito del cliente): no cambia el catalogo en ningun otro lado -- solo
+// restringe el combo de categoria cuando el motivo es Nacimiento, para no
+// poder cargar por error un nacimiento como "Toros" o "Vacas de cria".
+// Elegidas junto al cliente: Terneros/as (vacunos), Corderos/as mamones
+// (ovinos, la mas joven del catalogo), Potrillos/potrancas al pie de la
+// madre (equinos, el recien nacido que todavia mama).
+export const BIRTH_CATEGORY_CODE: Record<"vacunos" | "ovinos" | "equinos", string> = {
+  vacunos: "9",
+  ovinos: "8",
+  equinos: "5"
+};
+
 export const movementKindLabels = {
   purchase: "Compra",
   sale: "Venta",

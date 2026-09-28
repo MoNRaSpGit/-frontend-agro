@@ -57,6 +57,7 @@ import {
 import { agroWorkspaceSections } from "./agro.workspace.config";
 import { AGRO_WORKSPACE_SAVE_ERROR_TOAST_ID, describeAgroWorkspaceError, friendlyAgroToastMessage } from "./agro.workspaceErrors";
 import {
+  BIRTH_CATEGORY_CODE,
   categoryCatalog,
   establishments as initialEstablishments,
   fields as initialFields,
@@ -428,6 +429,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           transferDestinationFieldId: "",
           freightAmount: "",
           collectedAmount: current.collectedAmount || "0"
+        };
+      }
+
+      if (kind === "birth") {
+        return {
+          ...current,
+          kind,
+          categoryCode: BIRTH_CATEGORY_CODE[current.species],
+          earTag: "",
+          transferDestinationEstablishmentId: "",
+          transferDestinationFieldId: ""
         };
       }
 
