@@ -181,7 +181,7 @@ export function App() {
           <div className="access-secondary-actions">
             <button
               type="button"
-              className="access-text-button"
+              className="access-demo-button"
               disabled={loginPending || passwordPending}
               onClick={() => {
                 setPasswordPanelOpen((current) => !current);
@@ -189,7 +189,7 @@ export function App() {
                 setPasswordSuccess(null);
               }}
             >
-              {passwordPanelOpen ? "Cancelar cambio de contrasena" : "Definir nueva contrasena para Rosendo"}
+              {passwordPanelOpen ? "Cancelar cambio de contrasena" : "Definir nueva contrasena"}
             </button>
           </div>
 
