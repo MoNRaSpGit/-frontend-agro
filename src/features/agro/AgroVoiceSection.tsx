@@ -12,6 +12,8 @@ import { AccountingEntry, AgroSpecies, Establishment, FieldUnit, MoneyCurrency, 
 import {
   parseVoiceBirthCommand,
   parseVoiceDeathCommand,
+  parseVoicePurchaseCommand,
+  parseVoiceRainfallCommand,
   parseVoiceSanityCommand,
   parseVoiceSummaryCommand,
   parseVoiceTransferCommand,
@@ -19,6 +21,10 @@ import {
   VoiceBirthSlots,
   VoiceDeathReady,
   VoiceDeathSlots,
+  VoicePurchaseReady,
+  VoicePurchaseSlots,
+  VoiceRainfallReady,
+  VoiceRainfallSlots,
   VoiceSanityReady,
   VoiceSanitySlots,
   VoiceSummarySlots,
@@ -51,6 +57,8 @@ type AgroVoiceSectionProps = {
   // modal de confirmacion -- solo hace falta de verdad si la especie
   // termina siendo vacunos, pero siempre se manda tal cual esta.
   onSubmitDeath: (death: VoiceDeathReady, earTag: string) => Promise<{ ok: true } | { ok: false; message: string }>;
+  onSubmitRainfall: (rainfall: VoiceRainfallReady) => Promise<{ ok: true } | { ok: false; message: string }>;
+  onSubmitPurchase: (purchase: VoicePurchaseReady) => Promise<{ ok: true } | { ok: false; message: string }>;
   // Para el comando de voz "resumen" (29/09/2026, pedido explicito): stock
   // actual (misma cuenta que ya usa AgroHomePage, ver stockBalanceMap),
   // mas sanidad/contabilidad del mes actual en ese potrero.
@@ -74,18 +82,27 @@ type SummaryMoneyTotals = {
 };
 
 // Fila de la lista "Movimientos por voz de esta sesion" -- soporta
-// traslado (con destino), nacimiento y sanidad (sin destino, ver
-// "destination"; "treatment" solo tiene valor en sanidad).
+// traslado (con destino), nacimiento, sanidad, muerte y compra (sin
+// destino, ver "destination"; "treatment" solo tiene valor en sanidad).
+// "Lluvia" no entra aca -- no tiene potrero/categoria, tiene su propia
+// lista chica (ver ConfirmedRainfallRow).
 type ConfirmedVoiceRow = {
   id: string;
   date: string;
-  kind: "transfer" | "birth" | "sanity" | "death";
+  kind: "transfer" | "birth" | "sanity" | "death" | "purchase";
   origin: { establishment: Establishment; field: FieldUnit };
   destination: { establishment: Establishment; field: FieldUnit } | null;
   quantity: number;
   species: AgroSpecies;
   categoryLabel: string;
   treatment: string | null;
+};
+
+type ConfirmedRainfallRow = {
+  id: string;
+  date: string;
+  establishment: Establishment;
+  millimeters: number;
 };
 
 // Tipado minimo de la Web Speech API (todavia no forma parte de las libs
@@ -273,13 +290,55 @@ function buildDeathExampleParts(establishments: Establishment[], fields: FieldUn
   ];
 }
 
-type VoiceExampleKind = "traslado" | "nacimiento" | "sanidad" | "muerte" | "resumen";
+// Mismo criterio, para "lluvia" (29/09/2026): no pide potrero.
+function buildRainfallExampleParts(establishments: Establishment[]): ExamplePart[] | null {
+  const establishment = establishments[0];
+  if (!establishment) return null;
+
+  return [
+    { text: "Lluvia", keyword: true },
+    { text: " ", keyword: false },
+    { text: "del campo", keyword: true },
+    { text: ` ${establishment.name} `, keyword: false },
+    { text: "cantidad", keyword: true },
+    { text: " 23 milimetros.", keyword: false }
+  ];
+}
+
+// Mismo criterio, para "compra" (29/09/2026): sin destino, con precio al
+// final.
+function buildPurchaseExampleParts(establishments: Establishment[], fields: FieldUnit[]): ExamplePart[] | null {
+  const establishment = establishments.find((item) => fields.some((field) => field.establishmentId === item.id));
+  if (!establishment) return null;
+  const field = fields.find((item) => item.establishmentId === establishment.id);
+  if (!field) return null;
+
+  const category = categoryCatalog.vacunos[0];
+  const categoryLabel = category ? formatCategoryLabel(category.label) : "vacas de cria";
+
+  return [
+    { text: "Compra", keyword: true },
+    { text: " ", keyword: false },
+    { text: "del campo", keyword: true },
+    { text: ` ${establishment.name} `, keyword: false },
+    { text: "potrero", keyword: true },
+    { text: ` ${field.name}, `, keyword: false },
+    { text: "cantidad", keyword: true },
+    { text: ` 4, ${categoryLabel}, `, keyword: false },
+    { text: "precio", keyword: true },
+    { text: " 500.", keyword: false }
+  ];
+}
+
+type VoiceExampleKind = "traslado" | "nacimiento" | "sanidad" | "muerte" | "lluvia" | "compra" | "resumen";
 
 const VOICE_EXAMPLE_LABELS: Record<VoiceExampleKind, string> = {
   traslado: "Traslado",
   nacimiento: "Nacimiento",
   sanidad: "Sanidad",
   muerte: "Muerte",
+  lluvia: "Lluvia",
+  compra: "Compra",
   resumen: "Resumen"
 };
 
@@ -290,6 +349,8 @@ export function AgroVoiceSection({
   onSubmitBirth,
   onSubmitSanity,
   onSubmitDeath,
+  onSubmitRainfall,
+  onSubmitPurchase,
   stockBalanceMap,
   sanitaryRecords,
   accountingEntries
@@ -341,6 +402,17 @@ export function AgroVoiceSection({
   const [deathDraft, setDeathDraft] = useState<VoiceDeathSlots | null>(null);
   const [editedDeathQuantity, setEditedDeathQuantity] = useState("");
   const [editedDeathEarTag, setEditedDeathEarTag] = useState("");
+  // Comando "lluvia" (29/09/2026, pedido explicito) -- solo pide campo, no
+  // potrero. Lista propia porque su forma de fila no tiene nada que ver
+  // con los movimientos de animales (ver ConfirmedRainfallRow).
+  const [rainfallDraft, setRainfallDraft] = useState<VoiceRainfallSlots | null>(null);
+  const [editedRainfallMillimeters, setEditedRainfallMillimeters] = useState("");
+  const [confirmedRainfallRows, setConfirmedRainfallRows] = useState<ConfirmedRainfallRow[]>([]);
+  // Comando "compra" (29/09/2026, pedido explicito) -- version
+  // simplificada: precio por cabeza, sin flete/comision/impuestos por voz.
+  const [purchaseDraft, setPurchaseDraft] = useState<VoicePurchaseSlots | null>(null);
+  const [editedPurchaseQuantity, setEditedPurchaseQuantity] = useState("");
+  const [editedPurchaseUnitPrice, setEditedPurchaseUnitPrice] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const maxListeningTimeoutRef = useRef<number | null>(null);
@@ -356,6 +428,8 @@ export function AgroVoiceSection({
   const birthExampleParts = useMemo(() => buildBirthExampleParts(establishments, fields), [establishments, fields]);
   const sanityExampleParts = useMemo(() => buildSanityExampleParts(establishments, fields), [establishments, fields]);
   const deathExampleParts = useMemo(() => buildDeathExampleParts(establishments, fields), [establishments, fields]);
+  const rainfallExampleParts = useMemo(() => buildRainfallExampleParts(establishments), [establishments]);
+  const purchaseExampleParts = useMemo(() => buildPurchaseExampleParts(establishments, fields), [establishments, fields]);
   const summaryExampleParts = useMemo(() => buildSummaryExampleParts(establishments, fields), [establishments, fields]);
   const exampleParts =
     selectedExampleKind === "traslado"
@@ -366,7 +440,11 @@ export function AgroVoiceSection({
           ? sanityExampleParts
           : selectedExampleKind === "muerte"
             ? deathExampleParts
-            : summaryExampleParts;
+            : selectedExampleKind === "lluvia"
+              ? rainfallExampleParts
+              : selectedExampleKind === "compra"
+                ? purchaseExampleParts
+                : summaryExampleParts;
 
   useEffect(() => {
     setIsSupported(getSpeechRecognitionConstructor() !== null);
@@ -582,6 +660,47 @@ export function AgroVoiceSection({
       return;
     }
 
+    const rainfallResult = parseVoiceRainfallCommand(heard, { establishments });
+    if (rainfallResult.status !== "no_intent") {
+      setStatusMessage(null);
+      setActiveSummary(null);
+
+      if (rainfallResult.status === "ready") {
+        setRainfallDraft({ establishment: rainfallResult.establishment, millimeters: rainfallResult.millimeters });
+        setEditedRainfallMillimeters(String(rainfallResult.millimeters));
+        return;
+      }
+
+      setRainfallDraft(rainfallResult.slots);
+      setEditedRainfallMillimeters(rainfallResult.slots.millimeters !== null ? String(rainfallResult.slots.millimeters) : "");
+      return;
+    }
+
+    const purchaseResult = parseVoicePurchaseCommand(heard, { establishments, fields, categoryCatalog });
+    if (purchaseResult.status !== "no_intent") {
+      setStatusMessage(null);
+      setActiveSummary(null);
+
+      if (purchaseResult.status === "ready") {
+        setPurchaseDraft({
+          establishment: purchaseResult.establishment,
+          field: purchaseResult.field,
+          quantity: purchaseResult.quantity,
+          species: purchaseResult.species,
+          category: purchaseResult.category,
+          unitPrice: purchaseResult.unitPrice
+        });
+        setEditedPurchaseQuantity(String(purchaseResult.quantity));
+        setEditedPurchaseUnitPrice(String(purchaseResult.unitPrice));
+        return;
+      }
+
+      setPurchaseDraft(purchaseResult.slots);
+      setEditedPurchaseQuantity(purchaseResult.slots.quantity ? String(purchaseResult.slots.quantity) : "");
+      setEditedPurchaseUnitPrice(purchaseResult.slots.unitPrice ? String(purchaseResult.slots.unitPrice) : "");
+      return;
+    }
+
     const summaryResult = parseVoiceSummaryCommand(heard, { establishments, fields });
     if (summaryResult.status !== "no_intent") {
       setStatusMessage(null);
@@ -599,7 +718,7 @@ export function AgroVoiceSection({
 
     setStatusMessage({
       tone: "info",
-      text: "No empezo con \"traslado\", \"nacimiento\", \"sanidad\", \"muerte\" ni \"resumen\", asi que no se interpreto nada."
+      text: "No empezo con \"traslado\", \"nacimiento\", \"sanidad\", \"muerte\", \"lluvia\", \"compra\" ni \"resumen\", asi que no se interpreto nada."
     });
   }
 
@@ -796,6 +915,116 @@ export function AgroVoiceSection({
   function handleCancelDeath() {
     if (isSubmitting) return;
     setDeathDraft(null);
+  }
+
+  function updateRainfallDraft(patch: Partial<VoiceRainfallSlots>) {
+    setRainfallDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  const parsedEditedRainfallMillimeters = Number(editedRainfallMillimeters.replace(",", "."));
+  const isEditedRainfallMillimetersValid = Number.isFinite(parsedEditedRainfallMillimeters) && parsedEditedRainfallMillimeters >= 0;
+  const isRainfallDraftComplete = Boolean(rainfallDraft?.establishment);
+
+  async function handleConfirmRainfall() {
+    if (!rainfallDraft || !isRainfallDraftComplete || !isEditedRainfallMillimetersValid || isSubmitting) return;
+
+    const readyRainfall: VoiceRainfallReady = {
+      status: "ready",
+      establishment: rainfallDraft.establishment!,
+      millimeters: parsedEditedRainfallMillimeters
+    };
+
+    setIsSubmitting(true);
+    const result = await onSubmitRainfall(readyRainfall);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setRainfallDraft(null);
+      setBlockedMessage(result.message);
+      return;
+    }
+
+    const row: ConfirmedRainfallRow = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date: getTodayDate(),
+      establishment: readyRainfall.establishment,
+      millimeters: parsedEditedRainfallMillimeters
+    };
+
+    setConfirmedRainfallRows((current) => [row, ...current]);
+    setRainfallDraft(null);
+    setTranscript("");
+  }
+
+  function handleCancelRainfall() {
+    if (isSubmitting) return;
+    setRainfallDraft(null);
+  }
+
+  function updatePurchaseDraft(patch: Partial<VoicePurchaseSlots>) {
+    setPurchaseDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  const parsedEditedPurchaseQuantity = Number(editedPurchaseQuantity.replace(",", "."));
+  const isEditedPurchaseQuantityValid = Number.isFinite(parsedEditedPurchaseQuantity) && parsedEditedPurchaseQuantity > 0;
+  const parsedEditedPurchaseUnitPrice = Number(editedPurchaseUnitPrice.replace(",", "."));
+  const isEditedPurchaseUnitPriceValid = Number.isFinite(parsedEditedPurchaseUnitPrice) && parsedEditedPurchaseUnitPrice >= 0;
+  const isPurchaseDraftComplete = Boolean(purchaseDraft?.establishment && purchaseDraft?.field && purchaseDraft?.category);
+  const purchaseDraftFieldOptions = purchaseDraft?.establishment
+    ? fields.filter((field) => field.establishmentId === purchaseDraft.establishment!.id)
+    : fields;
+  const purchaseCategoryOptionsForSpecies = purchaseDraft?.species ? categoryCatalog[purchaseDraft.species] : [];
+
+  async function handleConfirmPurchase() {
+    if (
+      !purchaseDraft ||
+      !isPurchaseDraftComplete ||
+      !isEditedPurchaseQuantityValid ||
+      !isEditedPurchaseUnitPriceValid ||
+      isSubmitting
+    )
+      return;
+
+    const readyPurchase: VoicePurchaseReady = {
+      status: "ready",
+      establishment: purchaseDraft.establishment!,
+      field: purchaseDraft.field!,
+      quantity: parsedEditedPurchaseQuantity,
+      species: purchaseDraft.species!,
+      category: purchaseDraft.category!,
+      unitPrice: parsedEditedPurchaseUnitPrice
+    };
+
+    setIsSubmitting(true);
+    const result = await onSubmitPurchase(readyPurchase);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setPurchaseDraft(null);
+      setBlockedMessage(result.message);
+      return;
+    }
+
+    const row: ConfirmedVoiceRow = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date: getTodayDate(),
+      kind: "purchase",
+      origin: { establishment: readyPurchase.establishment, field: readyPurchase.field },
+      destination: null,
+      quantity: parsedEditedPurchaseQuantity,
+      species: readyPurchase.species,
+      categoryLabel: formatCategoryLabel(readyPurchase.category.label),
+      treatment: null
+    };
+
+    setConfirmedRows((current) => [row, ...current]);
+    setPurchaseDraft(null);
+    setTranscript("");
+  }
+
+  function handleCancelPurchase() {
+    if (isSubmitting) return;
+    setPurchaseDraft(null);
   }
 
   // Datos del resumen (29/09/2026): animales = stock actual (sin filtro de
@@ -1038,7 +1267,9 @@ export function AgroVoiceSection({
                           ? "Nacimiento (voz)"
                           : row.kind === "sanity"
                             ? "Sanidad (voz)"
-                            : "Muerte (voz)"}
+                            : row.kind === "death"
+                              ? "Muerte (voz)"
+                              : "Compra (voz)"}
                     </td>
                     <td>
                       {row.origin.establishment.name} / {row.origin.field.name}
@@ -1062,6 +1293,60 @@ export function AgroVoiceSection({
                 <tr>
                   <td className="cell-empty" colSpan={8}>
                     Todavia no hiciste ningun movimiento por voz.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Lluvia por voz de esta sesion</h2>
+            <p>Ya quedo guardada de verdad (se ve tambien en "Lluvia"). Esta lista es solo un repaso rapido.</p>
+          </div>
+          {confirmedRainfallRows.length ? (
+            <div className="table-actions">
+              <button type="button" className="ghost-button" onClick={() => setConfirmedRainfallRows([])}>
+                Vaciar
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="table-wrap">
+          <table className="animal-ledger-table">
+            <thead>
+              <tr>
+                <th className="cell-date">Fecha</th>
+                <th className="cell-field">Campo</th>
+                <th className="cell-number">Milimetros</th>
+                <th className="cell-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {confirmedRainfallRows.length ? (
+                confirmedRainfallRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatShortDate(row.date)}</td>
+                    <td>{row.establishment.name}</td>
+                    <td className="cell-number">{row.millimeters}</td>
+                    <td className="cell-actions">
+                      <button
+                        type="button"
+                        className="ghost-button danger"
+                        onClick={() => setConfirmedRainfallRows((current) => current.filter((item) => item.id !== row.id))}
+                      >
+                        Quitar de esta lista
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="cell-empty" colSpan={4}>
+                    Todavia no cargaste ninguna lluvia por voz.
                   </td>
                 </tr>
               )}
@@ -1642,6 +1927,218 @@ export function AgroVoiceSection({
                 className="primary-button"
                 disabled={!isDeathDraftComplete || !isEditedDeathQuantityValid || isSubmitting}
                 onClick={() => void handleConfirmDeath()}
+              >
+                {isSubmitting ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {rainfallDraft ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-rainfall-confirm-title">
+            <div className="confirm-modal-copy">
+              <strong id="voice-rainfall-confirm-title">¿Confirmar lluvia?</strong>
+              <span>
+                {isRainfallDraftComplete
+                  ? "Se va a guardar de verdad, igual que cargarlo a mano desde \"Lluvia\"."
+                  : "Entendi parte de la frase -- completa lo que falta antes de confirmar."}
+              </span>
+            </div>
+            <div className="voice-confirm-summary">
+              <label className="voice-confirm-field">
+                <span>Campo</span>
+                {rainfallDraft.establishment ? (
+                  <strong>{rainfallDraft.establishment.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      const establishment = establishments.find((item) => item.id === event.target.value) ?? null;
+                      updateRainfallDraft({ establishment });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-quantity-field">
+                <span>Milimetros</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={editedRainfallMillimeters}
+                  onChange={(event) => setEditedRainfallMillimeters(event.target.value)}
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+              </label>
+              {!isEditedRainfallMillimetersValid ? (
+                <p className="voice-status voice-status-error">Ingresa un numero de milimetros valido (0 o mas).</p>
+              ) : null}
+            </div>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={handleCancelRainfall} disabled={isSubmitting}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!isRainfallDraftComplete || !isEditedRainfallMillimetersValid || isSubmitting}
+                onClick={() => void handleConfirmRainfall()}
+              >
+                {isSubmitting ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {purchaseDraft ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-purchase-confirm-title">
+            <div className="confirm-modal-copy">
+              <strong id="voice-purchase-confirm-title">¿Confirmar compra?</strong>
+              <span>
+                {isPurchaseDraftComplete
+                  ? "Se va a guardar de verdad, igual que cargarlo a mano desde \"Animales\". Flete, comision e IVA quedan en 0 -- editalos ahi si hace falta."
+                  : "Entendi parte de la frase -- completa lo que falta antes de confirmar."}
+              </span>
+            </div>
+            <div className="voice-confirm-summary">
+              <label className="voice-confirm-field">
+                <span>Campo</span>
+                {purchaseDraft.establishment ? (
+                  <strong>{purchaseDraft.establishment.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      const establishment = establishments.find((item) => item.id === event.target.value) ?? null;
+                      updatePurchaseDraft({ establishment, field: null });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-field">
+                <span>Potrero</span>
+                {purchaseDraft.field ? (
+                  <strong>{purchaseDraft.field.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting || !purchaseDraft.establishment}
+                    onChange={(event) => {
+                      const field = purchaseDraftFieldOptions.find((item) => item.id === event.target.value) ?? null;
+                      updatePurchaseDraft({ field });
+                    }}
+                  >
+                    <option value="">{purchaseDraft.establishment ? "Elegir..." : "Elegi el campo primero"}</option>
+                    {purchaseDraftFieldOptions.map((field) => (
+                      <option key={field.id} value={field.id}>
+                        {field.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-quantity-field">
+                <span>Cantidad</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={editedPurchaseQuantity}
+                  onChange={(event) => setEditedPurchaseQuantity(event.target.value)}
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+              </label>
+              {!isEditedPurchaseQuantityValid ? <p className="voice-status voice-status-error">Ingresa una cantidad valida mayor a 0.</p> : null}
+
+              <label className="voice-confirm-field">
+                <span>Categoria</span>
+                {purchaseDraft.category ? (
+                  <strong>{speciesLabels[purchaseDraft.species!]} · {formatCategoryLabel(purchaseDraft.category.label)}</strong>
+                ) : (
+                  <div className="voice-confirm-category-pickers">
+                    <select
+                      value={purchaseDraft.species ?? ""}
+                      disabled={isSubmitting}
+                      onChange={(event) => {
+                        const species = (event.target.value || null) as AgroSpecies | null;
+                        updatePurchaseDraft({ species, category: null });
+                      }}
+                    >
+                      <option value="">Especie...</option>
+                      {(Object.keys(speciesLabels) as AgroSpecies[]).map((species) => (
+                        <option key={species} value={species}>
+                          {speciesLabels[species]}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value=""
+                      disabled={isSubmitting || !purchaseDraft.species}
+                      onChange={(event) => {
+                        const category = purchaseCategoryOptionsForSpecies.find((item) => item.code === event.target.value) ?? null;
+                        updatePurchaseDraft({ category });
+                      }}
+                    >
+                      <option value="">{purchaseDraft.species ? "Categoria..." : "Elegi la especie primero"}</option>
+                      {purchaseCategoryOptionsForSpecies.map((category) => (
+                        <option key={category.code} value={category.code}>
+                          {formatCategoryLabel(category.label)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </label>
+
+              <label className="voice-confirm-quantity-field">
+                <span>Precio por cabeza (U$S)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={editedPurchaseUnitPrice}
+                  onChange={(event) => setEditedPurchaseUnitPrice(event.target.value)}
+                  disabled={isSubmitting}
+                />
+              </label>
+              {!isEditedPurchaseUnitPriceValid ? <p className="voice-status voice-status-error">Ingresa un precio valido (0 o mas).</p> : null}
+            </div>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={handleCancelPurchase} disabled={isSubmitting}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={
+                  !isPurchaseDraftComplete || !isEditedPurchaseQuantityValid || !isEditedPurchaseUnitPriceValid || isSubmitting
+                }
+                onClick={() => void handleConfirmPurchase()}
               >
                 {isSubmitting ? "Guardando..." : "Confirmar"}
               </button>

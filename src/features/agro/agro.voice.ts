@@ -967,3 +967,190 @@ export function parseVoiceDeathCommand(transcript: string, data: VoiceTransferDa
     category: slots.category!
   };
 }
+
+// ---------- Comando "lluvia" (29/09/2026, pedido explicito) ----------
+//
+// Frase esperada: "lluvia [del] [campo] [establecimiento] cantidad
+// [numero] milimetros" -- a diferencia de los demas, NO pide potrero: la
+// lluvia se registra por establecimiento entero (el campo cae parejo
+// sobre todo el campo), igual que el formulario manual.
+export type VoiceRainfallSlots = {
+  establishment: Establishment | null;
+  millimeters: number | null;
+};
+
+export type VoiceRainfallMissingSlot = "establishment" | "millimeters";
+
+export type VoiceRainfallPartial = {
+  status: "partial";
+  slots: VoiceRainfallSlots;
+  missing: VoiceRainfallMissingSlot[];
+};
+
+export type VoiceRainfallReady = {
+  status: "ready";
+  establishment: Establishment;
+  millimeters: number;
+};
+
+export type VoiceRainfallParseResult = { status: "no_intent" } | VoiceRainfallPartial | VoiceRainfallReady;
+
+export function parseVoiceRainfallCommand(
+  transcript: string,
+  data: { establishments: Establishment[] }
+): VoiceRainfallParseResult {
+  const tokens = normalize(transcript).split(" ").filter(Boolean);
+
+  if (tokens[0] !== "lluvia") {
+    return { status: "no_intent" };
+  }
+
+  const cantidadIdx = indexOfToken(tokens, "cantidad", 1);
+  const establishmentEnd = cantidadIdx !== -1 ? cantidadIdx : tokens.length;
+  const establishmentTokens = stripLeadingFillers(tokens.slice(1, establishmentEnd), ESTABLISHMENT_FILLERS);
+
+  const establishmentCandidates = buildEstablishmentCandidates(data.establishments);
+  const establishment = matchEntityAtStart(establishmentTokens, establishmentCandidates)?.value ?? null;
+
+  let millimeters: number | null = null;
+  if (cantidadIdx !== -1) {
+    const parsedQuantity = parseQuantity(tokens, cantidadIdx + 1);
+    if (parsedQuantity && parsedQuantity.value >= 0) {
+      millimeters = parsedQuantity.value;
+    }
+  }
+
+  const slots: VoiceRainfallSlots = { establishment, millimeters };
+  const missing: VoiceRainfallMissingSlot[] = [];
+  if (!slots.establishment) missing.push("establishment");
+  if (slots.millimeters === null) missing.push("millimeters");
+
+  if (missing.length > 0) {
+    return { status: "partial", slots, missing };
+  }
+
+  return { status: "ready", establishment: slots.establishment!, millimeters: slots.millimeters! };
+}
+
+// ---------- Comando "compra" (29/09/2026, pedido explicito) ----------
+//
+// Frase esperada: "compra [del] [campo] [establecimiento] potrero
+// [potrero] cantidad [numero] [categoria] precio [numero]" -- version
+// simplificada de la compra: precio por cabeza (modo "unidad", sin pedir
+// peso), sin flete/comision/impuestos por voz (quedan en 0, editables a
+// mano en el modal si hace falta).
+export type VoicePurchaseSlots = {
+  establishment: Establishment | null;
+  field: FieldUnit | null;
+  quantity: number | null;
+  species: AgroSpecies | null;
+  category: CategoryDefinition | null;
+  unitPrice: number | null;
+};
+
+export type VoicePurchaseMissingSlot = "establishment" | "field" | "quantity" | "category" | "unitPrice";
+
+export type VoicePurchasePartial = {
+  status: "partial";
+  slots: VoicePurchaseSlots;
+  missing: VoicePurchaseMissingSlot[];
+};
+
+export type VoicePurchaseReady = {
+  status: "ready";
+  establishment: Establishment;
+  field: FieldUnit;
+  quantity: number;
+  species: AgroSpecies;
+  category: CategoryDefinition;
+  unitPrice: number;
+};
+
+export type VoicePurchaseParseResult = { status: "no_intent" } | VoicePurchasePartial | VoicePurchaseReady;
+
+export function parseVoicePurchaseCommand(transcript: string, data: VoiceTransferData): VoicePurchaseParseResult {
+  const tokens = normalize(transcript).split(" ").filter(Boolean);
+
+  if (tokens[0] !== "compra") {
+    return { status: "no_intent" };
+  }
+
+  const potreroIdx = indexOfToken(tokens, "potrero", 1);
+  const afterPotrero = potreroIdx !== -1 ? potreroIdx + 1 : 1;
+  const cantidadIdx = indexOfToken(tokens, "cantidad", afterPotrero);
+  const afterCantidadAnchor = cantidadIdx !== -1 ? cantidadIdx + 1 : afterPotrero;
+  const precioIdx = indexOfToken(tokens, "precio", afterCantidadAnchor);
+
+  const establishmentEnd = [potreroIdx, cantidadIdx, precioIdx, tokens.length].find((value) => value >= 1) ?? tokens.length;
+  const establishmentTokens = stripLeadingFillers(tokens.slice(1, establishmentEnd), ESTABLISHMENT_FILLERS);
+
+  const fieldEnd = potreroIdx !== -1 ? [cantidadIdx, precioIdx, tokens.length].find((value) => value >= afterPotrero) ?? tokens.length : afterPotrero;
+  const fieldTokens = potreroIdx !== -1 ? stripLeadingFillers(tokens.slice(afterPotrero, fieldEnd), FIELD_FILLERS) : [];
+
+  const establishmentCandidates = buildEstablishmentCandidates(data.establishments);
+  const establishment = matchEntityAtStart(establishmentTokens, establishmentCandidates)?.value ?? null;
+
+  const fieldCandidates = buildFieldCandidates(
+    establishment ? data.fields.filter((field) => field.establishmentId === establishment.id) : data.fields
+  );
+  const fieldMatch = matchEntityAtStart(fieldTokens, fieldCandidates);
+  const field = fieldMatch?.value ?? null;
+  const inferredEstablishment =
+    establishment ?? (field ? data.establishments.find((item) => item.id === field.establishmentId) ?? null : null);
+
+  const afterField = potreroIdx !== -1 ? afterPotrero + (fieldMatch?.consumed ?? 0) : afterPotrero;
+
+  let quantity: number | null = null;
+  let quantityEnd = afterField;
+  if (cantidadIdx !== -1) {
+    const parsedQuantity = parseQuantity(tokens, cantidadIdx + 1);
+    if (parsedQuantity && parsedQuantity.value > 0) {
+      quantity = parsedQuantity.value;
+      quantityEnd = cantidadIdx + 1 + parsedQuantity.consumed;
+    } else {
+      quantityEnd = cantidadIdx + 1;
+    }
+  }
+
+  const categoryTailEnd = precioIdx !== -1 ? precioIdx : tokens.length;
+  const categoryTail = tokens.slice(quantityEnd, categoryTailEnd).join(" ");
+  const categoryMatch = categoryTail ? matchCategory(categoryTail, data.categoryCatalog) : null;
+
+  let unitPrice: number | null = null;
+  if (precioIdx !== -1) {
+    const parsedPrice = parseQuantity(tokens, precioIdx + 1);
+    if (parsedPrice && parsedPrice.value > 0) {
+      unitPrice = parsedPrice.value;
+    }
+  }
+
+  const slots: VoicePurchaseSlots = {
+    establishment: inferredEstablishment,
+    field,
+    quantity,
+    species: categoryMatch?.species ?? null,
+    category: categoryMatch?.category ?? null,
+    unitPrice
+  };
+
+  const missing: VoicePurchaseMissingSlot[] = [];
+  if (!slots.establishment) missing.push("establishment");
+  if (!slots.field) missing.push("field");
+  if (!slots.quantity) missing.push("quantity");
+  if (!slots.category) missing.push("category");
+  if (!slots.unitPrice) missing.push("unitPrice");
+
+  if (missing.length > 0) {
+    return { status: "partial", slots, missing };
+  }
+
+  return {
+    status: "ready",
+    establishment: slots.establishment!,
+    field: slots.field!,
+    quantity: slots.quantity!,
+    species: slots.species!,
+    category: slots.category!,
+    unitPrice: slots.unitPrice!
+  };
+}

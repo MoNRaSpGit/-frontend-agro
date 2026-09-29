@@ -11,7 +11,14 @@ import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
 import { AgroVoiceSection } from "./AgroVoiceSection";
-import type { VoiceBirthReady, VoiceDeathReady, VoiceSanityReady, VoiceTransferReady } from "./agro.voice";
+import type {
+  VoiceBirthReady,
+  VoiceDeathReady,
+  VoicePurchaseReady,
+  VoiceRainfallReady,
+  VoiceSanityReady,
+  VoiceTransferReady
+} from "./agro.voice";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { AgroApiError } from "../../shared/errors/agroApiError";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
@@ -128,6 +135,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // Mismo mecanismo, para el comando de voz "sanidad" (29/09/2026) -- ver
   // submitVoiceSanity y su useEffect, mas abajo.
   const voiceSanitySubmitCallbackRef = useRef<{ onBlocked: (message: string) => void; onSaved: () => void } | null>(null);
+  // Mismo mecanismo, para el comando de voz "lluvia" (29/09/2026) -- ver
+  // submitVoiceRainfall y su useEffect, mas abajo.
+  const voiceRainfallSubmitCallbackRef = useRef<{ onBlocked: (message: string) => void; onSaved: () => void } | null>(null);
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
   const accountingFormPanelRef = useRef<HTMLElement | null>(null);
   const animalTableWrapRef = useRef<HTMLDivElement | null>(null);
@@ -2804,6 +2814,74 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sanitaryForm]);
 
+  // Mismo mecanismo, para el comando de voz "lluvia" (29/09/2026, pedido
+  // explicito). No pide potrero -- la lluvia se registra por
+  // establecimiento entero, igual que el formulario manual.
+  function submitVoiceRainfall(rainfall: VoiceRainfallReady): Promise<{ ok: true } | { ok: false; message: string }> {
+    return new Promise((resolve) => {
+      voiceRainfallSubmitCallbackRef.current = {
+        onBlocked: (message) => resolve({ ok: false, message }),
+        onSaved: () => resolve({ ok: true })
+      };
+
+      setEditingRainfallRecordId(null);
+      setRainfallForm({
+        date: today,
+        establishmentId: rainfall.establishment.id,
+        fieldId: "",
+        millimeters: String(rainfall.millimeters),
+        notes: "Cargado por voz"
+      });
+    });
+  }
+
+  useEffect(() => {
+    const callbacks = voiceRainfallSubmitCallbackRef.current;
+    if (!callbacks) return;
+    voiceRainfallSubmitCallbackRef.current = null;
+    handleRainfallSubmit(undefined, callbacks);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rainfallForm]);
+
+  // Mismo mecanismo, para el comando de voz "compra" (29/09/2026, pedido
+  // explicito). Version simplificada: precio por cabeza (modo "unidad",
+  // sin peso), sin flete/comision/impuestos por voz -- quedan en 0,
+  // editables a mano en "Animales" despues si hace falta corregirlos.
+  function submitVoicePurchase(
+    purchase: VoicePurchaseReady
+  ): Promise<{ ok: true } | { ok: false; message: string }> {
+    return new Promise((resolve) => {
+      voiceSubmitCallbackRef.current = {
+        onBlocked: (message) => resolve({ ok: false, message }),
+        onSaved: () => resolve({ ok: true })
+      };
+
+      setEditingAnimalMovementId(null);
+      setAnimalFormErrors({});
+      setAnimalForm({
+        date: today,
+        establishmentId: purchase.establishment.id,
+        fieldId: purchase.field.id,
+        transferDestinationEstablishmentId: "",
+        transferDestinationFieldId: "",
+        species: purchase.species,
+        categoryCode: purchase.category.code,
+        kind: "purchase",
+        quantity: String(purchase.quantity),
+        earTag: "",
+        pricingMode: "unidad",
+        weightKg: "",
+        unitPrice: String(purchase.unitPrice),
+        freightAmount: "0",
+        commissionAmount: "0",
+        taxAmount: "0",
+        collectedAmount: "",
+        currency: "USD",
+        notes: "Compra cargada por voz"
+      });
+    });
+  }
+
   // Dispara el submit real recien cuando animalForm ya tiene los datos del
   // traslado de voz cargados (setAnimalForm es asincronico -- no se puede
   // llamar a handleAnimalSubmit en el mismo tick porque leeria el estado
@@ -2953,12 +3031,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     return true;
   }
 
-  function handleRainfallSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function handleRainfallSubmit(
+    event?: React.FormEvent<HTMLFormElement>,
+    callbacks?: { onBlocked?: (message: string) => void; onSaved?: () => void }
+  ) {
+    event?.preventDefault();
 
     const millimeters = parseDecimalInput(rainfallForm.millimeters);
     if (!Number.isFinite(millimeters) || millimeters < 0) {
-      showError("La lluvia debe ser un numero valido.");
+      const message = "La lluvia debe ser un numero valido.";
+      showError(message);
+      callbacks?.onBlocked?.(message);
       return;
     }
 
@@ -2977,6 +3060,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     );
     resetRainfallForm(true);
     showSuccess(editingRainfallRecordId ? "Registro de lluvia actualizado." : "Registro de lluvia guardado.");
+    callbacks?.onSaved?.();
   }
 
   function handleSanitarySubmit(
@@ -4107,6 +4191,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             onSubmitBirth={submitVoiceBirth}
             onSubmitSanity={submitVoiceSanity}
             onSubmitDeath={submitVoiceDeath}
+            onSubmitRainfall={submitVoiceRainfall}
+            onSubmitPurchase={submitVoicePurchase}
             stockBalanceMap={stockBalanceMap}
             sanitaryRecords={sanitaryRecords}
             accountingEntries={accountingEntries}

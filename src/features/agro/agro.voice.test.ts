@@ -4,6 +4,8 @@ import { Establishment, FieldUnit } from "./agro.types";
 import {
   parseVoiceBirthCommand,
   parseVoiceDeathCommand,
+  parseVoicePurchaseCommand,
+  parseVoiceRainfallCommand,
   parseVoiceSanityCommand,
   parseVoiceSummaryCommand,
   parseVoiceTransferCommand,
@@ -267,5 +269,60 @@ describe("parseVoiceDeathCommand (29/09/2026)", () => {
     if (result.status !== "ready") return;
     expect(result.establishment.id).toBe("est-ombu");
     expect(result.field.id).toBe("field-ombu-1");
+  });
+});
+
+describe("parseVoiceRainfallCommand (29/09/2026)", () => {
+  it("no interpreta nada si no arranca con 'lluvia'", () => {
+    const result = parseVoiceRainfallCommand("hola como estas", { establishments });
+    expect(result.status).toBe("no_intent");
+  });
+
+  it("frase completa -- entiende campo y milimetros (sin potrero)", () => {
+    const result = parseVoiceRainfallCommand("lluvia del campo la milagrosa cantidad 23 milimetros", { establishments });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.millimeters).toBe(23);
+  });
+
+  it("falta el campo -- se conserva la cantidad", () => {
+    const result = parseVoiceRainfallCommand("lluvia cantidad 15 milimetros", { establishments });
+    expect(result.status).toBe("partial");
+    if (result.status !== "partial") return;
+    expect(result.slots.millimeters).toBe(15);
+    expect(result.missing).toEqual(["establishment"]);
+  });
+});
+
+describe("parseVoicePurchaseCommand (29/09/2026)", () => {
+  it("no interpreta nada si no arranca con 'compra'", () => {
+    const result = parseVoicePurchaseCommand("hola como estas", data);
+    expect(result.status).toBe("no_intent");
+  });
+
+  it("frase completa -- entiende campo, potrero, cantidad, categoria y precio", () => {
+    const result = parseVoicePurchaseCommand(
+      "compra del campo la milagrosa potrero 5 cantidad 4 toros precio 500",
+      data
+    );
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.field.id).toBe("field-milagrosa-5");
+    expect(result.quantity).toBe(4);
+    expect(result.category.code).toBe("1"); // Toros
+    expect(result.unitPrice).toBe(500);
+  });
+
+  it("falta el precio -- se conserva el resto", () => {
+    const result = parseVoicePurchaseCommand("compra del campo la milagrosa potrero costa cantidad 3 toros", data);
+    expect(result.status).toBe("partial");
+    if (result.status !== "partial") return;
+    expect(result.slots.establishment?.id).toBe("est-milagrosa");
+    expect(result.slots.field?.id).toBe("field-milagrosa-costa");
+    expect(result.slots.quantity).toBe(3);
+    expect(result.slots.category?.code).toBe("1");
+    expect(result.missing).toEqual(["unitPrice"]);
   });
 });
