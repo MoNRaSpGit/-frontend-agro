@@ -733,3 +733,237 @@ export function parseVoiceBirthCommand(
     category
   };
 }
+
+// ---------- Comando "sanidad" (29/09/2026, pedido explicito) ----------
+//
+// Frase esperada: "sanidad [del] [campo] [establecimiento] potrero
+// [potrero] cantidad [numero] [categoria] tratamiento [texto libre]".
+// La especie no se pide aparte: viene junto con la categoria, igual que
+// en traslado (matchCategory busca en el catalogo entero). "tratamiento"
+// es la unica ancla que no tiene un valor fijo del catalogo -- todo lo
+// que sigue se toma tal cual como texto del tratamiento (ej: "baño de
+// pulgas"). OJO: por ahora ese texto sale en minuscula y sin acentos
+// (viene de la misma version normalizada que usa el resto del parser) --
+// se puede mejorar mas adelante si hace falta conservar mayusculas.
+export type VoiceSanitySlots = {
+  establishment: Establishment | null;
+  field: FieldUnit | null;
+  quantity: number | null;
+  species: AgroSpecies | null;
+  category: CategoryDefinition | null;
+  treatment: string | null;
+};
+
+export type VoiceSanityMissingSlot = "establishment" | "field" | "quantity" | "category" | "treatment";
+
+export type VoiceSanityPartial = {
+  status: "partial";
+  slots: VoiceSanitySlots;
+  missing: VoiceSanityMissingSlot[];
+};
+
+export type VoiceSanityReady = {
+  status: "ready";
+  establishment: Establishment;
+  field: FieldUnit;
+  quantity: number;
+  species: AgroSpecies;
+  category: CategoryDefinition;
+  treatment: string;
+};
+
+export type VoiceSanityParseResult = { status: "no_intent" } | VoiceSanityPartial | VoiceSanityReady;
+
+export function parseVoiceSanityCommand(
+  transcript: string,
+  data: VoiceTransferData
+): VoiceSanityParseResult {
+  const tokens = normalize(transcript).split(" ").filter(Boolean);
+
+  if (tokens[0] !== "sanidad") {
+    return { status: "no_intent" };
+  }
+
+  const potreroIdx = indexOfToken(tokens, "potrero", 1);
+  const afterPotrero = potreroIdx !== -1 ? potreroIdx + 1 : 1;
+  const cantidadIdx = indexOfToken(tokens, "cantidad", afterPotrero);
+  const afterCantidadAnchor = cantidadIdx !== -1 ? cantidadIdx + 1 : afterPotrero;
+  const tratamientoIdx = indexOfToken(tokens, "tratamiento", afterCantidadAnchor);
+
+  const establishmentEnd = [potreroIdx, cantidadIdx, tratamientoIdx, tokens.length].find((value) => value >= 1) ?? tokens.length;
+  const establishmentTokens = stripLeadingFillers(tokens.slice(1, establishmentEnd), ESTABLISHMENT_FILLERS);
+
+  const fieldEnd = potreroIdx !== -1 ? [cantidadIdx, tratamientoIdx, tokens.length].find((value) => value >= afterPotrero) ?? tokens.length : afterPotrero;
+  const fieldTokens = potreroIdx !== -1 ? stripLeadingFillers(tokens.slice(afterPotrero, fieldEnd), FIELD_FILLERS) : [];
+
+  const establishmentCandidates = buildEstablishmentCandidates(data.establishments);
+  const establishment = matchEntityAtStart(establishmentTokens, establishmentCandidates)?.value ?? null;
+
+  const fieldCandidates = buildFieldCandidates(
+    establishment ? data.fields.filter((field) => field.establishmentId === establishment.id) : data.fields
+  );
+  const fieldMatch = matchEntityAtStart(fieldTokens, fieldCandidates);
+  const field = fieldMatch?.value ?? null;
+  const inferredEstablishment =
+    establishment ?? (field ? data.establishments.find((item) => item.id === field.establishmentId) ?? null : null);
+
+  const afterField = potreroIdx !== -1 ? afterPotrero + (fieldMatch?.consumed ?? 0) : afterPotrero;
+
+  let quantity: number | null = null;
+  let quantityEnd = afterField;
+  if (cantidadIdx !== -1) {
+    const parsedQuantity = parseQuantity(tokens, cantidadIdx + 1);
+    if (parsedQuantity && parsedQuantity.value > 0) {
+      quantity = parsedQuantity.value;
+      quantityEnd = cantidadIdx + 1 + parsedQuantity.consumed;
+    } else {
+      quantityEnd = cantidadIdx + 1;
+    }
+  }
+
+  const categoryTailEnd = tratamientoIdx !== -1 ? tratamientoIdx : tokens.length;
+  const categoryTail = tokens.slice(quantityEnd, categoryTailEnd).join(" ");
+  const categoryMatch = categoryTail ? matchCategory(categoryTail, data.categoryCatalog) : null;
+
+  const treatmentTail = tratamientoIdx !== -1 ? tokens.slice(tratamientoIdx + 1).join(" ").trim() : "";
+  const treatment = treatmentTail || null;
+
+  const slots: VoiceSanitySlots = {
+    establishment: inferredEstablishment,
+    field,
+    quantity,
+    species: categoryMatch?.species ?? null,
+    category: categoryMatch?.category ?? null,
+    treatment
+  };
+
+  const missing: VoiceSanityMissingSlot[] = [];
+  if (!slots.establishment) missing.push("establishment");
+  if (!slots.field) missing.push("field");
+  if (!slots.quantity) missing.push("quantity");
+  if (!slots.category) missing.push("category");
+  if (!slots.treatment) missing.push("treatment");
+
+  if (missing.length > 0) {
+    return { status: "partial", slots, missing };
+  }
+
+  return {
+    status: "ready",
+    establishment: slots.establishment!,
+    field: slots.field!,
+    quantity: slots.quantity!,
+    species: slots.species!,
+    category: slots.category!,
+    treatment: slots.treatment!
+  };
+}
+
+// ---------- Comando "muerte" (29/09/2026, pedido explicito) ----------
+//
+// Frase esperada: "muerte [del] [campo] [establecimiento] potrero
+// [potrero] cantidad [numero] [categoria]" -- a diferencia de nacimiento,
+// aca SI se pide la categoria real (una muerte puede ser de cualquier
+// categoria, no esta restringida). La caravana (obligatoria en vacunos,
+// ver requiresEarTag en agro.domain.ts) NO se pide por voz -- es un dato
+// alfanumerico dificil de reconocer hablado, se completa a mano en el
+// modal antes de confirmar (ver AgroVoiceSection.tsx).
+export type VoiceDeathSlots = {
+  establishment: Establishment | null;
+  field: FieldUnit | null;
+  quantity: number | null;
+  species: AgroSpecies | null;
+  category: CategoryDefinition | null;
+};
+
+export type VoiceDeathMissingSlot = "establishment" | "field" | "quantity" | "category";
+
+export type VoiceDeathPartial = {
+  status: "partial";
+  slots: VoiceDeathSlots;
+  missing: VoiceDeathMissingSlot[];
+};
+
+export type VoiceDeathReady = {
+  status: "ready";
+  establishment: Establishment;
+  field: FieldUnit;
+  quantity: number;
+  species: AgroSpecies;
+  category: CategoryDefinition;
+};
+
+export type VoiceDeathParseResult = { status: "no_intent" } | VoiceDeathPartial | VoiceDeathReady;
+
+export function parseVoiceDeathCommand(transcript: string, data: VoiceTransferData): VoiceDeathParseResult {
+  const tokens = normalize(transcript).split(" ").filter(Boolean);
+
+  if (tokens[0] !== "muerte") {
+    return { status: "no_intent" };
+  }
+
+  const potreroIdx = indexOfToken(tokens, "potrero", 1);
+  const afterPotrero = potreroIdx !== -1 ? potreroIdx + 1 : 1;
+  const cantidadIdx = indexOfToken(tokens, "cantidad", afterPotrero);
+
+  const establishmentEnd = [potreroIdx, cantidadIdx, tokens.length].find((value) => value >= 1) ?? tokens.length;
+  const establishmentTokens = stripLeadingFillers(tokens.slice(1, establishmentEnd), ESTABLISHMENT_FILLERS);
+
+  const fieldEnd = potreroIdx !== -1 ? [cantidadIdx, tokens.length].find((value) => value >= afterPotrero) ?? tokens.length : afterPotrero;
+  const fieldTokens = potreroIdx !== -1 ? stripLeadingFillers(tokens.slice(afterPotrero, fieldEnd), FIELD_FILLERS) : [];
+
+  const establishmentCandidates = buildEstablishmentCandidates(data.establishments);
+  const establishment = matchEntityAtStart(establishmentTokens, establishmentCandidates)?.value ?? null;
+
+  const fieldCandidates = buildFieldCandidates(
+    establishment ? data.fields.filter((field) => field.establishmentId === establishment.id) : data.fields
+  );
+  const fieldMatch = matchEntityAtStart(fieldTokens, fieldCandidates);
+  const field = fieldMatch?.value ?? null;
+  const inferredEstablishment =
+    establishment ?? (field ? data.establishments.find((item) => item.id === field.establishmentId) ?? null : null);
+
+  const afterField = potreroIdx !== -1 ? afterPotrero + (fieldMatch?.consumed ?? 0) : afterPotrero;
+
+  let quantity: number | null = null;
+  let quantityEnd = afterField;
+  if (cantidadIdx !== -1) {
+    const parsedQuantity = parseQuantity(tokens, cantidadIdx + 1);
+    if (parsedQuantity && parsedQuantity.value > 0) {
+      quantity = parsedQuantity.value;
+      quantityEnd = cantidadIdx + 1 + parsedQuantity.consumed;
+    } else {
+      quantityEnd = cantidadIdx + 1;
+    }
+  }
+
+  const categoryTail = tokens.slice(quantityEnd).join(" ");
+  const categoryMatch = categoryTail ? matchCategory(categoryTail, data.categoryCatalog) : null;
+
+  const slots: VoiceDeathSlots = {
+    establishment: inferredEstablishment,
+    field,
+    quantity,
+    species: categoryMatch?.species ?? null,
+    category: categoryMatch?.category ?? null
+  };
+
+  const missing: VoiceDeathMissingSlot[] = [];
+  if (!slots.establishment) missing.push("establishment");
+  if (!slots.field) missing.push("field");
+  if (!slots.quantity) missing.push("quantity");
+  if (!slots.category) missing.push("category");
+
+  if (missing.length > 0) {
+    return { status: "partial", slots, missing };
+  }
+
+  return {
+    status: "ready",
+    establishment: slots.establishment!,
+    field: slots.field!,
+    quantity: slots.quantity!,
+    species: slots.species!,
+    category: slots.category!
+  };
+}

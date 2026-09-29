@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { categoryCatalog } from "./agro.demo.data";
 import { Establishment, FieldUnit } from "./agro.types";
-import { parseVoiceBirthCommand, parseVoiceSummaryCommand, parseVoiceTransferCommand, VoiceTransferData } from "./agro.voice";
+import {
+  parseVoiceBirthCommand,
+  parseVoiceDeathCommand,
+  parseVoiceSanityCommand,
+  parseVoiceSummaryCommand,
+  parseVoiceTransferCommand,
+  VoiceTransferData
+} from "./agro.voice";
 
 const establishments: Establishment[] = [
   { id: "est-milagrosa", name: "La Milagrosa", location: "", hectares: 500 },
@@ -184,5 +191,81 @@ describe("parseVoiceBirthCommand (29/09/2026)", () => {
     expect(result.field.id).toBe("field-ombu-1");
     expect(result.species).toBe("ovinos");
     expect(result.category.code).toBe("8"); // Corderos/as mamones
+  });
+});
+
+describe("parseVoiceSanityCommand (29/09/2026)", () => {
+  it("no interpreta nada si no arranca con 'sanidad'", () => {
+    const result = parseVoiceSanityCommand("hola como estas", data);
+    expect(result.status).toBe("no_intent");
+  });
+
+  it("frase completa -- entiende campo, potrero, cantidad, categoria y tratamiento", () => {
+    const result = parseVoiceSanityCommand(
+      "sanidad del campo la milagrosa potrero 5 cantidad 10 toros tratamiento bano de pulgas",
+      data
+    );
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.field.id).toBe("field-milagrosa-5");
+    expect(result.quantity).toBe(10);
+    expect(result.category.code).toBe("1"); // Toros
+    expect(result.treatment).toBe("bano de pulgas");
+  });
+
+  it("falta el tratamiento -- se conserva el resto", () => {
+    const result = parseVoiceSanityCommand("sanidad del campo la milagrosa potrero costa cantidad 5 toros", data);
+    expect(result.status).toBe("partial");
+    if (result.status !== "partial") return;
+    expect(result.slots.establishment?.id).toBe("est-milagrosa");
+    expect(result.slots.field?.id).toBe("field-milagrosa-costa");
+    expect(result.slots.quantity).toBe(5);
+    expect(result.slots.category?.code).toBe("1");
+    expect(result.missing).toEqual(["treatment"]);
+  });
+
+  it("falta el campo (al principio) -- el potrero unico igual se infiere", () => {
+    const result = parseVoiceSanityCommand("sanidad potrero costa cantidad 3 toros tratamiento vacuna aftosa", data);
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.field.id).toBe("field-milagrosa-costa");
+    expect(result.treatment).toBe("vacuna aftosa");
+  });
+});
+
+describe("parseVoiceDeathCommand (29/09/2026)", () => {
+  it("no interpreta nada si no arranca con 'muerte'", () => {
+    const result = parseVoiceDeathCommand("hola como estas", data);
+    expect(result.status).toBe("no_intent");
+  });
+
+  it("frase completa -- entiende campo, potrero, cantidad y categoria real (no restringida)", () => {
+    const result = parseVoiceDeathCommand("muerte del campo la milagrosa potrero 5 cantidad 2 toros", data);
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.field.id).toBe("field-milagrosa-5");
+    expect(result.quantity).toBe(2);
+    expect(result.category.code).toBe("1"); // Toros
+  });
+
+  it("falta la categoria -- se conserva el resto", () => {
+    const result = parseVoiceDeathCommand("muerte del campo la milagrosa potrero costa cantidad 1", data);
+    expect(result.status).toBe("partial");
+    if (result.status !== "partial") return;
+    expect(result.slots.establishment?.id).toBe("est-milagrosa");
+    expect(result.slots.field?.id).toBe("field-milagrosa-costa");
+    expect(result.slots.quantity).toBe(1);
+    expect(result.missing).toEqual(["category"]);
+  });
+
+  it("falta el campo (al principio) -- el potrero unico igual se infiere", () => {
+    const result = parseVoiceDeathCommand("muerte potrero 1 cantidad 3 toros", data);
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-ombu");
+    expect(result.field.id).toBe("field-ombu-1");
   });
 });

@@ -11,7 +11,7 @@ import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
 import { AgroVoiceSection } from "./AgroVoiceSection";
-import type { VoiceBirthReady, VoiceTransferReady } from "./agro.voice";
+import type { VoiceBirthReady, VoiceDeathReady, VoiceSanityReady, VoiceTransferReady } from "./agro.voice";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { AgroApiError } from "../../shared/errors/agroApiError";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
@@ -125,6 +125,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // validaciones de stock que el formulario manual de "Animales" (ver
   // submitVoiceTransfer y el useEffect que lo dispara, mas abajo).
   const voiceSubmitCallbackRef = useRef<{ onBlocked: (message: string) => void; onSaved: () => void } | null>(null);
+  // Mismo mecanismo, para el comando de voz "sanidad" (29/09/2026) -- ver
+  // submitVoiceSanity y su useEffect, mas abajo.
+  const voiceSanitySubmitCallbackRef = useRef<{ onBlocked: (message: string) => void; onSaved: () => void } | null>(null);
   const animalFormPanelRef = useRef<HTMLElement | null>(null);
   const accountingFormPanelRef = useRef<HTMLElement | null>(null);
   const animalTableWrapRef = useRef<HTMLDivElement | null>(null);
@@ -2723,6 +2726,84 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     });
   }
 
+  // Mismo mecanismo que submitVoiceTransfer/submitVoiceBirth, para el
+  // comando de voz "muerte" (29/09/2026, pedido explicito). La caravana
+  // (earTag) no se reconoce por voz -- viene ya escrita a mano desde el
+  // modal de confirmacion (ver AgroVoiceSection.tsx); requiresEarTag()
+  // sigue exigiendola igual que en el formulario manual si la especie es
+  // vacunos, y bloquea con el mismo mensaje si falta.
+  function submitVoiceDeath(
+    death: VoiceDeathReady,
+    earTag: string
+  ): Promise<{ ok: true } | { ok: false; message: string }> {
+    return new Promise((resolve) => {
+      voiceSubmitCallbackRef.current = {
+        onBlocked: (message) => resolve({ ok: false, message }),
+        onSaved: () => resolve({ ok: true })
+      };
+
+      setEditingAnimalMovementId(null);
+      setAnimalFormErrors({});
+      setAnimalForm({
+        date: today,
+        establishmentId: death.establishment.id,
+        fieldId: death.field.id,
+        transferDestinationEstablishmentId: "",
+        transferDestinationFieldId: "",
+        species: death.species,
+        categoryCode: death.category.code,
+        kind: "death",
+        quantity: String(death.quantity),
+        earTag,
+        pricingMode: "kilo",
+        weightKg: "",
+        unitPrice: "",
+        freightAmount: "",
+        commissionAmount: "",
+        taxAmount: "",
+        collectedAmount: "",
+        currency: "USD",
+        notes: "Muerte cargada por voz"
+      });
+    });
+  }
+
+  // Mismo mecanismo que submitVoiceTransfer/submitVoiceBirth, para el
+  // comando de voz "sanidad" (29/09/2026, pedido explicito). Reusa
+  // handleSanitarySubmit tal cual -- misma validacion de stock disponible
+  // en el potrero que ya tiene el formulario manual.
+  function submitVoiceSanity(sanity: VoiceSanityReady): Promise<{ ok: true } | { ok: false; message: string }> {
+    return new Promise((resolve) => {
+      voiceSanitySubmitCallbackRef.current = {
+        onBlocked: (message) => resolve({ ok: false, message }),
+        onSaved: () => resolve({ ok: true })
+      };
+
+      setEditingSanitaryRecordId(null);
+      setSanitaryForm({
+        date: today,
+        establishmentId: sanity.establishment.id,
+        fieldId: sanity.field.id,
+        species: sanity.species,
+        categoryCode: sanity.category.code,
+        quantity: String(sanity.quantity),
+        treatment: sanity.treatment,
+        notes: "Cargado por voz"
+      });
+    });
+  }
+
+  // Dispara el submit real recien cuando sanitaryForm ya tiene los datos
+  // cargados (mismo motivo que el useEffect de animalForm, mas abajo:
+  // setSanitaryForm es asincronico).
+  useEffect(() => {
+    const callbacks = voiceSanitySubmitCallbackRef.current;
+    if (!callbacks) return;
+    voiceSanitySubmitCallbackRef.current = null;
+    handleSanitarySubmit(undefined, callbacks);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sanitaryForm]);
+
   // Dispara el submit real recien cuando animalForm ya tiene los datos del
   // traslado de voz cargados (setAnimalForm es asincronico -- no se puede
   // llamar a handleAnimalSubmit en el mismo tick porque leeria el estado
@@ -2898,12 +2979,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     showSuccess(editingRainfallRecordId ? "Registro de lluvia actualizado." : "Registro de lluvia guardado.");
   }
 
-  function handleSanitarySubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function handleSanitarySubmit(
+    event?: React.FormEvent<HTMLFormElement>,
+    callbacks?: { onBlocked?: (message: string) => void; onSaved?: () => void }
+  ) {
+    event?.preventDefault();
 
     const quantity = parseDecimalInput(sanitaryForm.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      showError("La cantidad de animales debe ser mayor a 0.");
+      const message = "La cantidad de animales debe ser mayor a 0.";
+      showError(message);
+      callbacks?.onBlocked?.(message);
       return;
     }
 
@@ -2917,17 +3003,23 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         (item) => item.categoryCode === sanitaryForm.categoryCode
       );
       if (!availableCategory) {
-        showError("Esa categoria no tiene stock disponible en este potrero.");
+        const message = "Esa categoria no tiene stock disponible en este potrero.";
+        showError(message);
+        callbacks?.onBlocked?.(message);
         return;
       }
       if (quantity > availableCategory.quantity) {
-        showError(`Solo hay ${formatNumber(availableCategory.quantity, 0)} disponibles en este potrero para esa categoria.`);
+        const message = `Solo hay ${formatNumber(availableCategory.quantity, 0)} disponibles en este potrero para esa categoria.`;
+        showError(message);
+        callbacks?.onBlocked?.(message);
         return;
       }
     }
 
     if (!sanitaryForm.treatment.trim()) {
-      showError("Falta agregar el tratamiento sanitario.");
+      const message = "Falta agregar el tratamiento sanitario.";
+      showError(message);
+      callbacks?.onBlocked?.(message);
       return;
     }
 
@@ -2951,6 +3043,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setSelectedEstablishmentId(sanitaryForm.establishmentId);
     resetSanitaryForm(true);
     showSuccess(editingSanitaryRecordId ? "Tratamiento sanitario actualizado." : "Tratamiento sanitario guardado.");
+    callbacks?.onSaved?.();
   }
 
   function saveInitialStockLoad() {
@@ -4012,6 +4105,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             fields={fields}
             onSubmitTransfer={submitVoiceTransfer}
             onSubmitBirth={submitVoiceBirth}
+            onSubmitSanity={submitVoiceSanity}
+            onSubmitDeath={submitVoiceDeath}
             stockBalanceMap={stockBalanceMap}
             sanitaryRecords={sanitaryRecords}
             accountingEntries={accountingEntries}

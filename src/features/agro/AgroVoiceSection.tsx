@@ -11,10 +11,16 @@ import {
 import { AccountingEntry, AgroSpecies, Establishment, FieldUnit, MoneyCurrency, SanitaryRecord } from "./agro.types";
 import {
   parseVoiceBirthCommand,
+  parseVoiceDeathCommand,
+  parseVoiceSanityCommand,
   parseVoiceSummaryCommand,
   parseVoiceTransferCommand,
   VoiceBirthReady,
   VoiceBirthSlots,
+  VoiceDeathReady,
+  VoiceDeathSlots,
+  VoiceSanityReady,
+  VoiceSanitySlots,
   VoiceSummarySlots,
   VoiceTransferReady,
   VoiceTransferSlots
@@ -39,6 +45,12 @@ type AgroVoiceSectionProps = {
     quantity: number
   ) => Promise<{ ok: true } | { ok: false; message: string }>;
   onSubmitBirth: (birth: VoiceBirthReady) => Promise<{ ok: true } | { ok: false; message: string }>;
+  onSubmitSanity: (sanity: VoiceSanityReady) => Promise<{ ok: true } | { ok: false; message: string }>;
+  // earTag (caravana): no se reconoce por voz (ver comentario en
+  // agro.voice.ts), viene del campo de texto que se completa a mano en el
+  // modal de confirmacion -- solo hace falta de verdad si la especie
+  // termina siendo vacunos, pero siempre se manda tal cual esta.
+  onSubmitDeath: (death: VoiceDeathReady, earTag: string) => Promise<{ ok: true } | { ok: false; message: string }>;
   // Para el comando de voz "resumen" (29/09/2026, pedido explicito): stock
   // actual (misma cuenta que ya usa AgroHomePage, ver stockBalanceMap),
   // mas sanidad/contabilidad del mes actual en ese potrero.
@@ -62,16 +74,18 @@ type SummaryMoneyTotals = {
 };
 
 // Fila de la lista "Movimientos por voz de esta sesion" -- soporta
-// traslado (con destino) y nacimiento (sin destino, ver "destination").
+// traslado (con destino), nacimiento y sanidad (sin destino, ver
+// "destination"; "treatment" solo tiene valor en sanidad).
 type ConfirmedVoiceRow = {
   id: string;
   date: string;
-  kind: "transfer" | "birth";
+  kind: "transfer" | "birth" | "sanity" | "death";
   origin: { establishment: Establishment; field: FieldUnit };
   destination: { establishment: Establishment; field: FieldUnit } | null;
   quantity: number;
   species: AgroSpecies;
   categoryLabel: string;
+  treatment: string | null;
 };
 
 // Tipado minimo de la Web Speech API (todavia no forma parte de las libs
@@ -213,11 +227,59 @@ function buildSummaryExampleParts(establishments: Establishment[], fields: Field
   ];
 }
 
-type VoiceExampleKind = "traslado" | "nacimiento" | "resumen";
+// Mismo criterio, para "sanidad" (29/09/2026).
+function buildSanityExampleParts(establishments: Establishment[], fields: FieldUnit[]): ExamplePart[] | null {
+  const establishment = establishments.find((item) => fields.some((field) => field.establishmentId === item.id));
+  if (!establishment) return null;
+  const field = fields.find((item) => item.establishmentId === establishment.id);
+  if (!field) return null;
+
+  const category = categoryCatalog.vacunos[0];
+  const categoryLabel = category ? formatCategoryLabel(category.label) : "vacas de cria";
+
+  return [
+    { text: "Sanidad", keyword: true },
+    { text: " ", keyword: false },
+    { text: "del campo", keyword: true },
+    { text: ` ${establishment.name} `, keyword: false },
+    { text: "potrero", keyword: true },
+    { text: ` ${field.name}, `, keyword: false },
+    { text: "cantidad", keyword: true },
+    { text: ` 10, ${categoryLabel}, `, keyword: false },
+    { text: "tratamiento", keyword: true },
+    { text: " baño de pulgas.", keyword: false }
+  ];
+}
+
+// Mismo criterio, para "muerte" (29/09/2026).
+function buildDeathExampleParts(establishments: Establishment[], fields: FieldUnit[]): ExamplePart[] | null {
+  const establishment = establishments.find((item) => fields.some((field) => field.establishmentId === item.id));
+  if (!establishment) return null;
+  const field = fields.find((item) => item.establishmentId === establishment.id);
+  if (!field) return null;
+
+  const category = categoryCatalog.vacunos[0];
+  const categoryLabel = category ? formatCategoryLabel(category.label) : "vacas de cria";
+
+  return [
+    { text: "Muerte", keyword: true },
+    { text: " ", keyword: false },
+    { text: "del campo", keyword: true },
+    { text: ` ${establishment.name} `, keyword: false },
+    { text: "potrero", keyword: true },
+    { text: ` ${field.name}, `, keyword: false },
+    { text: "cantidad", keyword: true },
+    { text: ` 1, ${categoryLabel}.`, keyword: false }
+  ];
+}
+
+type VoiceExampleKind = "traslado" | "nacimiento" | "sanidad" | "muerte" | "resumen";
 
 const VOICE_EXAMPLE_LABELS: Record<VoiceExampleKind, string> = {
   traslado: "Traslado",
   nacimiento: "Nacimiento",
+  sanidad: "Sanidad",
+  muerte: "Muerte",
   resumen: "Resumen"
 };
 
@@ -226,6 +288,8 @@ export function AgroVoiceSection({
   fields,
   onSubmitTransfer,
   onSubmitBirth,
+  onSubmitSanity,
+  onSubmitDeath,
   stockBalanceMap,
   sanitaryRecords,
   accountingEntries
@@ -263,6 +327,20 @@ export function AgroVoiceSection({
   // que "draft" para traslado, pero sin categoria (se infiere sola).
   const [birthDraft, setBirthDraft] = useState<VoiceBirthSlots | null>(null);
   const [editedBirthQuantity, setEditedBirthQuantity] = useState("");
+  // Comando "sanidad" (29/09/2026, pedido explicito) -- mismo espiritu que
+  // "draft" para traslado, con el tratamiento como campo de texto libre
+  // adicional.
+  const [sanityDraft, setSanityDraft] = useState<VoiceSanitySlots | null>(null);
+  const [editedSanityQuantity, setEditedSanityQuantity] = useState("");
+  const [editedTreatment, setEditedTreatment] = useState("");
+  // Comando "muerte" (29/09/2026, pedido explicito) -- mismo espiritu que
+  // traslado (categoria real, no restringida). "earTag" (caravana) es un
+  // campo de texto libre aparte, obligatorio solo si la especie termina
+  // siendo vacunos (ver requiresEarTag en agro.domain.ts) -- nunca se
+  // intenta reconocer por voz.
+  const [deathDraft, setDeathDraft] = useState<VoiceDeathSlots | null>(null);
+  const [editedDeathQuantity, setEditedDeathQuantity] = useState("");
+  const [editedDeathEarTag, setEditedDeathEarTag] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const maxListeningTimeoutRef = useRef<number | null>(null);
@@ -276,13 +354,19 @@ export function AgroVoiceSection({
   const [selectedExampleKind, setSelectedExampleKind] = useState<VoiceExampleKind>("traslado");
   const transferExampleParts = useMemo(() => buildExampleParts(establishments, fields), [establishments, fields]);
   const birthExampleParts = useMemo(() => buildBirthExampleParts(establishments, fields), [establishments, fields]);
+  const sanityExampleParts = useMemo(() => buildSanityExampleParts(establishments, fields), [establishments, fields]);
+  const deathExampleParts = useMemo(() => buildDeathExampleParts(establishments, fields), [establishments, fields]);
   const summaryExampleParts = useMemo(() => buildSummaryExampleParts(establishments, fields), [establishments, fields]);
   const exampleParts =
     selectedExampleKind === "traslado"
       ? transferExampleParts
       : selectedExampleKind === "nacimiento"
         ? birthExampleParts
-        : summaryExampleParts;
+        : selectedExampleKind === "sanidad"
+          ? sanityExampleParts
+          : selectedExampleKind === "muerte"
+            ? deathExampleParts
+            : summaryExampleParts;
 
   useEffect(() => {
     setIsSupported(getSpeechRecognitionConstructor() !== null);
@@ -450,6 +534,54 @@ export function AgroVoiceSection({
       return;
     }
 
+    const sanityResult = parseVoiceSanityCommand(heard, { establishments, fields, categoryCatalog });
+    if (sanityResult.status !== "no_intent") {
+      setStatusMessage(null);
+      setActiveSummary(null);
+
+      if (sanityResult.status === "ready") {
+        setSanityDraft({
+          establishment: sanityResult.establishment,
+          field: sanityResult.field,
+          quantity: sanityResult.quantity,
+          species: sanityResult.species,
+          category: sanityResult.category,
+          treatment: sanityResult.treatment
+        });
+        setEditedSanityQuantity(String(sanityResult.quantity));
+        setEditedTreatment(sanityResult.treatment);
+        return;
+      }
+
+      setSanityDraft(sanityResult.slots);
+      setEditedSanityQuantity(sanityResult.slots.quantity ? String(sanityResult.slots.quantity) : "");
+      setEditedTreatment(sanityResult.slots.treatment ?? "");
+      return;
+    }
+
+    const deathResult = parseVoiceDeathCommand(heard, { establishments, fields, categoryCatalog });
+    if (deathResult.status !== "no_intent") {
+      setStatusMessage(null);
+      setActiveSummary(null);
+      setEditedDeathEarTag("");
+
+      if (deathResult.status === "ready") {
+        setDeathDraft({
+          establishment: deathResult.establishment,
+          field: deathResult.field,
+          quantity: deathResult.quantity,
+          species: deathResult.species,
+          category: deathResult.category
+        });
+        setEditedDeathQuantity(String(deathResult.quantity));
+        return;
+      }
+
+      setDeathDraft(deathResult.slots);
+      setEditedDeathQuantity(deathResult.slots.quantity ? String(deathResult.slots.quantity) : "");
+      return;
+    }
+
     const summaryResult = parseVoiceSummaryCommand(heard, { establishments, fields });
     if (summaryResult.status !== "no_intent") {
       setStatusMessage(null);
@@ -467,7 +599,7 @@ export function AgroVoiceSection({
 
     setStatusMessage({
       tone: "info",
-      text: "No empezo con \"traslado\", \"nacimiento\" ni \"resumen\", asi que no se interpreto nada."
+      text: "No empezo con \"traslado\", \"nacimiento\", \"sanidad\", \"muerte\" ni \"resumen\", asi que no se interpreto nada."
     });
   }
 
@@ -534,7 +666,8 @@ export function AgroVoiceSection({
       destination: null,
       quantity: parsedEditedBirthQuantity,
       species: readyBirth.species,
-      categoryLabel: formatCategoryLabel(readyBirth.category.label)
+      categoryLabel: formatCategoryLabel(readyBirth.category.label),
+      treatment: null
     };
 
     setConfirmedRows((current) => [row, ...current]);
@@ -545,6 +678,124 @@ export function AgroVoiceSection({
   function handleCancelBirth() {
     if (isSubmitting) return;
     setBirthDraft(null);
+  }
+
+  function updateSanityDraft(patch: Partial<VoiceSanitySlots>) {
+    setSanityDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  const parsedEditedSanityQuantity = Number(editedSanityQuantity.replace(",", "."));
+  const isEditedSanityQuantityValid = Number.isFinite(parsedEditedSanityQuantity) && parsedEditedSanityQuantity > 0;
+  const isSanityDraftComplete = Boolean(
+    sanityDraft?.establishment && sanityDraft?.field && sanityDraft?.category && editedTreatment.trim()
+  );
+  const sanityDraftFieldOptions = sanityDraft?.establishment
+    ? fields.filter((field) => field.establishmentId === sanityDraft.establishment!.id)
+    : fields;
+  const sanityCategoryOptionsForSpecies = sanityDraft?.species ? categoryCatalog[sanityDraft.species] : [];
+
+  async function handleConfirmSanity() {
+    if (!sanityDraft || !isSanityDraftComplete || !isEditedSanityQuantityValid || isSubmitting) return;
+
+    const readySanity: VoiceSanityReady = {
+      status: "ready",
+      establishment: sanityDraft.establishment!,
+      field: sanityDraft.field!,
+      quantity: parsedEditedSanityQuantity,
+      species: sanityDraft.species!,
+      category: sanityDraft.category!,
+      treatment: editedTreatment.trim()
+    };
+
+    setIsSubmitting(true);
+    const result = await onSubmitSanity(readySanity);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setSanityDraft(null);
+      setBlockedMessage(result.message);
+      return;
+    }
+
+    const row: ConfirmedVoiceRow = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date: getTodayDate(),
+      kind: "sanity",
+      origin: { establishment: readySanity.establishment, field: readySanity.field },
+      destination: null,
+      quantity: parsedEditedSanityQuantity,
+      species: readySanity.species,
+      categoryLabel: formatCategoryLabel(readySanity.category.label),
+      treatment: readySanity.treatment
+    };
+
+    setConfirmedRows((current) => [row, ...current]);
+    setSanityDraft(null);
+    setTranscript("");
+  }
+
+  function handleCancelSanity() {
+    if (isSubmitting) return;
+    setSanityDraft(null);
+  }
+
+  function updateDeathDraft(patch: Partial<VoiceDeathSlots>) {
+    setDeathDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  const parsedEditedDeathQuantity = Number(editedDeathQuantity.replace(",", "."));
+  const isEditedDeathQuantityValid = Number.isFinite(parsedEditedDeathQuantity) && parsedEditedDeathQuantity > 0;
+  const deathRequiresEarTag = deathDraft?.species === "vacunos";
+  const isDeathDraftComplete = Boolean(
+    deathDraft?.establishment && deathDraft?.field && deathDraft?.category && (!deathRequiresEarTag || editedDeathEarTag.trim())
+  );
+  const deathDraftFieldOptions = deathDraft?.establishment
+    ? fields.filter((field) => field.establishmentId === deathDraft.establishment!.id)
+    : fields;
+  const deathCategoryOptionsForSpecies = deathDraft?.species ? categoryCatalog[deathDraft.species] : [];
+
+  async function handleConfirmDeath() {
+    if (!deathDraft || !isDeathDraftComplete || !isEditedDeathQuantityValid || isSubmitting) return;
+
+    const readyDeath: VoiceDeathReady = {
+      status: "ready",
+      establishment: deathDraft.establishment!,
+      field: deathDraft.field!,
+      quantity: parsedEditedDeathQuantity,
+      species: deathDraft.species!,
+      category: deathDraft.category!
+    };
+
+    setIsSubmitting(true);
+    const result = await onSubmitDeath(readyDeath, editedDeathEarTag.trim());
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setDeathDraft(null);
+      setBlockedMessage(result.message);
+      return;
+    }
+
+    const row: ConfirmedVoiceRow = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date: getTodayDate(),
+      kind: "death",
+      origin: { establishment: readyDeath.establishment, field: readyDeath.field },
+      destination: null,
+      quantity: parsedEditedDeathQuantity,
+      species: readyDeath.species,
+      categoryLabel: formatCategoryLabel(readyDeath.category.label),
+      treatment: null
+    };
+
+    setConfirmedRows((current) => [row, ...current]);
+    setDeathDraft(null);
+    setTranscript("");
+  }
+
+  function handleCancelDeath() {
+    if (isSubmitting) return;
+    setDeathDraft(null);
   }
 
   // Datos del resumen (29/09/2026): animales = stock actual (sin filtro de
@@ -674,7 +925,8 @@ export function AgroVoiceSection({
       destination: readyTransfer.destination,
       quantity: parsedEditedQuantity,
       species: readyTransfer.species,
-      categoryLabel: formatCategoryLabel(readyTransfer.category.label)
+      categoryLabel: formatCategoryLabel(readyTransfer.category.label),
+      treatment: null
     };
 
     setConfirmedRows((current) => [row, ...current]);
@@ -770,6 +1022,7 @@ export function AgroVoiceSection({
                 <th className="cell-field">Destino</th>
                 <th className="cell-category">Categoria</th>
                 <th className="cell-number">Cantidad</th>
+                <th className="cell-description">Tratamiento</th>
                 <th className="cell-actions">Acciones</th>
               </tr>
             </thead>
@@ -778,7 +1031,15 @@ export function AgroVoiceSection({
                 confirmedRows.map((row) => (
                   <tr key={row.id}>
                     <td>{formatShortDate(row.date)}</td>
-                    <td>{row.kind === "transfer" ? "Traslado (voz)" : "Nacimiento (voz)"}</td>
+                    <td>
+                      {row.kind === "transfer"
+                        ? "Traslado (voz)"
+                        : row.kind === "birth"
+                          ? "Nacimiento (voz)"
+                          : row.kind === "sanity"
+                            ? "Sanidad (voz)"
+                            : "Muerte (voz)"}
+                    </td>
                     <td>
                       {row.origin.establishment.name} / {row.origin.field.name}
                     </td>
@@ -789,6 +1050,7 @@ export function AgroVoiceSection({
                       {speciesLabels[row.species]} · {row.categoryLabel}
                     </td>
                     <td className="cell-number">{row.quantity}</td>
+                    <td>{row.treatment ?? "-"}</td>
                     <td className="cell-actions">
                       <button type="button" className="ghost-button danger" onClick={() => handleRemoveRow(row.id)}>
                         Quitar de esta lista
@@ -798,7 +1060,7 @@ export function AgroVoiceSection({
                 ))
               ) : (
                 <tr>
-                  <td className="cell-empty" colSpan={7}>
+                  <td className="cell-empty" colSpan={8}>
                     Todavia no hiciste ningun movimiento por voz.
                   </td>
                 </tr>
@@ -1098,6 +1360,288 @@ export function AgroVoiceSection({
                 className="primary-button"
                 disabled={!isBirthDraftComplete || !isEditedBirthQuantityValid || isSubmitting}
                 onClick={() => void handleConfirmBirth()}
+              >
+                {isSubmitting ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {sanityDraft ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-sanity-confirm-title">
+            <div className="confirm-modal-copy">
+              <strong id="voice-sanity-confirm-title">¿Confirmar tratamiento sanitario?</strong>
+              <span>
+                {isSanityDraftComplete
+                  ? "Se va a guardar de verdad, igual que cargarlo a mano desde \"Sanidad\"."
+                  : "Entendi parte de la frase -- completa lo que falta antes de confirmar."}
+              </span>
+            </div>
+            <div className="voice-confirm-summary">
+              <label className="voice-confirm-field">
+                <span>Campo</span>
+                {sanityDraft.establishment ? (
+                  <strong>{sanityDraft.establishment.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      const establishment = establishments.find((item) => item.id === event.target.value) ?? null;
+                      updateSanityDraft({ establishment, field: null });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-field">
+                <span>Potrero</span>
+                {sanityDraft.field ? (
+                  <strong>{sanityDraft.field.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting || !sanityDraft.establishment}
+                    onChange={(event) => {
+                      const field = sanityDraftFieldOptions.find((item) => item.id === event.target.value) ?? null;
+                      updateSanityDraft({ field });
+                    }}
+                  >
+                    <option value="">{sanityDraft.establishment ? "Elegir..." : "Elegi el campo primero"}</option>
+                    {sanityDraftFieldOptions.map((field) => (
+                      <option key={field.id} value={field.id}>
+                        {field.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-quantity-field">
+                <span>Cantidad</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={editedSanityQuantity}
+                  onChange={(event) => setEditedSanityQuantity(event.target.value)}
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+              </label>
+              {!isEditedSanityQuantityValid ? <p className="voice-status voice-status-error">Ingresa una cantidad valida mayor a 0.</p> : null}
+
+              <label className="voice-confirm-field">
+                <span>Categoria</span>
+                {sanityDraft.category ? (
+                  <strong>{speciesLabels[sanityDraft.species!]} · {formatCategoryLabel(sanityDraft.category.label)}</strong>
+                ) : (
+                  <div className="voice-confirm-category-pickers">
+                    <select
+                      value={sanityDraft.species ?? ""}
+                      disabled={isSubmitting}
+                      onChange={(event) => {
+                        const species = (event.target.value || null) as AgroSpecies | null;
+                        updateSanityDraft({ species, category: null });
+                      }}
+                    >
+                      <option value="">Especie...</option>
+                      {(Object.keys(speciesLabels) as AgroSpecies[]).map((species) => (
+                        <option key={species} value={species}>
+                          {speciesLabels[species]}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value=""
+                      disabled={isSubmitting || !sanityDraft.species}
+                      onChange={(event) => {
+                        const category = sanityCategoryOptionsForSpecies.find((item) => item.code === event.target.value) ?? null;
+                        updateSanityDraft({ category });
+                      }}
+                    >
+                      <option value="">{sanityDraft.species ? "Categoria..." : "Elegi la especie primero"}</option>
+                      {sanityCategoryOptionsForSpecies.map((category) => (
+                        <option key={category.code} value={category.code}>
+                          {formatCategoryLabel(category.label)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </label>
+
+              <label className="voice-confirm-field">
+                <span>Tratamiento</span>
+                <input
+                  type="text"
+                  value={editedTreatment}
+                  onChange={(event) => setEditedTreatment(event.target.value)}
+                  placeholder="Ej: baño de pulgas"
+                  disabled={isSubmitting}
+                />
+              </label>
+            </div>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={handleCancelSanity} disabled={isSubmitting}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!isSanityDraftComplete || !isEditedSanityQuantityValid || isSubmitting}
+                onClick={() => void handleConfirmSanity()}
+              >
+                {isSubmitting ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deathDraft ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-death-confirm-title">
+            <div className="confirm-modal-copy">
+              <strong id="voice-death-confirm-title">¿Confirmar muerte?</strong>
+              <span>
+                {isDeathDraftComplete
+                  ? "Se va a guardar de verdad, igual que cargarlo a mano desde \"Animales\"."
+                  : "Entendi parte de la frase -- completa lo que falta antes de confirmar."}
+              </span>
+            </div>
+            <div className="voice-confirm-summary">
+              <label className="voice-confirm-field">
+                <span>Campo</span>
+                {deathDraft.establishment ? (
+                  <strong>{deathDraft.establishment.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      const establishment = establishments.find((item) => item.id === event.target.value) ?? null;
+                      updateDeathDraft({ establishment, field: null });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-field">
+                <span>Potrero</span>
+                {deathDraft.field ? (
+                  <strong>{deathDraft.field.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting || !deathDraft.establishment}
+                    onChange={(event) => {
+                      const field = deathDraftFieldOptions.find((item) => item.id === event.target.value) ?? null;
+                      updateDeathDraft({ field });
+                    }}
+                  >
+                    <option value="">{deathDraft.establishment ? "Elegir..." : "Elegi el campo primero"}</option>
+                    {deathDraftFieldOptions.map((field) => (
+                      <option key={field.id} value={field.id}>
+                        {field.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-quantity-field">
+                <span>Cantidad</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={editedDeathQuantity}
+                  onChange={(event) => setEditedDeathQuantity(event.target.value)}
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+              </label>
+              {!isEditedDeathQuantityValid ? <p className="voice-status voice-status-error">Ingresa una cantidad valida mayor a 0.</p> : null}
+
+              <label className="voice-confirm-field">
+                <span>Categoria</span>
+                {deathDraft.category ? (
+                  <strong>{speciesLabels[deathDraft.species!]} · {formatCategoryLabel(deathDraft.category.label)}</strong>
+                ) : (
+                  <div className="voice-confirm-category-pickers">
+                    <select
+                      value={deathDraft.species ?? ""}
+                      disabled={isSubmitting}
+                      onChange={(event) => {
+                        const species = (event.target.value || null) as AgroSpecies | null;
+                        updateDeathDraft({ species, category: null });
+                      }}
+                    >
+                      <option value="">Especie...</option>
+                      {(Object.keys(speciesLabels) as AgroSpecies[]).map((species) => (
+                        <option key={species} value={species}>
+                          {speciesLabels[species]}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value=""
+                      disabled={isSubmitting || !deathDraft.species}
+                      onChange={(event) => {
+                        const category = deathCategoryOptionsForSpecies.find((item) => item.code === event.target.value) ?? null;
+                        updateDeathDraft({ category });
+                      }}
+                    >
+                      <option value="">{deathDraft.species ? "Categoria..." : "Elegi la especie primero"}</option>
+                      {deathCategoryOptionsForSpecies.map((category) => (
+                        <option key={category.code} value={category.code}>
+                          {formatCategoryLabel(category.label)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </label>
+
+              {deathRequiresEarTag ? (
+                <label className="voice-confirm-field">
+                  <span>Caravana</span>
+                  <input
+                    type="text"
+                    value={editedDeathEarTag}
+                    onChange={(event) => setEditedDeathEarTag(event.target.value)}
+                    placeholder="Numero de caravana"
+                    disabled={isSubmitting}
+                  />
+                </label>
+              ) : null}
+            </div>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={handleCancelDeath} disabled={isSubmitting}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!isDeathDraftComplete || !isEditedDeathQuantityValid || isSubmitting}
+                onClick={() => void handleConfirmDeath()}
               >
                 {isSubmitting ? "Guardando..." : "Confirmar"}
               </button>
