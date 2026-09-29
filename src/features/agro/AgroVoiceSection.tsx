@@ -2417,7 +2417,7 @@ export function AgroVoiceSection({
               </div>
             )}
 
-            <div className="action-row">
+            <div className="action-row voice-delete-actions">
               <button type="button" className="ghost-button" onClick={handleCancelDeleteTransfers} disabled={isDeletingTransfers}>
                 Cancelar
               </button>

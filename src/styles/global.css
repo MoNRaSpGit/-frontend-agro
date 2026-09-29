@@ -1493,12 +1493,33 @@ th {
   padding: 22px;
   display: grid;
   gap: 18px;
+  /* Sin esto, un modal mas alto que la pantalla quedaba cortado contra el
+     borde de la ventana, sin scroll -- pedido explicito (29/09/2026, con
+     la lista larga de "borrar traslados" en La Milagrosa: "no tengo un
+     scroll... no puedo llegar a ver los botones"). */
+  max-height: min(85vh, 760px);
+  overflow-y: auto;
 }
 
 /* Modal mas ancho para mostrar la tabla de vista previa de "borrar
    traslados" (29/09/2026) sin que quede apretada. */
 .confirm-modal.confirm-modal-wide {
   width: min(700px, 100%);
+}
+
+/* Botones de Confirmar/Cancelar pegados abajo del modal de "borrar
+   traslados" (29/09/2026, pedido explicito) -- con una lista larga
+   (ej. todos los traslados de La Milagrosa), el modal scrollea por
+   dentro pero estos dos botones quedan siempre a la vista, no hace
+   falta llegar hasta el final de la lista para confirmar o cancelar. */
+.voice-delete-actions {
+  position: sticky;
+  bottom: -22px;
+  margin: 0 -22px -22px;
+  padding: 14px 22px;
+  background: #f6efe2;
+  border-top: 1px solid rgba(35, 48, 31, 0.14);
+  border-radius: 0 0 24px 24px;
 }
 
 .confirm-modal-copy {
