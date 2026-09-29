@@ -341,11 +341,31 @@ function numberToWord(value: number): string | null {
 // Candidatos de potrero: ademas del nombre tal cual, si es un numero puro
 // (ej "9") se agrega tambien su forma en palabra ("nueve") como candidato
 // valido -- ver comentario de NUMBER_TO_WORD arriba.
+// El nombre del potrero puede empezar con un articulo ("La Esperanza") o
+// con la palabra "potrero" (ej "Potrero B") -- en ambos casos, esa
+// primera palabra ya se "gasto" en la ventana (el articulo se dice
+// contraido en "del potrero"/"al potrero", y la palabra "potrero" YA es
+// el ancla que separa campo de potrero, asi que decirla nunca se pide
+// dos veces). Sin esta variante, "potrero B" nunca podria matchear un
+// potrero llamado de verdad "Potrero B" (el ancla ya se comio el
+// "potrero", y buscar "B" solo contra el candidato "potrero b" (2
+// palabras) siempre da un mismatch de longitud). Pedido explicito,
+// 29/09/2026: "digo el potrero como es y no me lo toma".
 function buildFieldCandidates(fields: FieldUnit[]): EntityCandidate<FieldUnit>[] {
   const candidates: EntityCandidate<FieldUnit>[] = [];
   for (const field of fields) {
     const trimmedName = field.name.trim();
-    candidates.push({ normalizedName: normalize(trimmedName), label: field.name, value: field });
+    const normalizedFull = normalize(trimmedName);
+    candidates.push({ normalizedName: normalizedFull, label: field.name, value: field });
+
+    const article = LEADING_ARTICLES.find((prefix) => normalizedFull.startsWith(prefix));
+    if (article) {
+      candidates.push({ normalizedName: normalizedFull.slice(article.length), label: field.name, value: field });
+    }
+
+    if (normalizedFull.startsWith("potrero ")) {
+      candidates.push({ normalizedName: normalizedFull.slice("potrero ".length), label: field.name, value: field });
+    }
 
     if (/^\d+$/.test(trimmedName)) {
       const asWord = numberToWord(Number(trimmedName));
@@ -563,7 +583,11 @@ function stripLeadingFillers(tokens: string[], fillerPhrases: string[][]): strin
 // campo") se agrega aca -- se aplica a TODOS los comandos por igual, ya
 // que comparten esta misma lista de muletillas.
 const ESTABLISHMENT_FILLERS = [["del"], ["de", "la"], ["de"], ["en"], ["el"], ["la"], ["campo"]];
-const FIELD_FILLERS = [["el"], ["la"], ["numero"]];
+// OJO: a proposito NO incluye "el"/"la" -- muchos potreros arrancan con
+// un articulo como parte de su propio nombre real ("La Esperanza"), y
+// sacarselo a ciegas antes de buscar rompia el matching (buildFieldCandidates
+// ya registra la variante sin articulo por su cuenta, cuando corresponde).
+const FIELD_FILLERS = [["numero"]];
 
 // "resumen [del] [campo] [establecimiento] potrero [potrero]" -- la unica
 // ancla es la palabra "potrero", que separa establecimiento (antes) de
@@ -877,6 +901,11 @@ export type VoiceDeathSlots = {
   quantity: number | null;
   species: AgroSpecies | null;
   category: CategoryDefinition | null;
+  // Caravana (29/09/2026, pedido explicito): opcional -- nunca cuenta
+  // como "faltante". Si se dice "caravana [texto]" al final, se toma tal
+  // cual (normalizado, sin acentos/mayusculas); si no se dice, se puede
+  // completar a mano en el modal igual que antes.
+  earTag: string | null;
 };
 
 export type VoiceDeathMissingSlot = "establishment" | "field" | "quantity" | "category";
@@ -894,6 +923,7 @@ export type VoiceDeathReady = {
   quantity: number;
   species: AgroSpecies;
   category: CategoryDefinition;
+  earTag: string | null;
 };
 
 export type VoiceDeathParseResult = { status: "no_intent" } | VoiceDeathPartial | VoiceDeathReady;
@@ -940,15 +970,20 @@ export function parseVoiceDeathCommand(transcript: string, data: VoiceTransferDa
     }
   }
 
-  const categoryTail = tokens.slice(quantityEnd).join(" ");
+  const caravanaIdx = indexOfToken(tokens, "caravana", quantityEnd);
+  const categoryTailEnd = caravanaIdx !== -1 ? caravanaIdx : tokens.length;
+  const categoryTail = tokens.slice(quantityEnd, categoryTailEnd).join(" ");
   const categoryMatch = categoryTail ? matchCategory(categoryTail, data.categoryCatalog) : null;
+
+  const earTagTail = caravanaIdx !== -1 ? tokens.slice(caravanaIdx + 1).join(" ").trim() : "";
 
   const slots: VoiceDeathSlots = {
     establishment: inferredEstablishment,
     field,
     quantity,
     species: categoryMatch?.species ?? null,
-    category: categoryMatch?.category ?? null
+    category: categoryMatch?.category ?? null,
+    earTag: earTagTail || null
   };
 
   const missing: VoiceDeathMissingSlot[] = [];
@@ -967,7 +1002,8 @@ export function parseVoiceDeathCommand(transcript: string, data: VoiceTransferDa
     field: slots.field!,
     quantity: slots.quantity!,
     species: slots.species!,
-    category: slots.category!
+    category: slots.category!,
+    earTag: slots.earTag
   };
 }
 

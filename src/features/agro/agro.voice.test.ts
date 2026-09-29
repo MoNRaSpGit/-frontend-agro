@@ -276,6 +276,21 @@ describe("parseVoiceDeathCommand (29/09/2026)", () => {
     expect(result.missing).toEqual(["category"]);
   });
 
+  it("con 'caravana' al final -- se entiende como texto libre, sin pisar la categoria", () => {
+    const result = parseVoiceDeathCommand("muerte del campo la milagrosa potrero 5 cantidad 2 toros caravana 34b185", data);
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.category.code).toBe("1"); // Toros
+    expect(result.earTag).toBe("34b185");
+  });
+
+  it("sin 'caravana' -- earTag queda null (se completa a mano en el modal)", () => {
+    const result = parseVoiceDeathCommand("muerte del campo la milagrosa potrero 5 cantidad 2 toros", data);
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.earTag).toBeNull();
+  });
+
   it("falta el campo (al principio) -- el potrero unico igual se infiere", () => {
     const result = parseVoiceDeathCommand("muerte potrero 1 cantidad 3 toros", data);
     expect(result.status).toBe("ready");
@@ -411,5 +426,38 @@ describe("parseVoiceDeleteTransfersCommand (29/09/2026)", () => {
     if (result.status !== "ready") return;
     expect(result.startDate).toBe("2026-09-15");
     expect(result.endDate).toBe("2026-09-29");
+  });
+});
+
+// Reproduce el reporte real (29/09/2026): "digo el potrero como es y no
+// me lo toma" -- potreros que arrancan con articulo ("La Esperanza", el
+// mismo nombre que el campo) o con la palabra "potrero" ("Potrero B"),
+// como en el tenant "Agro Demo".
+describe("buildFieldCandidates -- potreros con articulo o con 'potrero' en el propio nombre (29/09/2026)", () => {
+  const demoEstablishments: Establishment[] = [{ id: "est-demo-1", name: "La Esperanza", location: "", hectares: 1280 }];
+  const demoFields: FieldUnit[] = [
+    { id: "field-demo-1", establishmentId: "est-demo-1", name: "La Esperanza", hectares: 1280, notes: "" },
+    { id: "field-est-demo-1-potrero-b", establishmentId: "est-demo-1", name: "Potrero B", hectares: 20, notes: "" }
+  ];
+
+  it("nacimiento -- potrero con el mismo nombre que el campo ('La Esperanza')", () => {
+    const result = parseVoiceBirthCommand(
+      "nacimiento en el campo la esperanza potrero la esperanza cantidad 3 vacunos",
+      { establishments: demoEstablishments, fields: demoFields, categoryCatalog }
+    );
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.field.id).toBe("field-demo-1");
+  });
+
+  it("nacimiento -- potrero que se llama literal 'Potrero B'", () => {
+    const result = parseVoiceBirthCommand("nacimiento en el campo la esperanza potrero b cantidad 3 vacunos", {
+      establishments: demoEstablishments,
+      fields: demoFields,
+      categoryCatalog
+    });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.field.id).toBe("field-est-demo-1-potrero-b");
   });
 });

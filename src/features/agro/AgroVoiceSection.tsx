@@ -258,7 +258,7 @@ function buildSummaryExampleParts(establishments: Establishment[], fields: Field
   return [
     { text: "Resumen", keyword: true },
     { text: " ", keyword: false },
-    { text: "en el campo", keyword: true },
+    { text: "del campo", keyword: true },
     { text: ` ${establishment.name} `, keyword: false },
     { text: "potrero", keyword: true },
     { text: ` ${field.name}.`, keyword: false }
@@ -307,7 +307,9 @@ function buildDeathExampleParts(establishments: Establishment[], fields: FieldUn
     { text: "potrero", keyword: true },
     { text: ` ${field.name}, `, keyword: false },
     { text: "cantidad", keyword: true },
-    { text: ` 1, ${categoryLabel}.`, keyword: false }
+    { text: ` 1, ${categoryLabel}, `, keyword: false },
+    { text: "caravana", keyword: true },
+    { text: " 34b185 (opcional -- solo hace falta si es vacunos).", keyword: false }
   ];
 }
 
@@ -716,7 +718,6 @@ export function AgroVoiceSection({
     if (deathResult.status !== "no_intent") {
       setStatusMessage(null);
       setActiveSummary(null);
-      setEditedDeathEarTag("");
 
       if (deathResult.status === "ready") {
         setDeathDraft({
@@ -724,14 +725,17 @@ export function AgroVoiceSection({
           field: deathResult.field,
           quantity: deathResult.quantity,
           species: deathResult.species,
-          category: deathResult.category
+          category: deathResult.category,
+          earTag: deathResult.earTag
         });
         setEditedDeathQuantity(String(deathResult.quantity));
+        setEditedDeathEarTag(deathResult.earTag ?? "");
         return;
       }
 
       setDeathDraft(deathResult.slots);
       setEditedDeathQuantity(deathResult.slots.quantity ? String(deathResult.slots.quantity) : "");
+      setEditedDeathEarTag(deathResult.slots.earTag ?? "");
       return;
     }
 
@@ -982,7 +986,8 @@ export function AgroVoiceSection({
       field: deathDraft.field!,
       quantity: parsedEditedDeathQuantity,
       species: deathDraft.species!,
-      category: deathDraft.category!
+      category: deathDraft.category!,
+      earTag: deathDraft.earTag
     };
 
     setIsSubmitting(true);
