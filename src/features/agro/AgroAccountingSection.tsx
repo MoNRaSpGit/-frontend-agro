@@ -43,6 +43,8 @@ interface AgroAccountingSectionProps {
     dueDate: string;
     clientName: string;
     notes: string;
+    freightAmount: string;
+    linkedAnimalMovementId: string | null;
   };
   exchangeRateForm: {
     yearMonth: string;
@@ -100,6 +102,8 @@ interface AgroAccountingSectionProps {
       dueDate: string;
       clientName: string;
       notes: string;
+      freightAmount: string;
+      linkedAnimalMovementId: string | null;
     }>
   >;
   setAccountingStatusFilter: (value: "all" | "pending" | "partial" | "collected") => void;
@@ -416,6 +420,18 @@ export function AgroAccountingSection({
               onChange={(event) => setAccountingForm((current) => ({ ...current, grossAmount: event.target.value }))}
             />
           </label>
+          {accountingForm.linkedAnimalMovementId ? (
+            <label>
+              <span>Flete</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={accountingForm.freightAmount}
+                onChange={(event) => setAccountingForm((current) => ({ ...current, freightAmount: event.target.value }))}
+              />
+              <small>Viene de la compra vinculada en "Animales" -- se actualiza en los dos lados al guardar.</small>
+            </label>
+          ) : null}
           <label>
             <span>Comision</span>
             <input
@@ -484,7 +500,7 @@ export function AgroAccountingSection({
                   parseDecimalInput(accountingForm.grossAmount) || 0,
                   parseDecimalInput(accountingForm.commissionAmount) || 0,
                   parseDecimalInput(accountingForm.taxAmount) || 0
-                ),
+                ) + (accountingForm.linkedAnimalMovementId ? parseDecimalInput(accountingForm.freightAmount) || 0 : 0),
                 accountingForm.currency
               )}
             </strong>

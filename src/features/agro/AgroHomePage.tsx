@@ -267,7 +267,16 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     collectedAmount: "",
     dueDate: "",
     clientName: "",
-    notes: ""
+    notes: "",
+    // Flete (29/09/2026, pedido explicito del cliente): el flete de una
+    // compra vive en el movimiento de "Animales" (AnimalMovementRecord),
+    // no en el movimiento contable -- por eso este campo solo tiene
+    // sentido, y solo se muestra, cuando este movimiento contable esta
+    // linkeado a una compra real (linkedAnimalMovementId). Al guardar, se
+    // actualiza tanto el total contable como el flete del lado de
+    // Animales, para que no queden desincronizados.
+    freightAmount: "",
+    linkedAnimalMovementId: null as string | null
   });
 
   const [rainfallForm, setRainfallForm] = useState({
@@ -503,7 +512,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       // proxima carga aunque se preserve el resto del contexto.
       dueDate: "",
       clientName: "",
-      notes: ""
+      notes: "",
+      freightAmount: "",
+      linkedAnimalMovementId: null
     }));
     setEditingAccountingEntryId(null);
   }
@@ -2696,7 +2707,16 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     const commissionAmount =
       accountingForm.commissionAmount.trim() === "" ? 0 : parseDecimalInput(accountingForm.commissionAmount);
     const taxAmount = accountingForm.taxAmount.trim() === "" ? 0 : parseDecimalInput(accountingForm.taxAmount);
-    const netAmount = getNetAmount(accountingForm.type, grossAmount, commissionAmount, taxAmount);
+    // Flete (29/09/2026): solo aplica cuando este gasto esta linkeado a
+    // una compra real -- el neto de esta pantalla tiene que sumarlo igual
+    // que ya hace calculateAnimalTotal del lado de Animales, para que los
+    // dos lados muestren siempre el mismo total.
+    const freightAmount = accountingForm.linkedAnimalMovementId
+      ? accountingForm.freightAmount.trim() === ""
+        ? 0
+        : parseDecimalInput(accountingForm.freightAmount)
+      : 0;
+    const netAmount = getNetAmount(accountingForm.type, grossAmount, commissionAmount, taxAmount) + freightAmount;
     const collectedAmount =
       accountingForm.type === "income"
         ? accountingForm.collectedAmount.trim() === ""
@@ -2716,6 +2736,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     if (!Number.isFinite(taxAmount) || taxAmount < 0) {
       showError("Los impuestos deben ser un numero valido.");
+      return false;
+    }
+
+    if (accountingForm.linkedAnimalMovementId && (!Number.isFinite(freightAmount) || freightAmount < 0)) {
+      showError("El flete debe ser un numero valido.");
       return false;
     }
 
@@ -2780,6 +2805,29 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           movement.id === existingEntry.linkedAnimalMovementId ? { ...movement, linkedAccountingEntryId: entry.id } : movement
         )
       );
+    }
+
+    // Sincroniza el flete de vuelta al lado de "Animales" (29/09/2026,
+    // pedido explicito del cliente): esta pantalla es la que Rosendo usa
+    // para cargarlo/corregirlo cuando llega tarde la factura del flete,
+    // asi que la compra original tiene que quedar con el mismo numero y
+    // el mismo total, no solo el movimiento contable.
+    if (accountingForm.linkedAnimalMovementId) {
+      const linkedMovementId = accountingForm.linkedAnimalMovementId;
+      const oldMovement = animalMovements.find((item) => item.id === linkedMovementId);
+      if (oldMovement) {
+        const updatedMovement: AnimalMovementRecord = { ...oldMovement, freightAmount, totalAmount: netAmount };
+        setAnimalMovements((current) => current.map((item) => (item.id === linkedMovementId ? updatedMovement : item)));
+
+        const editAuditEntry: AgroAuditEntry = {
+          id: `audit-${Date.now()}-0-${linkedMovementId}`,
+          action: "edit",
+          movementId: linkedMovementId,
+          before: oldMovement,
+          after: updatedMovement
+        };
+        setAuditLog((current) => [editAuditEntry, ...current]);
+      }
     }
     setSelectedEstablishmentId(accountingForm.establishmentId);
     resetAccountingForm(true);
@@ -3012,6 +3060,13 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       return;
     }
 
+    // El flete solo se puede editar aca si este movimiento contable viene
+    // de verdad de una compra de animales -- si es un gasto cargado a
+    // mano (sin movimiento vinculado), no hay donde guardar el flete.
+    const linkedMovement = entry.linkedAnimalMovementId
+      ? animalMovements.find((item) => item.id === entry.linkedAnimalMovementId && item.kind === "purchase")
+      : undefined;
+
     setEditingAccountingEntryId(entryId);
     setSelectedEstablishmentId(entry.establishmentId);
     setAccountingForm({
@@ -3027,7 +3082,9 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       collectedAmount: entry.type === "income" ? `${getIncomeCollectedAmount(entry)}` : "",
       dueDate: entry.dueDate ?? "",
       clientName: entry.clientName ?? "",
-      notes: entry.notes
+      notes: entry.notes,
+      freightAmount: linkedMovement ? `${linkedMovement.freightAmount ?? 0}` : "",
+      linkedAnimalMovementId: linkedMovement ? linkedMovement.id : null
     });
     accountingFormPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
