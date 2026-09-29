@@ -1228,7 +1228,7 @@ export function parseVoiceDeleteTransfersCommand(
 ): VoiceDeleteTransfersParseResult {
   const tokens = normalize(transcript).split(" ").filter(Boolean);
 
-  if (tokens[0] !== "borrar" || tokens[1] !== "traslados") {
+  if (tokens[0] !== "borrar" || (tokens[1] !== "traslados" && tokens[1] !== "traslado")) {
     return { status: "no_intent" };
   }
 

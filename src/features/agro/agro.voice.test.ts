@@ -389,4 +389,15 @@ describe("parseVoiceDeleteTransfersCommand (29/09/2026)", () => {
     if (result.status !== "ready") return;
     expect(result.establishment).toBeNull();
   });
+
+  it("acepta 'traslado' en singular ademas de 'traslados'", () => {
+    const result = parseVoiceDeleteTransfersCommand("borrar traslado del 15 del 9 al 29 del 9", {
+      year: 2026,
+      establishments
+    });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.startDate).toBe("2026-09-15");
+    expect(result.endDate).toBe("2026-09-29");
+  });
 });
