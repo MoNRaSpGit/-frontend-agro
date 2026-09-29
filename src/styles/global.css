@@ -1650,6 +1650,23 @@ th {
   color: #7a1f1f;
 }
 
+/* Panel "Resumen" por voz (29/09/2026). */
+.voice-summary-section {
+  margin-top: 18px;
+}
+
+.voice-summary-section h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: #2d3d2a;
+}
+
+.voice-summary-totals {
+  margin-top: 6px;
+  font-weight: 600;
+  color: #3a4738;
+}
+
 .voice-confirm-summary {
   border-radius: 16px;
   background: rgba(64, 88, 52, 0.08);

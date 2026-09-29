@@ -71,6 +71,34 @@ export type VoiceTransferPartial = {
 
 export type VoiceTransferParseResult = { status: "no_intent" } | VoiceTransferPartial | VoiceTransferReady;
 
+// ---------- Comando "resumen" (29/09/2026, pedido explicito) ----------
+//
+// Frase esperada: "resumen [del] [campo] [establecimiento] potrero
+// [potrero]" -- el establecimiento y el potrero son los dos unicos datos,
+// y ambos son obligatorios (a diferencia de "traslado", aca no hay
+// cantidad/categoria que pedir). Igual que en traslado, se tolera que
+// falte alguno: se devuelve lo que se entendio y se marca lo que falta.
+export type VoiceSummarySlots = {
+  establishment: Establishment | null;
+  field: FieldUnit | null;
+};
+
+export type VoiceSummaryMissingSlot = "establishment" | "field";
+
+export type VoiceSummaryPartial = {
+  status: "partial";
+  slots: VoiceSummarySlots;
+  missing: VoiceSummaryMissingSlot[];
+};
+
+export type VoiceSummaryReady = {
+  status: "ready";
+  establishment: Establishment;
+  field: FieldUnit;
+};
+
+export type VoiceSummaryParseResult = { status: "no_intent" } | VoiceSummaryPartial | VoiceSummaryReady;
+
 // ---------- Normalizacion y similitud (para tolerar variaciones de la voz) ----------
 
 function normalize(text: string): string {
@@ -508,4 +536,73 @@ export function parseVoiceTransferCommand(transcript: string, data: VoiceTransfe
     species: slots.species!,
     category: slots.category!
   };
+}
+
+// Saca "muletillas" pegadas adelante del nombre que se quiere reconocer
+// (ej "del campo la milagrosa" -> "la milagrosa"), sacando de a una frase
+// por vez hasta que ninguna calce mas -- asi se banca combinaciones como
+// "del campo" (dos muletillas seguidas).
+function stripLeadingFillers(tokens: string[], fillerPhrases: string[][]): string[] {
+  let result = tokens;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const filler of fillerPhrases) {
+      if (filler.length <= result.length && filler.every((word, i) => result[i] === word)) {
+        result = result.slice(filler.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+const ESTABLISHMENT_FILLERS = [["del"], ["de", "la"], ["de"], ["el"], ["la"], ["campo"]];
+const FIELD_FILLERS = [["el"], ["la"], ["numero"]];
+
+// "resumen [del] [campo] [establecimiento] potrero [potrero]" -- la unica
+// ancla es la palabra "potrero", que separa establecimiento (antes) de
+// potrero (despues). Igual criterio que en traslado: si falta la ancla,
+// se intenta igual resolver el establecimiento con todo lo que hay, y el
+// potrero queda vacio (falta).
+export function parseVoiceSummaryCommand(
+  transcript: string,
+  data: { establishments: Establishment[]; fields: FieldUnit[] }
+): VoiceSummaryParseResult {
+  const tokens = normalize(transcript).split(" ").filter(Boolean);
+
+  if (tokens[0] !== "resumen") {
+    return { status: "no_intent" };
+  }
+
+  const potreroIdx = indexOfToken(tokens, "potrero", 1);
+  const establishmentEnd = potreroIdx !== -1 ? potreroIdx : tokens.length;
+  const establishmentTokens = stripLeadingFillers(tokens.slice(1, establishmentEnd), ESTABLISHMENT_FILLERS);
+  const fieldTokens = potreroIdx !== -1 ? stripLeadingFillers(tokens.slice(potreroIdx + 1), FIELD_FILLERS) : [];
+
+  const establishmentCandidates = buildEstablishmentCandidates(data.establishments);
+  const establishment = matchEntityAtStart(establishmentTokens, establishmentCandidates)?.value ?? null;
+
+  // Igual que en traslado: si se sabe el establecimiento, el potrero se
+  // busca solo entre los suyos (evita confundir un "5" de un campo con el
+  // "5" de otro); si no, se busca entre todos y, si da unico, se infiere
+  // de regalo el establecimiento al que pertenece.
+  const fieldCandidates = buildFieldCandidates(
+    establishment ? data.fields.filter((field) => field.establishmentId === establishment.id) : data.fields
+  );
+  const field = matchEntityAtStart(fieldTokens, fieldCandidates)?.value ?? null;
+  const inferredEstablishment =
+    establishment ?? (field ? data.establishments.find((item) => item.id === field.establishmentId) ?? null : null);
+
+  const slots: VoiceSummarySlots = { establishment: inferredEstablishment, field };
+  const missing: VoiceSummaryMissingSlot[] = [];
+  if (!slots.establishment) missing.push("establishment");
+  if (!slots.field) missing.push("field");
+
+  if (missing.length > 0) {
+    return { status: "partial", slots, missing };
+  }
+
+  return { status: "ready", establishment: slots.establishment!, field: slots.field! };
 }

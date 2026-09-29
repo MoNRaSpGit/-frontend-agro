@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { categoryCatalog } from "./agro.demo.data";
 import { Establishment, FieldUnit } from "./agro.types";
-import { parseVoiceTransferCommand, VoiceTransferData } from "./agro.voice";
+import { parseVoiceSummaryCommand, parseVoiceTransferCommand, VoiceTransferData } from "./agro.voice";
 
 const establishments: Establishment[] = [
   { id: "est-milagrosa", name: "La Milagrosa", location: "", hectares: 500 },
@@ -87,5 +87,52 @@ describe("parseVoiceTransferCommand -- version tolerante (28/09/2026)", () => {
     expect(result.missing).toContain("destinationField");
     expect(result.slots.quantity).toBe(5);
     expect(result.slots.category?.code).toBe("1");
+  });
+});
+
+describe("parseVoiceSummaryCommand (29/09/2026)", () => {
+  it("no interpreta nada si no arranca con 'resumen'", () => {
+    const result = parseVoiceSummaryCommand("hola como estas", { establishments, fields });
+    expect(result.status).toBe("no_intent");
+  });
+
+  it("frase completa con 'del campo' -- entiende establecimiento y potrero", () => {
+    const result = parseVoiceSummaryCommand("resumen del campo la milagrosa potrero 5", { establishments, fields });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.field.id).toBe("field-milagrosa-5");
+  });
+
+  it("frase completa sin 'del campo' -- igual entiende", () => {
+    const result = parseVoiceSummaryCommand("resumen el ombu potrero 1", { establishments, fields });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-ombu");
+    expect(result.field.id).toBe("field-ombu-1");
+  });
+
+  it("falta el potrero -- se entiende el establecimiento igual", () => {
+    const result = parseVoiceSummaryCommand("resumen del campo la milagrosa", { establishments, fields });
+    expect(result.status).toBe("partial");
+    if (result.status !== "partial") return;
+    expect(result.slots.establishment?.id).toBe("est-milagrosa");
+    expect(result.slots.field).toBeNull();
+    expect(result.missing).toEqual(["field"]);
+  });
+
+  it("falta el establecimiento pero el potrero es unico -- se infiere solo", () => {
+    const result = parseVoiceSummaryCommand("resumen potrero costa", { establishments, fields });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.field.id).toBe("field-milagrosa-costa");
+  });
+
+  it("falta el establecimiento y el potrero es ambiguo (existe en los dos campos) -- falta todo", () => {
+    const result = parseVoiceSummaryCommand("resumen potrero 5", { establishments, fields });
+    expect(result.status).toBe("partial");
+    if (result.status !== "partial") return;
+    expect(result.missing.sort()).toEqual(["establishment", "field"].sort());
   });
 });

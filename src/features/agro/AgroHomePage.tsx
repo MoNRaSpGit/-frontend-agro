@@ -3970,7 +3970,14 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         ) : null}
 
         {activeView === "voz" ? (
-          <AgroVoiceSection establishments={establishments} fields={fields} onSubmitTransfer={submitVoiceTransfer} />
+          <AgroVoiceSection
+            establishments={establishments}
+            fields={fields}
+            onSubmitTransfer={submitVoiceTransfer}
+            stockBalanceMap={stockBalanceMap}
+            sanitaryRecords={sanitaryRecords}
+            accountingEntries={accountingEntries}
+          />
         ) : null}
 
         <AgroDeleteConfirmModal

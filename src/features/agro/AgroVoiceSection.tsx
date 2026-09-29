@@ -1,7 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatCategoryLabel, formatShortDate, getTodayDate } from "./agro.home.shared";
-import { AgroSpecies, Establishment, FieldUnit } from "./agro.types";
-import { parseVoiceTransferCommand, VoiceTransferReady, VoiceTransferSlots } from "./agro.voice";
+import {
+  compareRecordsByDateDesc,
+  formatCategoryLabel,
+  formatMoney,
+  formatShortDate,
+  getMonthDateRange,
+  getTodayDate,
+  isDateWithinRange
+} from "./agro.home.shared";
+import { AccountingEntry, AgroSpecies, Establishment, FieldUnit, MoneyCurrency, SanitaryRecord } from "./agro.types";
+import {
+  parseVoiceSummaryCommand,
+  parseVoiceTransferCommand,
+  VoiceSummarySlots,
+  VoiceTransferReady,
+  VoiceTransferSlots
+} from "./agro.voice";
 import { categoryCatalog, speciesLabels } from "./agro.demo.data";
 
 // Pestana "Voz" (22/09/2026, pasada a produccion 26/09/2026, pedido
@@ -21,6 +35,26 @@ type AgroVoiceSectionProps = {
     transfer: VoiceTransferReady,
     quantity: number
   ) => Promise<{ ok: true } | { ok: false; message: string }>;
+  // Para el comando de voz "resumen" (29/09/2026, pedido explicito): stock
+  // actual (misma cuenta que ya usa AgroHomePage, ver stockBalanceMap),
+  // mas sanidad/contabilidad del mes actual en ese potrero.
+  stockBalanceMap: Map<string, number>;
+  sanitaryRecords: SanitaryRecord[];
+  accountingEntries: AccountingEntry[];
+};
+
+type SummaryAnimalRow = {
+  species: AgroSpecies;
+  categoryCode: string;
+  categoryLabel: string;
+  quantity: number;
+  ug: number;
+};
+
+type SummaryMoneyTotals = {
+  currency: MoneyCurrency;
+  income: number;
+  expense: number;
 };
 
 type ConfirmedTransferRow = {
@@ -59,8 +93,12 @@ interface SpeechRecognitionLike {
 type SpeechRecognitionConstructorLike = new () => SpeechRecognitionLike;
 
 // Sin palabras nuevas durante este tiempo, se da la frase por terminada
-// (ver el timer de silencio propio en handleStartListening).
-const SILENCE_TIMEOUT_MS = 2500;
+// (ver el timer de silencio propio en handleStartListening). Subido de
+// 2500 a 3800 (pedido explicito, 29/09/2026: "demora un microsegundo en
+// hablar y se corta... hablar sin parar"): con continuous=true (ver mas
+// abajo) este timer propio es el UNICO que decide cuando termino la
+// frase, asi que ahora sí importa cuanto vale.
+const SILENCE_TIMEOUT_MS = 3800;
 // Tope duro por si nunca hay un hueco de silencio.
 const MAX_LISTENING_TIMEOUT_MS = 15000;
 
@@ -129,7 +167,14 @@ function buildExampleParts(establishments: Establishment[], fields: FieldUnit[])
   ];
 }
 
-export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: AgroVoiceSectionProps) {
+export function AgroVoiceSection({
+  establishments,
+  fields,
+  onSubmitTransfer,
+  stockBalanceMap,
+  sanitaryRecords,
+  accountingEntries
+}: AgroVoiceSectionProps) {
   const [isSupported, setIsSupported] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -153,9 +198,17 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
   // suelto cuando el traslado no se puede hacer, un modal prolijo como el
   // de confirmar, explicando el motivo.
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
+  // Comando "resumen" (29/09/2026, pedido explicito). summaryDraft es igual
+  // de espiritu que "draft" para traslado: lo que se entendio, completando
+  // a mano en un modal lo que falte. activeSummary es el combo ya resuelto
+  // (campo + potrero) que efectivamente se muestra debajo.
+  const [summaryDraft, setSummaryDraft] = useState<VoiceSummarySlots | null>(null);
+  const [activeSummary, setActiveSummary] = useState<{ establishment: Establishment; field: FieldUnit } | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const maxListeningTimeoutRef = useRef<number | null>(null);
+  const heardSoFarRef = useRef("");
+  const hadErrorRef = useRef(false);
 
   const exampleParts = useMemo(() => buildExampleParts(establishments, fields), [establishments, fields]);
 
@@ -194,10 +247,19 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
 
     setStatusMessage(null);
     setTranscript("");
+    heardSoFarRef.current = "";
+    hadErrorRef.current = false;
 
     const recognition = new Recognition();
     recognition.lang = "es-UY";
-    recognition.continuous = false;
+    // continuous=true (pedido explicito, 29/09/2026: se cortaba apenas
+    // hacia una pausa minima al hablar, antes de que le diera tiempo a
+    // terminar la frase) -- con false, Chrome corta solo apenas detecta
+    // SU propia pausa (mucho mas corta que SILENCE_TIMEOUT_MS, fuera de
+    // nuestro control). Con true, Chrome sigue escuchando entre pausas y
+    // el UNICO que decide cuando termino la frase es nuestro propio timer
+    // de silencio, de abajo.
+    recognition.continuous = true;
     // interimResults=true: asi llegan avisos MIENTRAS la persona habla
     // (no solo al terminar), y se puede reiniciar el reloj de silencio
     // propio cada vez que hay actividad -- ver resetSilenceTimer.
@@ -205,10 +267,9 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
     recognition.maxAlternatives = 1;
 
     // Si no hay palabras nuevas en SILENCE_TIMEOUT_MS, se da la frase por
-    // terminada y se corta sola (en Chrome esto ya lo hace el navegador,
-    // pero no hay que depender de eso -- ver el comentario en el tipo de
-    // arriba). MAX_LISTENING_TIMEOUT_MS es un tope duro por si nunca hay
-    // un hueco de silencio (ruido de fondo constante, etc.).
+    // terminada y se corta a mano. MAX_LISTENING_TIMEOUT_MS es un tope
+    // duro por si nunca hay un hueco de silencio (ruido de fondo
+    // constante, etc.).
     function resetSilenceTimer() {
       if (silenceTimeoutRef.current !== null) window.clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = window.setTimeout(() => recognition.stop(), SILENCE_TIMEOUT_MS);
@@ -221,16 +282,23 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
       // reloj de silencio.
       resetSilenceTimer();
 
-      const lastResult = event.results[event.results.length - 1];
-      if (!lastResult?.isFinal) return;
-
-      clearListeningTimers();
-      const heard = lastResult[0]?.transcript ?? "";
-      setTranscript(heard);
-      handleTranscript(heard);
+      // Con continuous=true, event.results va acumulando TODOS los
+      // pedazos de la sesion (los ya finalizados se quedan, el ultimo
+      // puede seguir siendo parcial) -- se junta todo para mostrar/usar
+      // la frase completa dicha hasta ahora, sin depender de que cada
+      // pedazo se marque "final" (en algunos navegadores eso no es
+      // confiable -- ver comentario mas arriba sobre iPhone).
+      let combined = "";
+      for (let i = 0; i < event.results.length; i++) {
+        const text = event.results[i]?.[0]?.transcript ?? "";
+        if (text.trim()) combined += (combined ? " " : "") + text.trim();
+      }
+      heardSoFarRef.current = combined;
+      setTranscript(combined);
     };
 
     recognition.onerror = (event) => {
+      hadErrorRef.current = true;
       clearListeningTimers();
       setIsListening(false);
       if (event.error === "no-speech") {
@@ -245,6 +313,9 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
     recognition.onend = () => {
       clearListeningTimers();
       setIsListening(false);
+      if (!hadErrorRef.current && heardSoFarRef.current.trim()) {
+        handleTranscript(heardSoFarRef.current);
+      }
     };
 
     recognitionRef.current = recognition;
@@ -260,34 +331,133 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
   function handleTranscript(heard: string) {
     if (!heard.trim()) return;
 
-    const result = parseVoiceTransferCommand(heard, { establishments, fields, categoryCatalog });
+    const transferResult = parseVoiceTransferCommand(heard, { establishments, fields, categoryCatalog });
+    if (transferResult.status !== "no_intent") {
+      setStatusMessage(null);
+      setActiveSummary(null);
 
-    if (result.status === "no_intent") {
-      setStatusMessage({ tone: "info", text: "No empezo con \"traslado\", asi que no se interpreto nada." });
+      if (transferResult.status === "ready") {
+        setDraft({
+          originEstablishment: transferResult.origin.establishment,
+          originField: transferResult.origin.field,
+          destinationEstablishment: transferResult.destination.establishment,
+          destinationField: transferResult.destination.field,
+          quantity: transferResult.quantity,
+          species: transferResult.species,
+          category: transferResult.category
+        });
+        setEditedQuantity(String(transferResult.quantity));
+        return;
+      }
+
+      // "partial": se guarda tal cual lo que se entendio -- los campos en
+      // null se completan a mano en el modal (ver mas abajo).
+      setDraft(transferResult.slots);
+      setEditedQuantity(transferResult.slots.quantity ? String(transferResult.slots.quantity) : "");
       return;
     }
 
-    setStatusMessage(null);
+    const summaryResult = parseVoiceSummaryCommand(heard, { establishments, fields });
+    if (summaryResult.status !== "no_intent") {
+      setStatusMessage(null);
+      setDraft(null);
 
-    if (result.status === "ready") {
-      setDraft({
-        originEstablishment: result.origin.establishment,
-        originField: result.origin.field,
-        destinationEstablishment: result.destination.establishment,
-        destinationField: result.destination.field,
-        quantity: result.quantity,
-        species: result.species,
-        category: result.category
-      });
-      setEditedQuantity(String(result.quantity));
+      if (summaryResult.status === "ready") {
+        setActiveSummary({ establishment: summaryResult.establishment, field: summaryResult.field });
+        setSummaryDraft(null);
+        return;
+      }
+
+      setSummaryDraft(summaryResult.slots);
       return;
     }
 
-    // "partial": se guarda tal cual lo que se entendio -- los campos en
-    // null se completan a mano en el modal (ver mas abajo).
-    setDraft(result.slots);
-    setEditedQuantity(result.slots.quantity ? String(result.slots.quantity) : "");
+    setStatusMessage({ tone: "info", text: "No empezo con \"traslado\" ni \"resumen\", asi que no se interpreto nada." });
   }
+
+  function updateSummaryDraft(patch: Partial<VoiceSummarySlots>) {
+    setSummaryDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  const isSummaryDraftComplete = Boolean(summaryDraft?.establishment && summaryDraft?.field);
+  const summaryDraftFieldOptions = summaryDraft?.establishment
+    ? fields.filter((field) => field.establishmentId === summaryDraft.establishment!.id)
+    : fields;
+
+  function handleConfirmSummaryDraft() {
+    if (!summaryDraft || !isSummaryDraftComplete) return;
+    setActiveSummary({ establishment: summaryDraft.establishment!, field: summaryDraft.field! });
+    setSummaryDraft(null);
+  }
+
+  function handleCancelSummaryDraft() {
+    setSummaryDraft(null);
+  }
+
+  // Datos del resumen (29/09/2026): animales = stock actual (sin filtro de
+  // fecha, es una foto de HOY); sanidad y contabilidad se acotan al mes
+  // calendario actual (pedido explicito: "traemos los del mes actual...
+  // luego podemos hacer mejoras tipo ingresar fecha").
+  const currentMonthRange = useMemo(() => {
+    const today = getTodayDate();
+    return getMonthDateRange(today.slice(0, 4), today.slice(5, 7));
+  }, []);
+
+  const summaryAnimalRows = useMemo((): SummaryAnimalRow[] => {
+    if (!activeSummary) return [];
+    const prefix = `${activeSummary.field.id}:`;
+    const rows: SummaryAnimalRow[] = [];
+
+    for (const [key, quantity] of stockBalanceMap.entries()) {
+      if (!key.startsWith(prefix) || quantity <= 0) continue;
+      const [, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
+      const category = categoryCatalog[species]?.find((item) => item.code === categoryCode);
+      if (!category) continue;
+      rows.push({
+        species,
+        categoryCode,
+        categoryLabel: formatCategoryLabel(category.label),
+        quantity,
+        ug: quantity * category.ug
+      });
+    }
+
+    return rows.sort((a, b) => a.species.localeCompare(b.species) || a.categoryLabel.localeCompare(b.categoryLabel));
+  }, [activeSummary, stockBalanceMap]);
+
+  const summaryTotalHeads = summaryAnimalRows.reduce((sum, row) => sum + row.quantity, 0);
+  const summaryTotalUg = summaryAnimalRows.reduce((sum, row) => sum + row.ug, 0);
+
+  const summarySanitaryRecords = useMemo(() => {
+    if (!activeSummary) return [];
+    return sanitaryRecords
+      .filter(
+        (record) =>
+          record.fieldId === activeSummary.field.id &&
+          isDateWithinRange(record.date, currentMonthRange.startDate, currentMonthRange.endDate)
+      )
+      .sort(compareRecordsByDateDesc);
+  }, [activeSummary, currentMonthRange, sanitaryRecords]);
+
+  const summaryMoneyTotals = useMemo((): SummaryMoneyTotals[] => {
+    if (!activeSummary) return [];
+    const byCurrency = new Map<MoneyCurrency, SummaryMoneyTotals>();
+
+    for (const entry of accountingEntries) {
+      if (entry.fieldId !== activeSummary.field.id) continue;
+      if (!isDateWithinRange(entry.date, currentMonthRange.startDate, currentMonthRange.endDate)) continue;
+
+      const totals = byCurrency.get(entry.currency) ?? { currency: entry.currency, income: 0, expense: 0 };
+      if (entry.type === "income") {
+        totals.income += entry.netAmount;
+      } else {
+        totals.expense += entry.netAmount;
+      }
+      byCurrency.set(entry.currency, totals);
+    }
+
+    return [...byCurrency.values()];
+  }, [accountingEntries, activeSummary, currentMonthRange]);
 
   function updateDraft(patch: Partial<VoiceTransferSlots>) {
     setDraft((current) => (current ? { ...current, ...patch } : current));
@@ -376,7 +546,9 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
             <p>
               <strong>Beta:</strong> interpreta una orden de traslado hablada y, si confirmas, la guarda de verdad,{" "}
               igual que cargarla a mano desde "Animales". Si la cantidad, la categoria o el potrero no tienen stock
-              suficiente, no se guarda nada y se avisa por que.
+              suficiente, no se guarda nada y se avisa por que. Tambien entiende "resumen": decí, por ejemplo,{" "}
+              <em>"resumen del campo {establishments[0]?.name ?? "..."} potrero {fields[0]?.name ?? "..."}"</em> y
+              te muestra animales, sanidad y contabilidad de ese potrero.
             </p>
           </div>
         </div>
@@ -473,6 +645,192 @@ export function AgroVoiceSection({ establishments, fields, onSubmitTransfer }: A
           </table>
         </div>
       </article>
+
+      {activeSummary ? (
+        <article className="panel wide">
+          <div className="panel-header">
+            <div>
+              <h2>
+                Resumen · {activeSummary.establishment.name} / {activeSummary.field.name}
+              </h2>
+              <p>Sanidad y contabilidad son del mes actual. Animales es el stock de hoy.</p>
+            </div>
+            <div className="table-actions">
+              <button type="button" className="ghost-button" onClick={() => setActiveSummary(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+
+          <div className="voice-summary-section">
+            <h3>Animales</h3>
+            {summaryAnimalRows.length ? (
+              <div className="table-wrap">
+                <table className="animal-ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Especie</th>
+                      <th>Categoria</th>
+                      <th className="cell-number">Cantidad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryAnimalRows.map((row) => (
+                      <tr key={`${row.species}-${row.categoryCode}`}>
+                        <td>{speciesLabels[row.species]}</td>
+                        <td>{row.categoryLabel}</td>
+                        <td className="cell-number">{row.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="voice-status voice-status-info">No hay animales en este potrero.</p>
+            )}
+            {summaryAnimalRows.length ? (
+              <p className="voice-summary-totals">
+                Total: {summaryTotalHeads} cabeza(s) · {summaryTotalUg.toFixed(1)} UG
+              </p>
+            ) : null}
+          </div>
+
+          <div className="voice-summary-section">
+            <h3>Sanidad (mes actual)</h3>
+            {summarySanitaryRecords.length ? (
+              <div className="table-wrap">
+                <table className="animal-ledger-table">
+                  <thead>
+                    <tr>
+                      <th className="cell-date">Fecha</th>
+                      <th>Categoria</th>
+                      <th className="cell-number">Cantidad</th>
+                      <th>Tratamiento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summarySanitaryRecords.map((record) => {
+                      const category = categoryCatalog[record.species]?.find((item) => item.code === record.categoryCode);
+                      return (
+                        <tr key={record.id}>
+                          <td>{formatShortDate(record.date)}</td>
+                          <td>
+                            {speciesLabels[record.species]} · {category ? formatCategoryLabel(category.label) : record.categoryCode}
+                          </td>
+                          <td className="cell-number">{record.quantity}</td>
+                          <td>{record.treatment}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="voice-status voice-status-info">No hay tratamientos de sanidad este mes en este potrero.</p>
+            )}
+          </div>
+
+          <div className="voice-summary-section">
+            <h3>Contabilidad (mes actual)</h3>
+            {summaryMoneyTotals.length ? (
+              <div className="table-wrap">
+                <table className="animal-ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Moneda</th>
+                      <th className="cell-number">Ingresos</th>
+                      <th className="cell-number">Egresos</th>
+                      <th className="cell-number">Resultado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryMoneyTotals.map((totals) => (
+                      <tr key={totals.currency}>
+                        <td>{totals.currency}</td>
+                        <td className="cell-number">{formatMoney(totals.income, totals.currency)}</td>
+                        <td className="cell-number">{formatMoney(totals.expense, totals.currency)}</td>
+                        <td className="cell-number">{formatMoney(totals.income - totals.expense, totals.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="voice-status voice-status-info">No hay movimientos contables este mes en este potrero.</p>
+            )}
+          </div>
+        </article>
+      ) : null}
+
+      {summaryDraft ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-summary-confirm-title">
+            <div className="confirm-modal-copy">
+              <strong id="voice-summary-confirm-title">¿Ver resumen de que potrero?</strong>
+              <span>Entendi parte de la frase -- completa lo que falta antes de continuar.</span>
+            </div>
+            <div className="voice-confirm-summary">
+              <label className="voice-confirm-field">
+                <span>Campo</span>
+                {summaryDraft.establishment ? (
+                  <strong>{summaryDraft.establishment.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      const establishment = establishments.find((item) => item.id === event.target.value) ?? null;
+                      updateSummaryDraft({ establishment, field: null });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-field">
+                <span>Potrero</span>
+                {summaryDraft.field ? (
+                  <strong>{summaryDraft.field.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={!summaryDraft.establishment}
+                    onChange={(event) => {
+                      const field = summaryDraftFieldOptions.find((item) => item.id === event.target.value) ?? null;
+                      updateSummaryDraft({ field });
+                    }}
+                  >
+                    <option value="">{summaryDraft.establishment ? "Elegir..." : "Elegi el campo primero"}</option>
+                    {summaryDraftFieldOptions.map((field) => (
+                      <option key={field.id} value={field.id}>
+                        {field.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+            </div>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={handleCancelSummaryDraft}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!isSummaryDraftComplete}
+                onClick={handleConfirmSummaryDraft}
+              >
+                Ver resumen
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {draft ? (
         <div className="confirm-modal-backdrop" role="presentation">
