@@ -10,13 +10,16 @@ import {
 } from "./agro.home.shared";
 import { AccountingEntry, AgroSpecies, Establishment, FieldUnit, MoneyCurrency, SanitaryRecord } from "./agro.types";
 import {
+  parseVoiceBirthCommand,
   parseVoiceSummaryCommand,
   parseVoiceTransferCommand,
+  VoiceBirthReady,
+  VoiceBirthSlots,
   VoiceSummarySlots,
   VoiceTransferReady,
   VoiceTransferSlots
 } from "./agro.voice";
-import { categoryCatalog, speciesLabels } from "./agro.demo.data";
+import { BIRTH_CATEGORY_CODE, categoryCatalog, speciesLabels } from "./agro.demo.data";
 
 // Pestana "Voz" (22/09/2026, pasada a produccion 26/09/2026, pedido
 // explicito: "que si guarde en la BDD, que no sea una demo"). Interpreta
@@ -35,6 +38,7 @@ type AgroVoiceSectionProps = {
     transfer: VoiceTransferReady,
     quantity: number
   ) => Promise<{ ok: true } | { ok: false; message: string }>;
+  onSubmitBirth: (birth: VoiceBirthReady) => Promise<{ ok: true } | { ok: false; message: string }>;
   // Para el comando de voz "resumen" (29/09/2026, pedido explicito): stock
   // actual (misma cuenta que ya usa AgroHomePage, ver stockBalanceMap),
   // mas sanidad/contabilidad del mes actual en ese potrero.
@@ -57,11 +61,14 @@ type SummaryMoneyTotals = {
   expense: number;
 };
 
-type ConfirmedTransferRow = {
+// Fila de la lista "Movimientos por voz de esta sesion" -- soporta
+// traslado (con destino) y nacimiento (sin destino, ver "destination").
+type ConfirmedVoiceRow = {
   id: string;
   date: string;
+  kind: "transfer" | "birth";
   origin: { establishment: Establishment; field: FieldUnit };
-  destination: { establishment: Establishment; field: FieldUnit };
+  destination: { establishment: Establishment; field: FieldUnit } | null;
   quantity: number;
   species: AgroSpecies;
   categoryLabel: string;
@@ -167,10 +174,58 @@ function buildExampleParts(establishments: Establishment[], fields: FieldUnit[])
   ];
 }
 
+// Mismo criterio que buildExampleParts, para "nacimiento" (29/09/2026): no
+// pide categoria (se infiere sola de la especie). "del campo" es una
+// muletilla fija que el parser sabe sacar -- no hace falta la contraccion
+// de articulo de spokenEstablishmentParts aca.
+function buildBirthExampleParts(establishments: Establishment[], fields: FieldUnit[]): ExamplePart[] | null {
+  const establishment = establishments.find((item) => fields.some((field) => field.establishmentId === item.id));
+  if (!establishment) return null;
+  const field = fields.find((item) => item.establishmentId === establishment.id);
+  if (!field) return null;
+
+  return [
+    { text: "Nacimiento", keyword: true },
+    { text: " ", keyword: false },
+    { text: "del campo", keyword: true },
+    { text: ` ${establishment.name} `, keyword: false },
+    { text: "potrero", keyword: true },
+    { text: ` ${field.name}, `, keyword: false },
+    { text: "cantidad", keyword: true },
+    { text: " 3, vacunos.", keyword: false }
+  ];
+}
+
+// Mismo criterio, para "resumen" (29/09/2026).
+function buildSummaryExampleParts(establishments: Establishment[], fields: FieldUnit[]): ExamplePart[] | null {
+  const establishment = establishments.find((item) => fields.some((field) => field.establishmentId === item.id));
+  if (!establishment) return null;
+  const field = fields.find((item) => item.establishmentId === establishment.id);
+  if (!field) return null;
+
+  return [
+    { text: "Resumen", keyword: true },
+    { text: " ", keyword: false },
+    { text: "del campo", keyword: true },
+    { text: ` ${establishment.name} `, keyword: false },
+    { text: "potrero", keyword: true },
+    { text: ` ${field.name}.`, keyword: false }
+  ];
+}
+
+type VoiceExampleKind = "traslado" | "nacimiento" | "resumen";
+
+const VOICE_EXAMPLE_LABELS: Record<VoiceExampleKind, string> = {
+  traslado: "Traslado",
+  nacimiento: "Nacimiento",
+  resumen: "Resumen"
+};
+
 export function AgroVoiceSection({
   establishments,
   fields,
   onSubmitTransfer,
+  onSubmitBirth,
   stockBalanceMap,
   sanitaryRecords,
   accountingEntries
@@ -192,7 +247,7 @@ export function AgroVoiceSection({
   // entendio 35") -- por eso la cantidad se puede corregir a mano antes de
   // confirmar, sin tener que repetir toda la frase de nuevo.
   const [editedQuantity, setEditedQuantity] = useState("");
-  const [confirmedRows, setConfirmedRows] = useState<ConfirmedTransferRow[]>([]);
+  const [confirmedRows, setConfirmedRows] = useState<ConfirmedVoiceRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Modal informativo (pedido explicito, 26/09/2026): en vez de un mensaje
   // suelto cuando el traslado no se puede hacer, un modal prolijo como el
@@ -204,13 +259,30 @@ export function AgroVoiceSection({
   // (campo + potrero) que efectivamente se muestra debajo.
   const [summaryDraft, setSummaryDraft] = useState<VoiceSummarySlots | null>(null);
   const [activeSummary, setActiveSummary] = useState<{ establishment: Establishment; field: FieldUnit } | null>(null);
+  // Comando "nacimiento" (29/09/2026, pedido explicito) -- mismo espiritu
+  // que "draft" para traslado, pero sin categoria (se infiere sola).
+  const [birthDraft, setBirthDraft] = useState<VoiceBirthSlots | null>(null);
+  const [editedBirthQuantity, setEditedBirthQuantity] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const maxListeningTimeoutRef = useRef<number | null>(null);
   const heardSoFarRef = useRef("");
   const hadErrorRef = useRef(false);
 
-  const exampleParts = useMemo(() => buildExampleParts(establishments, fields), [establishments, fields]);
+  // Selector de ejemplo (29/09/2026, pedido explicito): en vez de mostrar
+  // siempre el ejemplo de traslado, se elige de un desplegable cual
+  // comando ver -- asi entran los 7 que se vayan armando sin amontonar
+  // texto en la pantalla.
+  const [selectedExampleKind, setSelectedExampleKind] = useState<VoiceExampleKind>("traslado");
+  const transferExampleParts = useMemo(() => buildExampleParts(establishments, fields), [establishments, fields]);
+  const birthExampleParts = useMemo(() => buildBirthExampleParts(establishments, fields), [establishments, fields]);
+  const summaryExampleParts = useMemo(() => buildSummaryExampleParts(establishments, fields), [establishments, fields]);
+  const exampleParts =
+    selectedExampleKind === "traslado"
+      ? transferExampleParts
+      : selectedExampleKind === "nacimiento"
+        ? birthExampleParts
+        : summaryExampleParts;
 
   useEffect(() => {
     setIsSupported(getSpeechRecognitionConstructor() !== null);
@@ -357,6 +429,27 @@ export function AgroVoiceSection({
       return;
     }
 
+    const birthResult = parseVoiceBirthCommand(heard, { establishments, fields, categoryCatalog });
+    if (birthResult.status !== "no_intent") {
+      setStatusMessage(null);
+      setActiveSummary(null);
+
+      if (birthResult.status === "ready") {
+        setBirthDraft({
+          establishment: birthResult.establishment,
+          field: birthResult.field,
+          quantity: birthResult.quantity,
+          species: birthResult.species
+        });
+        setEditedBirthQuantity(String(birthResult.quantity));
+        return;
+      }
+
+      setBirthDraft(birthResult.slots);
+      setEditedBirthQuantity(birthResult.slots.quantity ? String(birthResult.slots.quantity) : "");
+      return;
+    }
+
     const summaryResult = parseVoiceSummaryCommand(heard, { establishments, fields });
     if (summaryResult.status !== "no_intent") {
       setStatusMessage(null);
@@ -372,7 +465,10 @@ export function AgroVoiceSection({
       return;
     }
 
-    setStatusMessage({ tone: "info", text: "No empezo con \"traslado\" ni \"resumen\", asi que no se interpreto nada." });
+    setStatusMessage({
+      tone: "info",
+      text: "No empezo con \"traslado\", \"nacimiento\" ni \"resumen\", asi que no se interpreto nada."
+    });
   }
 
   function updateSummaryDraft(patch: Partial<VoiceSummarySlots>) {
@@ -392,6 +488,63 @@ export function AgroVoiceSection({
 
   function handleCancelSummaryDraft() {
     setSummaryDraft(null);
+  }
+
+  function updateBirthDraft(patch: Partial<VoiceBirthSlots>) {
+    setBirthDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  const parsedEditedBirthQuantity = Number(editedBirthQuantity.replace(",", "."));
+  const isEditedBirthQuantityValid = Number.isFinite(parsedEditedBirthQuantity) && parsedEditedBirthQuantity > 0;
+  const isBirthDraftComplete = Boolean(birthDraft?.establishment && birthDraft?.field && birthDraft?.species);
+  const birthDraftFieldOptions = birthDraft?.establishment
+    ? fields.filter((field) => field.establishmentId === birthDraft.establishment!.id)
+    : fields;
+
+  async function handleConfirmBirth() {
+    if (!birthDraft || !isBirthDraftComplete || !isEditedBirthQuantityValid || isSubmitting) return;
+
+    const category = categoryCatalog[birthDraft.species!].find((item) => item.code === BIRTH_CATEGORY_CODE[birthDraft.species!]);
+    if (!category) return;
+
+    const readyBirth: VoiceBirthReady = {
+      status: "ready",
+      establishment: birthDraft.establishment!,
+      field: birthDraft.field!,
+      quantity: parsedEditedBirthQuantity,
+      species: birthDraft.species!,
+      category
+    };
+
+    setIsSubmitting(true);
+    const result = await onSubmitBirth(readyBirth);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setBirthDraft(null);
+      setBlockedMessage(result.message);
+      return;
+    }
+
+    const row: ConfirmedVoiceRow = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date: getTodayDate(),
+      kind: "birth",
+      origin: { establishment: readyBirth.establishment, field: readyBirth.field },
+      destination: null,
+      quantity: parsedEditedBirthQuantity,
+      species: readyBirth.species,
+      categoryLabel: formatCategoryLabel(readyBirth.category.label)
+    };
+
+    setConfirmedRows((current) => [row, ...current]);
+    setBirthDraft(null);
+    setTranscript("");
+  }
+
+  function handleCancelBirth() {
+    if (isSubmitting) return;
+    setBirthDraft(null);
   }
 
   // Datos del resumen (29/09/2026): animales = stock actual (sin filtro de
@@ -513,9 +666,10 @@ export function AgroVoiceSection({
       return;
     }
 
-    const row: ConfirmedTransferRow = {
+    const row: ConfirmedVoiceRow = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       date: getTodayDate(),
+      kind: "transfer",
       origin: readyTransfer.origin,
       destination: readyTransfer.destination,
       quantity: parsedEditedQuantity,
@@ -543,14 +697,22 @@ export function AgroVoiceSection({
         <div className="panel-header">
           <div>
             <h2>🎙️ Voz</h2>
-            <p>
-              <strong>Beta:</strong> interpreta una orden de traslado hablada y, si confirmas, la guarda de verdad,{" "}
-              igual que cargarla a mano desde "Animales". Si la cantidad, la categoria o el potrero no tienen stock
-              suficiente, no se guarda nada y se avisa por que. Tambien entiende "resumen": decí, por ejemplo,{" "}
-              <em>"resumen del campo {establishments[0]?.name ?? "..."} potrero {fields[0]?.name ?? "..."}"</em> y
-              te muestra animales, sanidad y contabilidad de ese potrero.
-            </p>
           </div>
+        </div>
+
+        <div className="voice-example-picker">
+          <label htmlFor="voice-example-select">Ejemplo</label>
+          <select
+            id="voice-example-select"
+            value={selectedExampleKind}
+            onChange={(event) => setSelectedExampleKind(event.target.value as VoiceExampleKind)}
+          >
+            {(Object.keys(VOICE_EXAMPLE_LABELS) as VoiceExampleKind[]).map((kind) => (
+              <option key={kind} value={kind}>
+                {VOICE_EXAMPLE_LABELS[kind]}
+              </option>
+            ))}
+          </select>
         </div>
         {exampleParts ? (
           <p className="voice-example">
@@ -584,7 +746,7 @@ export function AgroVoiceSection({
       <article className="panel wide">
         <div className="panel-header">
           <div>
-            <h2>Traslados por voz de esta sesion</h2>
+            <h2>Movimientos por voz de esta sesion</h2>
             <p>
               Ya quedaron guardados de verdad (se ven tambien en "Animales"). Esta lista es solo un repaso rapido y se
               pierde al recargar la pagina.
@@ -616,12 +778,12 @@ export function AgroVoiceSection({
                 confirmedRows.map((row) => (
                   <tr key={row.id}>
                     <td>{formatShortDate(row.date)}</td>
-                    <td>Traslado (voz)</td>
+                    <td>{row.kind === "transfer" ? "Traslado (voz)" : "Nacimiento (voz)"}</td>
                     <td>
                       {row.origin.establishment.name} / {row.origin.field.name}
                     </td>
                     <td>
-                      {row.destination.establishment.name} / {row.destination.field.name}
+                      {row.destination ? `${row.destination.establishment.name} / ${row.destination.field.name}` : "-"}
                     </td>
                     <td>
                       {speciesLabels[row.species]} · {row.categoryLabel}
@@ -637,7 +799,7 @@ export function AgroVoiceSection({
               ) : (
                 <tr>
                   <td className="cell-empty" colSpan={7}>
-                    Todavia no hiciste ningun traslado por voz.
+                    Todavia no hiciste ningun movimiento por voz.
                   </td>
                 </tr>
               )}
@@ -826,6 +988,118 @@ export function AgroVoiceSection({
                 onClick={handleConfirmSummaryDraft}
               >
                 Ver resumen
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {birthDraft ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-birth-confirm-title">
+            <div className="confirm-modal-copy">
+              <strong id="voice-birth-confirm-title">¿Confirmar nacimiento?</strong>
+              <span>
+                {isBirthDraftComplete
+                  ? "Se va a guardar de verdad, igual que cargarlo a mano desde \"Animales\"."
+                  : "Entendi parte de la frase -- completa lo que falta antes de confirmar."}
+              </span>
+            </div>
+            <div className="voice-confirm-summary">
+              <label className="voice-confirm-field">
+                <span>Campo</span>
+                {birthDraft.establishment ? (
+                  <strong>{birthDraft.establishment.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      const establishment = establishments.find((item) => item.id === event.target.value) ?? null;
+                      updateBirthDraft({ establishment, field: null });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {establishments.map((establishment) => (
+                      <option key={establishment.id} value={establishment.id}>
+                        {establishment.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-field">
+                <span>Potrero</span>
+                {birthDraft.field ? (
+                  <strong>{birthDraft.field.name}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting || !birthDraft.establishment}
+                    onChange={(event) => {
+                      const field = birthDraftFieldOptions.find((item) => item.id === event.target.value) ?? null;
+                      updateBirthDraft({ field });
+                    }}
+                  >
+                    <option value="">{birthDraft.establishment ? "Elegir..." : "Elegi el campo primero"}</option>
+                    {birthDraftFieldOptions.map((field) => (
+                      <option key={field.id} value={field.id}>
+                        {field.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
+              <label className="voice-confirm-quantity-field">
+                <span>Cantidad</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={editedBirthQuantity}
+                  onChange={(event) => setEditedBirthQuantity(event.target.value)}
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+              </label>
+              {!isEditedBirthQuantityValid ? <p className="voice-status voice-status-error">Ingresa una cantidad valida mayor a 0.</p> : null}
+
+              <label className="voice-confirm-field">
+                <span>Especie</span>
+                {birthDraft.species ? (
+                  <strong>{speciesLabels[birthDraft.species]}</strong>
+                ) : (
+                  <select
+                    value=""
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      const species = (event.target.value || null) as AgroSpecies | null;
+                      updateBirthDraft({ species });
+                    }}
+                  >
+                    <option value="">Elegir...</option>
+                    {(Object.keys(speciesLabels) as AgroSpecies[]).map((species) => (
+                      <option key={species} value={species}>
+                        {speciesLabels[species]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+            </div>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={handleCancelBirth} disabled={isSubmitting}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!isBirthDraftComplete || !isEditedBirthQuantityValid || isSubmitting}
+                onClick={() => void handleConfirmBirth()}
+              >
+                {isSubmitting ? "Guardando..." : "Confirmar"}
               </button>
             </div>
           </div>

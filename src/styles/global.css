@@ -1591,6 +1591,20 @@ th {
   color: #2d3d2a;
 }
 
+/* Selector de ejemplo (29/09/2026): elige que comando ver de ejemplo, en
+   vez de mostrar siempre el mismo (traslado). */
+.voice-example-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.voice-example-picker label {
+  font-weight: 700;
+  color: #2d3d2a;
+}
+
 /* Palabras clave del comando (22/09/2026, pedido explicito): resaltadas
    en mayuscula y en rojo para diferenciarlas de los datos (nombres,
    numero, categoria) dentro del ejemplo. */

@@ -27,6 +27,7 @@
 // faltante -- pero el resto de las ventanas se siguen resolviendo igual,
 // sin importar en que posicion de la frase esten.
 import { AgroSpecies, CategoryDefinition, Establishment, FieldUnit } from "./agro.types";
+import { BIRTH_CATEGORY_CODE, speciesLabels } from "./agro.demo.data";
 
 export type VoiceTransferData = {
   establishments: Establishment[];
@@ -605,4 +606,130 @@ export function parseVoiceSummaryCommand(
   }
 
   return { status: "ready", establishment: slots.establishment!, field: slots.field! };
+}
+
+// ---------- Comando "nacimiento" (29/09/2026, pedido explicito) ----------
+//
+// Frase esperada: "nacimiento [del] [campo] [establecimiento] potrero
+// [potrero] cantidad [numero] [especie]" -- a diferencia de traslado, NO
+// se pide la categoria: "Nacimiento" ya esta restringido a una sola
+// categoria por especie (ver BIRTH_CATEGORY_CODE), asi que apenas se sabe
+// la especie la categoria se infiere sola, igual que ya hace el
+// formulario manual.
+export type VoiceBirthSlots = {
+  establishment: Establishment | null;
+  field: FieldUnit | null;
+  quantity: number | null;
+  species: AgroSpecies | null;
+};
+
+export type VoiceBirthMissingSlot = "establishment" | "field" | "quantity" | "species";
+
+export type VoiceBirthPartial = {
+  status: "partial";
+  slots: VoiceBirthSlots;
+  missing: VoiceBirthMissingSlot[];
+};
+
+export type VoiceBirthReady = {
+  status: "ready";
+  establishment: Establishment;
+  field: FieldUnit;
+  quantity: number;
+  species: AgroSpecies;
+  category: CategoryDefinition;
+};
+
+export type VoiceBirthParseResult = { status: "no_intent" } | VoiceBirthPartial | VoiceBirthReady;
+
+function matchSpecies(tailText: string): AgroSpecies | null {
+  const normalizedTail = normalize(tailText);
+  if (!normalizedTail) return null;
+
+  for (const species of Object.keys(speciesLabels) as AgroSpecies[]) {
+    const label = normalize(speciesLabels[species]);
+    if (label === normalizedTail || similarity(label, normalizedTail) >= ENTITY_MATCH_THRESHOLD) {
+      return species;
+    }
+  }
+  return null;
+}
+
+export function parseVoiceBirthCommand(
+  transcript: string,
+  data: { establishments: Establishment[]; fields: FieldUnit[]; categoryCatalog: Record<AgroSpecies, CategoryDefinition[]> }
+): VoiceBirthParseResult {
+  const tokens = normalize(transcript).split(" ").filter(Boolean);
+
+  if (tokens[0] !== "nacimiento") {
+    return { status: "no_intent" };
+  }
+
+  const potreroIdx = indexOfToken(tokens, "potrero", 1);
+  const afterPotrero = potreroIdx !== -1 ? potreroIdx + 1 : 1;
+  const cantidadIdx = indexOfToken(tokens, "cantidad", afterPotrero);
+
+  const establishmentEnd = potreroIdx !== -1 ? potreroIdx : tokens.length;
+  const establishmentTokens = stripLeadingFillers(tokens.slice(1, establishmentEnd), ESTABLISHMENT_FILLERS);
+
+  const fieldEnd = cantidadIdx !== -1 ? cantidadIdx : tokens.length;
+  const fieldTokens = potreroIdx !== -1 ? stripLeadingFillers(tokens.slice(afterPotrero, fieldEnd), FIELD_FILLERS) : [];
+
+  const establishmentCandidates = buildEstablishmentCandidates(data.establishments);
+  const establishment = matchEntityAtStart(establishmentTokens, establishmentCandidates)?.value ?? null;
+
+  const fieldCandidates = buildFieldCandidates(
+    establishment ? data.fields.filter((field) => field.establishmentId === establishment.id) : data.fields
+  );
+  const fieldMatch = matchEntityAtStart(fieldTokens, fieldCandidates);
+  const field = fieldMatch?.value ?? null;
+  const inferredEstablishment =
+    establishment ?? (field ? data.establishments.find((item) => item.id === field.establishmentId) ?? null : null);
+
+  // Igual criterio que en traslado: si falta "cantidad", el tramo final
+  // (cantidad + especie) se arma a partir de lo que efectivamente consumio
+  // el potrero, para no pisar palabras entre ellos.
+  const afterField = potreroIdx !== -1 ? afterPotrero + (fieldMatch?.consumed ?? 0) : afterPotrero;
+
+  let quantity: number | null = null;
+  let quantityEnd = afterField;
+  if (cantidadIdx !== -1) {
+    const parsedQuantity = parseQuantity(tokens, cantidadIdx + 1);
+    if (parsedQuantity && parsedQuantity.value > 0) {
+      quantity = parsedQuantity.value;
+      quantityEnd = cantidadIdx + 1 + parsedQuantity.consumed;
+    } else {
+      quantityEnd = cantidadIdx + 1;
+    }
+  }
+
+  const species = matchSpecies(tokens.slice(quantityEnd).join(" "));
+
+  const slots: VoiceBirthSlots = { establishment: inferredEstablishment, field, quantity, species };
+  const missing: VoiceBirthMissingSlot[] = [];
+  if (!slots.establishment) missing.push("establishment");
+  if (!slots.field) missing.push("field");
+  if (!slots.quantity) missing.push("quantity");
+  if (!slots.species) missing.push("species");
+
+  if (missing.length > 0) {
+    return { status: "partial", slots, missing };
+  }
+
+  const category = data.categoryCatalog[slots.species!].find((item) => item.code === BIRTH_CATEGORY_CODE[slots.species!]);
+  if (!category) {
+    // No deberia pasar (BIRTH_CATEGORY_CODE siempre apunta a un codigo del
+    // catalogo), pero por las dudas se trata como especie faltante en vez
+    // de reventar.
+    return { status: "partial", slots: { ...slots, species: null }, missing: ["species"] };
+  }
+
+  return {
+    status: "ready",
+    establishment: slots.establishment!,
+    field: slots.field!,
+    quantity: slots.quantity!,
+    species: slots.species!,
+    category
+  };
 }

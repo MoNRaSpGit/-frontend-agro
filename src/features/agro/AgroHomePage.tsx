@@ -11,7 +11,7 @@ import { AgroRainfallSection } from "./AgroRainfallSection";
 import { AgroSanitySection } from "./AgroSanitySection";
 import { AgroSetupSection } from "./AgroSetupSection";
 import { AgroVoiceSection } from "./AgroVoiceSection";
-import type { VoiceTransferReady } from "./agro.voice";
+import type { VoiceBirthReady, VoiceTransferReady } from "./agro.voice";
 import { AgroPersistenceMode, fetchAgroWorkspace, saveAgroWorkspace } from "./agro.client";
 import { AgroApiError } from "../../shared/errors/agroApiError";
 import { calculateAnimalTotal, deriveMovementDirection, getIncomeConceptForSpecies, requiresEarTag } from "./agro.domain";
@@ -2686,6 +2686,43 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     });
   }
 
+  // Mismo mecanismo que submitVoiceTransfer, para el comando de voz
+  // "nacimiento" (29/09/2026, pedido explicito). La categoria ya viene
+  // resuelta desde el parser (BIRTH_CATEGORY_CODE) -- no hay combo de
+  // categoria que llenar aca.
+  function submitVoiceBirth(birth: VoiceBirthReady): Promise<{ ok: true } | { ok: false; message: string }> {
+    return new Promise((resolve) => {
+      voiceSubmitCallbackRef.current = {
+        onBlocked: (message) => resolve({ ok: false, message }),
+        onSaved: () => resolve({ ok: true })
+      };
+
+      setEditingAnimalMovementId(null);
+      setAnimalFormErrors({});
+      setAnimalForm({
+        date: today,
+        establishmentId: birth.establishment.id,
+        fieldId: birth.field.id,
+        transferDestinationEstablishmentId: "",
+        transferDestinationFieldId: "",
+        species: birth.species,
+        categoryCode: birth.category.code,
+        kind: "birth",
+        quantity: String(birth.quantity),
+        earTag: "",
+        pricingMode: "kilo",
+        weightKg: "",
+        unitPrice: "",
+        freightAmount: "",
+        commissionAmount: "",
+        taxAmount: "",
+        collectedAmount: "",
+        currency: "USD",
+        notes: "Nacimiento cargado por voz"
+      });
+    });
+  }
+
   // Dispara el submit real recien cuando animalForm ya tiene los datos del
   // traslado de voz cargados (setAnimalForm es asincronico -- no se puede
   // llamar a handleAnimalSubmit en el mismo tick porque leeria el estado
@@ -3974,6 +4011,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             establishments={establishments}
             fields={fields}
             onSubmitTransfer={submitVoiceTransfer}
+            onSubmitBirth={submitVoiceBirth}
             stockBalanceMap={stockBalanceMap}
             sanitaryRecords={sanitaryRecords}
             accountingEntries={accountingEntries}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { categoryCatalog } from "./agro.demo.data";
 import { Establishment, FieldUnit } from "./agro.types";
-import { parseVoiceSummaryCommand, parseVoiceTransferCommand, VoiceTransferData } from "./agro.voice";
+import { parseVoiceBirthCommand, parseVoiceSummaryCommand, parseVoiceTransferCommand, VoiceTransferData } from "./agro.voice";
 
 const establishments: Establishment[] = [
   { id: "est-milagrosa", name: "La Milagrosa", location: "", hectares: 500 },
@@ -134,5 +134,55 @@ describe("parseVoiceSummaryCommand (29/09/2026)", () => {
     expect(result.status).toBe("partial");
     if (result.status !== "partial") return;
     expect(result.missing.sort()).toEqual(["establishment", "field"].sort());
+  });
+});
+
+describe("parseVoiceBirthCommand (29/09/2026)", () => {
+  it("no interpreta nada si no arranca con 'nacimiento'", () => {
+    const result = parseVoiceBirthCommand("hola como estas", { establishments, fields, categoryCatalog });
+    expect(result.status).toBe("no_intent");
+  });
+
+  it("frase completa -- entiende campo, potrero, cantidad y especie, e infiere la categoria de nacimiento", () => {
+    const result = parseVoiceBirthCommand("nacimiento del campo la milagrosa potrero 5 cantidad 3 vacunos", {
+      establishments,
+      fields,
+      categoryCatalog
+    });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.field.id).toBe("field-milagrosa-5");
+    expect(result.quantity).toBe(3);
+    expect(result.species).toBe("vacunos");
+    expect(result.category.code).toBe("9"); // Terneros/as
+  });
+
+  it("falta la especie -- se conserva el resto", () => {
+    const result = parseVoiceBirthCommand("nacimiento del campo la milagrosa potrero costa cantidad 2", {
+      establishments,
+      fields,
+      categoryCatalog
+    });
+    expect(result.status).toBe("partial");
+    if (result.status !== "partial") return;
+    expect(result.slots.establishment?.id).toBe("est-milagrosa");
+    expect(result.slots.field?.id).toBe("field-milagrosa-costa");
+    expect(result.slots.quantity).toBe(2);
+    expect(result.missing).toEqual(["species"]);
+  });
+
+  it("falta el campo (al principio) -- el potrero unico igual se infiere", () => {
+    const result = parseVoiceBirthCommand("nacimiento potrero 1 cantidad 4 ovinos", {
+      establishments,
+      fields,
+      categoryCatalog
+    });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-ombu");
+    expect(result.field.id).toBe("field-ombu-1");
+    expect(result.species).toBe("ovinos");
+    expect(result.category.code).toBe("8"); // Corderos/as mamones
   });
 });
