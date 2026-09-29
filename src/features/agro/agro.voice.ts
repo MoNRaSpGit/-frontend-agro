@@ -559,7 +559,10 @@ function stripLeadingFillers(tokens: string[], fillerPhrases: string[][]): strin
   return result;
 }
 
-const ESTABLISHMENT_FILLERS = [["del"], ["de", "la"], ["de"], ["el"], ["la"], ["campo"]];
+// "en" (pedido explicito, 29/09/2026: "en el campo" ademas de "del
+// campo") se agrega aca -- se aplica a TODOS los comandos por igual, ya
+// que comparten esta misma lista de muletillas.
+const ESTABLISHMENT_FILLERS = [["del"], ["de", "la"], ["de"], ["en"], ["el"], ["la"], ["campo"]];
 const FIELD_FILLERS = [["el"], ["la"], ["numero"]];
 
 // "resumen [del] [campo] [establecimiento] potrero [potrero]" -- la unica

@@ -168,6 +168,18 @@ describe("parseVoiceBirthCommand (29/09/2026)", () => {
     expect(result.category.code).toBe("9"); // Terneros/as
   });
 
+  it("con 'en el campo' en vez de 'del campo' -- funciona igual (pedido explicito)", () => {
+    const result = parseVoiceBirthCommand("nacimiento en el campo la milagrosa potrero 5 cantidad 3 vacunos", {
+      establishments,
+      fields,
+      categoryCatalog
+    });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment.id).toBe("est-milagrosa");
+    expect(result.field.id).toBe("field-milagrosa-5");
+  });
+
   it("falta la especie -- se conserva el resto", () => {
     const result = parseVoiceBirthCommand("nacimiento del campo la milagrosa potrero costa cantidad 2", {
       establishments,

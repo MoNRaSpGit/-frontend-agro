@@ -239,7 +239,7 @@ function buildBirthExampleParts(establishments: Establishment[], fields: FieldUn
   return [
     { text: "Nacimiento", keyword: true },
     { text: " ", keyword: false },
-    { text: "del campo", keyword: true },
+    { text: "en el campo", keyword: true },
     { text: ` ${establishment.name} `, keyword: false },
     { text: "potrero", keyword: true },
     { text: ` ${field.name}, `, keyword: false },
@@ -258,7 +258,7 @@ function buildSummaryExampleParts(establishments: Establishment[], fields: Field
   return [
     { text: "Resumen", keyword: true },
     { text: " ", keyword: false },
-    { text: "del campo", keyword: true },
+    { text: "en el campo", keyword: true },
     { text: ` ${establishment.name} `, keyword: false },
     { text: "potrero", keyword: true },
     { text: ` ${field.name}.`, keyword: false }
@@ -278,7 +278,7 @@ function buildSanityExampleParts(establishments: Establishment[], fields: FieldU
   return [
     { text: "Sanidad", keyword: true },
     { text: " ", keyword: false },
-    { text: "del campo", keyword: true },
+    { text: "en el campo", keyword: true },
     { text: ` ${establishment.name} `, keyword: false },
     { text: "potrero", keyword: true },
     { text: ` ${field.name}, `, keyword: false },
@@ -302,7 +302,7 @@ function buildDeathExampleParts(establishments: Establishment[], fields: FieldUn
   return [
     { text: "Muerte", keyword: true },
     { text: " ", keyword: false },
-    { text: "del campo", keyword: true },
+    { text: "en el campo", keyword: true },
     { text: ` ${establishment.name} `, keyword: false },
     { text: "potrero", keyword: true },
     { text: ` ${field.name}, `, keyword: false },
@@ -319,7 +319,7 @@ function buildRainfallExampleParts(establishments: Establishment[]): ExamplePart
   return [
     { text: "Lluvia", keyword: true },
     { text: " ", keyword: false },
-    { text: "del campo", keyword: true },
+    { text: "en el campo", keyword: true },
     { text: ` ${establishment.name} `, keyword: false },
     { text: "cantidad", keyword: true },
     { text: " 23 milimetros.", keyword: false }
@@ -340,7 +340,7 @@ function buildPurchaseExampleParts(establishments: Establishment[], fields: Fiel
   return [
     { text: "Compra", keyword: true },
     { text: " ", keyword: false },
-    { text: "del campo", keyword: true },
+    { text: "en el campo", keyword: true },
     { text: ` ${establishment.name} `, keyword: false },
     { text: "potrero", keyword: true },
     { text: ` ${field.name}, `, keyword: false },
@@ -374,7 +374,7 @@ function buildDeleteTransfersExampleParts(establishments: Establishment[]): Exam
   return [
     ...base,
     { text: " ", keyword: false },
-    { text: "del campo", keyword: true },
+    { text: "en el campo", keyword: true },
     { text: ` ${establishment.name} `, keyword: false },
     { text: "(opcional, para acotarlo a un solo campo).", keyword: false }
   ];
