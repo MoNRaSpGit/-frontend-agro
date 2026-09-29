@@ -8,10 +8,11 @@ import {
   getTodayDate,
   isDateWithinRange
 } from "./agro.home.shared";
-import { AccountingEntry, AgroSpecies, Establishment, FieldUnit, MoneyCurrency, SanitaryRecord } from "./agro.types";
+import { AccountingEntry, AgroSpecies, AnimalMovementRecord, Establishment, FieldUnit, MoneyCurrency, SanitaryRecord } from "./agro.types";
 import {
   parseVoiceBirthCommand,
   parseVoiceDeathCommand,
+  parseVoiceDeleteTransfersCommand,
   parseVoicePurchaseCommand,
   parseVoiceRainfallCommand,
   parseVoiceSanityCommand,
@@ -59,12 +60,32 @@ type AgroVoiceSectionProps = {
   onSubmitDeath: (death: VoiceDeathReady, earTag: string) => Promise<{ ok: true } | { ok: false; message: string }>;
   onSubmitRainfall: (rainfall: VoiceRainfallReady) => Promise<{ ok: true } | { ok: false; message: string }>;
   onSubmitPurchase: (purchase: VoicePurchaseReady) => Promise<{ ok: true } | { ok: false; message: string }>;
+  // Comando "borrar traslados" (29/09/2026, pedido explicito): recibe los
+  // ids de los "transfer_out" a borrar (el par "transfer_in" se borra solo
+  // del lado de AgroHomePage). Si algun traslado del lote dejaria un
+  // potrero en negativo, no se borra NADA del lote -- ver
+  // AgroHomePage#submitVoiceDeleteTransfers.
+  onSubmitDeleteTransfers: (
+    transferOutIds: string[]
+  ) => Promise<{ ok: true; deletedCount: number } | { ok: false; message: string }>;
   // Para el comando de voz "resumen" (29/09/2026, pedido explicito): stock
   // actual (misma cuenta que ya usa AgroHomePage, ver stockBalanceMap),
   // mas sanidad/contabilidad del mes actual en ese potrero.
   stockBalanceMap: Map<string, number>;
   sanitaryRecords: SanitaryRecord[];
   accountingEntries: AccountingEntry[];
+  // Para armar la vista previa de "borrar traslados" antes de confirmar.
+  animalMovements: AnimalMovementRecord[];
+};
+
+type DeleteTransferPreviewRow = {
+  id: string;
+  date: string;
+  origin: { establishment: Establishment; field: FieldUnit };
+  destination: { establishment: Establishment; field: FieldUnit } | null;
+  species: AgroSpecies;
+  categoryLabel: string;
+  quantity: number;
 };
 
 type SummaryAnimalRow = {
@@ -330,7 +351,28 @@ function buildPurchaseExampleParts(establishments: Establishment[], fields: Fiel
   ];
 }
 
-type VoiceExampleKind = "traslado" | "nacimiento" | "sanidad" | "muerte" | "lluvia" | "compra" | "resumen";
+// Mismo criterio, para "borrar traslados" (29/09/2026): fechas fijas en
+// el ejemplo (no depende de datos reales del cliente).
+function buildDeleteTransfersExampleParts(): ExamplePart[] {
+  return [
+    { text: "Borrar traslados", keyword: true },
+    { text: " ", keyword: false },
+    { text: "del", keyword: true },
+    { text: " 15 9 ", keyword: false },
+    { text: "al", keyword: true },
+    { text: " 20 9.", keyword: false }
+  ];
+}
+
+type VoiceExampleKind =
+  | "traslado"
+  | "nacimiento"
+  | "sanidad"
+  | "muerte"
+  | "lluvia"
+  | "compra"
+  | "borrar"
+  | "resumen";
 
 const VOICE_EXAMPLE_LABELS: Record<VoiceExampleKind, string> = {
   traslado: "Traslado",
@@ -339,6 +381,7 @@ const VOICE_EXAMPLE_LABELS: Record<VoiceExampleKind, string> = {
   muerte: "Muerte",
   lluvia: "Lluvia",
   compra: "Compra",
+  borrar: "Borrar traslados",
   resumen: "Resumen"
 };
 
@@ -351,9 +394,11 @@ export function AgroVoiceSection({
   onSubmitDeath,
   onSubmitRainfall,
   onSubmitPurchase,
+  onSubmitDeleteTransfers,
   stockBalanceMap,
   sanitaryRecords,
-  accountingEntries
+  accountingEntries,
+  animalMovements
 }: AgroVoiceSectionProps) {
   const [isSupported, setIsSupported] = useState(true);
   const [isListening, setIsListening] = useState(false);
@@ -413,6 +458,13 @@ export function AgroVoiceSection({
   const [purchaseDraft, setPurchaseDraft] = useState<VoicePurchaseSlots | null>(null);
   const [editedPurchaseQuantity, setEditedPurchaseQuantity] = useState("");
   const [editedPurchaseUnitPrice, setEditedPurchaseUnitPrice] = useState("");
+  // Comando "borrar traslados" (29/09/2026, pedido explicito): un solo
+  // modal con las dos fechas (editables, precargadas con lo que se
+  // entendio) y, debajo, la vista previa de los traslados que entran en
+  // ese rango -- se recalcula sola cada vez que se toca una fecha. No se
+  // borra nada hasta tocar "Confirmar borrado".
+  const [deleteRangeDraft, setDeleteRangeDraft] = useState<{ startDate: string; endDate: string } | null>(null);
+  const [isDeletingTransfers, setIsDeletingTransfers] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const maxListeningTimeoutRef = useRef<number | null>(null);
@@ -430,6 +482,7 @@ export function AgroVoiceSection({
   const deathExampleParts = useMemo(() => buildDeathExampleParts(establishments, fields), [establishments, fields]);
   const rainfallExampleParts = useMemo(() => buildRainfallExampleParts(establishments), [establishments]);
   const purchaseExampleParts = useMemo(() => buildPurchaseExampleParts(establishments, fields), [establishments, fields]);
+  const deleteTransfersExampleParts = useMemo(() => buildDeleteTransfersExampleParts(), []);
   const summaryExampleParts = useMemo(() => buildSummaryExampleParts(establishments, fields), [establishments, fields]);
   const exampleParts =
     selectedExampleKind === "traslado"
@@ -444,7 +497,9 @@ export function AgroVoiceSection({
               ? rainfallExampleParts
               : selectedExampleKind === "compra"
                 ? purchaseExampleParts
-                : summaryExampleParts;
+                : selectedExampleKind === "borrar"
+                  ? deleteTransfersExampleParts
+                  : summaryExampleParts;
 
   useEffect(() => {
     setIsSupported(getSpeechRecognitionConstructor() !== null);
@@ -701,6 +756,20 @@ export function AgroVoiceSection({
       return;
     }
 
+    const deleteResult = parseVoiceDeleteTransfersCommand(heard, { year: Number(getTodayDate().slice(0, 4)) });
+    if (deleteResult.status !== "no_intent") {
+      setStatusMessage(null);
+      setActiveSummary(null);
+
+      if (deleteResult.status === "ready") {
+        setDeleteRangeDraft({ startDate: deleteResult.startDate, endDate: deleteResult.endDate });
+        return;
+      }
+
+      setDeleteRangeDraft({ startDate: deleteResult.slots.startDate ?? "", endDate: deleteResult.slots.endDate ?? "" });
+      return;
+    }
+
     const summaryResult = parseVoiceSummaryCommand(heard, { establishments, fields });
     if (summaryResult.status !== "no_intent") {
       setStatusMessage(null);
@@ -718,7 +787,7 @@ export function AgroVoiceSection({
 
     setStatusMessage({
       tone: "info",
-      text: "No empezo con \"traslado\", \"nacimiento\", \"sanidad\", \"muerte\", \"lluvia\", \"compra\" ni \"resumen\", asi que no se interpreto nada."
+      text: "No empezo con \"traslado\", \"nacimiento\", \"sanidad\", \"muerte\", \"lluvia\", \"compra\", \"borrar traslados\" ni \"resumen\", asi que no se interpreto nada."
     });
   }
 
@@ -1025,6 +1094,77 @@ export function AgroVoiceSection({
   function handleCancelPurchase() {
     if (isSubmitting) return;
     setPurchaseDraft(null);
+  }
+
+  // Vista previa de "borrar traslados" (29/09/2026): se recalcula sola
+  // cada vez que se toca una fecha en el modal. Solo mira "transfer_out"
+  // (cada uno representa un traslado completo junto con su
+  // "transfer_in" pareja) para no listar cada traslado dos veces.
+  const deleteTransfersPreview = useMemo((): DeleteTransferPreviewRow[] => {
+    if (!deleteRangeDraft?.startDate || !deleteRangeDraft?.endDate) return [];
+
+    return animalMovements
+      .filter(
+        (movement) =>
+          movement.kind === "transfer_out" &&
+          isDateWithinRange(movement.date, deleteRangeDraft.startDate, deleteRangeDraft.endDate)
+      )
+      .map((movement) => {
+        const originEstablishment = establishments.find((item) => item.id === movement.establishmentId);
+        const originField = fields.find((item) => item.id === movement.fieldId);
+        const paired = movement.pairedTransferMovementId
+          ? animalMovements.find((item) => item.id === movement.pairedTransferMovementId)
+          : undefined;
+        const destinationEstablishment = paired ? establishments.find((item) => item.id === paired.establishmentId) : undefined;
+        const destinationField = paired ? fields.find((item) => item.id === paired.fieldId) : undefined;
+        const category = categoryCatalog[movement.species]?.find((item) => item.code === movement.categoryCode);
+
+        return {
+          id: movement.id,
+          date: movement.date,
+          origin:
+            originEstablishment && originField
+              ? { establishment: originEstablishment, field: originField }
+              : { establishment: { id: "", name: "?", location: "", hectares: 0 }, field: { id: "", establishmentId: "", name: "?", hectares: 0, notes: "" } },
+          destination:
+            destinationEstablishment && destinationField
+              ? { establishment: destinationEstablishment, field: destinationField }
+              : null,
+          species: movement.species,
+          categoryLabel: category ? formatCategoryLabel(category.label) : movement.categoryCode,
+          quantity: movement.quantity
+        };
+      })
+      .sort(compareRecordsByDateDesc);
+  }, [animalMovements, deleteRangeDraft, establishments, fields]);
+
+  function updateDeleteRangeDraft(patch: Partial<{ startDate: string; endDate: string }>) {
+    setDeleteRangeDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  const isDeleteRangeComplete = Boolean(deleteRangeDraft?.startDate && deleteRangeDraft?.endDate);
+
+  async function handleConfirmDeleteTransfers() {
+    if (!deleteRangeDraft || !isDeleteRangeComplete || deleteTransfersPreview.length === 0 || isDeletingTransfers) return;
+
+    setIsDeletingTransfers(true);
+    const result = await onSubmitDeleteTransfers(deleteTransfersPreview.map((row) => row.id));
+    setIsDeletingTransfers(false);
+
+    if (!result.ok) {
+      setDeleteRangeDraft(null);
+      setBlockedMessage(result.message);
+      return;
+    }
+
+    setDeleteRangeDraft(null);
+    setTranscript("");
+    setStatusMessage({ tone: "info", text: `${result.deletedCount} traslado(s) eliminado(s).` });
+  }
+
+  function handleCancelDeleteTransfers() {
+    if (isDeletingTransfers) return;
+    setDeleteRangeDraft(null);
   }
 
   // Datos del resumen (29/09/2026): animales = stock actual (sin filtro de
@@ -2141,6 +2281,89 @@ export function AgroVoiceSection({
                 onClick={() => void handleConfirmPurchase()}
               >
                 {isSubmitting ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteRangeDraft ? (
+        <div className="confirm-modal-backdrop" role="presentation">
+          <div className="confirm-modal confirm-modal-wide" role="dialog" aria-modal="true" aria-labelledby="voice-delete-confirm-title">
+            <div className="confirm-modal-copy">
+              <strong id="voice-delete-confirm-title">Borrar traslados</strong>
+              <span>Revisa las fechas y la lista antes de confirmar -- esto borra los traslados de verdad.</span>
+            </div>
+            <div className="voice-confirm-summary">
+              <label className="voice-confirm-field">
+                <span>Desde</span>
+                <input
+                  type="date"
+                  value={deleteRangeDraft.startDate}
+                  onChange={(event) => updateDeleteRangeDraft({ startDate: event.target.value })}
+                  disabled={isDeletingTransfers}
+                />
+              </label>
+              <label className="voice-confirm-field">
+                <span>Hasta</span>
+                <input
+                  type="date"
+                  value={deleteRangeDraft.endDate}
+                  onChange={(event) => updateDeleteRangeDraft({ endDate: event.target.value })}
+                  disabled={isDeletingTransfers}
+                />
+              </label>
+            </div>
+
+            {!isDeleteRangeComplete ? (
+              <p className="voice-status voice-status-warning">Completa las dos fechas para ver los traslados.</p>
+            ) : deleteTransfersPreview.length === 0 ? (
+              <p className="voice-status voice-status-info">No hay traslados en ese rango de fechas.</p>
+            ) : (
+              <div className="table-wrap">
+                <table className="animal-ledger-table">
+                  <thead>
+                    <tr>
+                      <th className="cell-date">Fecha</th>
+                      <th className="cell-field">Origen</th>
+                      <th className="cell-field">Destino</th>
+                      <th className="cell-category">Categoria</th>
+                      <th className="cell-number">Cantidad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deleteTransfersPreview.map((row) => (
+                      <tr key={row.id}>
+                        <td>{formatShortDate(row.date)}</td>
+                        <td>
+                          {row.origin.establishment.name} / {row.origin.field.name}
+                        </td>
+                        <td>
+                          {row.destination ? `${row.destination.establishment.name} / ${row.destination.field.name}` : "-"}
+                        </td>
+                        <td>
+                          {speciesLabels[row.species]} · {row.categoryLabel}
+                        </td>
+                        <td className="cell-number">{row.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="voice-summary-totals">Se van a borrar {deleteTransfersPreview.length} traslado(s).</p>
+              </div>
+            )}
+
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={handleCancelDeleteTransfers} disabled={isDeletingTransfers}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button danger"
+                disabled={!isDeleteRangeComplete || deleteTransfersPreview.length === 0 || isDeletingTransfers}
+                onClick={() => void handleConfirmDeleteTransfers()}
+              >
+                {isDeletingTransfers ? "Borrando..." : "Confirmar borrado"}
               </button>
             </div>
           </div>

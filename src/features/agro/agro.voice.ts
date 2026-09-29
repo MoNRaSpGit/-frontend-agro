@@ -1154,3 +1154,75 @@ export function parseVoicePurchaseCommand(transcript: string, data: VoiceTransfe
     unitPrice: slots.unitPrice!
   };
 }
+
+// ---------- Comando "borrar" (29/09/2026, pedido explicito) ----------
+//
+// Frase esperada: "borrar traslados del [dia] [mes] al [dia] [mes]" -- por
+// ahora SOLO borra traslados (el pedido fue asi tal cual: "el borrar por
+// ahora solo borra traslados"). El anio no se dice, se asume el actual
+// (viene por parametro, no se lee el reloj aca para que el parser siga
+// siendo puro/testeable). La confirmacion (mostrar la lista antes de
+// borrar) la hace AgroVoiceSection.tsx, este parser solo devuelve el
+// rango de fechas.
+export type VoiceDeleteTransfersSlots = {
+  startDate: string | null;
+  endDate: string | null;
+};
+
+export type VoiceDeleteTransfersMissingSlot = "startDate" | "endDate";
+
+export type VoiceDeleteTransfersPartial = {
+  status: "partial";
+  slots: VoiceDeleteTransfersSlots;
+  missing: VoiceDeleteTransfersMissingSlot[];
+};
+
+export type VoiceDeleteTransfersReady = {
+  status: "ready";
+  startDate: string;
+  endDate: string;
+};
+
+export type VoiceDeleteTransfersParseResult =
+  | { status: "no_intent" }
+  | VoiceDeleteTransfersPartial
+  | VoiceDeleteTransfersReady;
+
+function parseSpokenDayMonth(tokens: string[], startIndex: number, year: number): { iso: string; consumed: number } | null {
+  const day = parseQuantity(tokens, startIndex);
+  if (!day || day.value < 1 || day.value > 31) return null;
+
+  const month = parseQuantity(tokens, startIndex + day.consumed);
+  if (!month || month.value < 1 || month.value > 12) return null;
+
+  const iso = `${year}-${String(month.value).padStart(2, "0")}-${String(day.value).padStart(2, "0")}`;
+  return { iso, consumed: day.consumed + month.consumed };
+}
+
+export function parseVoiceDeleteTransfersCommand(
+  transcript: string,
+  data: { year: number }
+): VoiceDeleteTransfersParseResult {
+  const tokens = normalize(transcript).split(" ").filter(Boolean);
+
+  if (tokens[0] !== "borrar" || tokens[1] !== "traslados") {
+    return { status: "no_intent" };
+  }
+
+  const delIdx = indexOfToken(tokens, "del", 2);
+  const alIdx = indexOfToken(tokens, "al", delIdx !== -1 ? delIdx + 1 : 2);
+
+  const startDate = delIdx !== -1 ? parseSpokenDayMonth(tokens, delIdx + 1, data.year)?.iso ?? null : null;
+  const endDate = alIdx !== -1 ? parseSpokenDayMonth(tokens, alIdx + 1, data.year)?.iso ?? null : null;
+
+  const slots: VoiceDeleteTransfersSlots = { startDate, endDate };
+  const missing: VoiceDeleteTransfersMissingSlot[] = [];
+  if (!slots.startDate) missing.push("startDate");
+  if (!slots.endDate) missing.push("endDate");
+
+  if (missing.length > 0) {
+    return { status: "partial", slots, missing };
+  }
+
+  return { status: "ready", startDate: slots.startDate!, endDate: slots.endDate! };
+}

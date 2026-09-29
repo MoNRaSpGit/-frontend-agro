@@ -4,6 +4,7 @@ import { Establishment, FieldUnit } from "./agro.types";
 import {
   parseVoiceBirthCommand,
   parseVoiceDeathCommand,
+  parseVoiceDeleteTransfersCommand,
   parseVoicePurchaseCommand,
   parseVoiceRainfallCommand,
   parseVoiceSanityCommand,
@@ -324,5 +325,38 @@ describe("parseVoicePurchaseCommand (29/09/2026)", () => {
     expect(result.slots.quantity).toBe(3);
     expect(result.slots.category?.code).toBe("1");
     expect(result.missing).toEqual(["unitPrice"]);
+  });
+});
+
+describe("parseVoiceDeleteTransfersCommand (29/09/2026)", () => {
+  it("no interpreta nada si no arranca con 'borrar traslados'", () => {
+    expect(parseVoiceDeleteTransfersCommand("hola como estas", { year: 2026 }).status).toBe("no_intent");
+    expect(parseVoiceDeleteTransfersCommand("borrar nacimientos del 1 9 al 2 9", { year: 2026 }).status).toBe(
+      "no_intent"
+    );
+  });
+
+  it("frase completa -- entiende el rango de fechas", () => {
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 9 al 20 9", { year: 2026 });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.startDate).toBe("2026-09-15");
+    expect(result.endDate).toBe("2026-09-20");
+  });
+
+  it("funciona con numeros dichos en palabras", () => {
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del quince nueve al veinte nueve", { year: 2026 });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.startDate).toBe("2026-09-15");
+    expect(result.endDate).toBe("2026-09-20");
+  });
+
+  it("falta la fecha final -- se conserva la inicial", () => {
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 9", { year: 2026 });
+    expect(result.status).toBe("partial");
+    if (result.status !== "partial") return;
+    expect(result.slots.startDate).toBe("2026-09-15");
+    expect(result.missing).toEqual(["endDate"]);
   });
 });

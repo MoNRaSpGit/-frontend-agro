@@ -919,6 +919,13 @@ button {
   background: #2b5f8a;
 }
 
+/* Boton de confirmar un borrado destructivo (29/09/2026, "borrar
+   traslados" por voz) -- rojo, para que se note que no es una accion
+   comun. */
+.primary-button.danger {
+  background: #8c3e2c;
+}
+
 .ghost-button {
   border: 1px solid rgba(60, 77, 49, 0.18);
   border-radius: 12px;
@@ -1486,6 +1493,12 @@ th {
   padding: 22px;
   display: grid;
   gap: 18px;
+}
+
+/* Modal mas ancho para mostrar la tabla de vista previa de "borrar
+   traslados" (29/09/2026) sin que quede apretada. */
+.confirm-modal.confirm-modal-wide {
+  width: min(700px, 100%);
 }
 
 .confirm-modal-copy {

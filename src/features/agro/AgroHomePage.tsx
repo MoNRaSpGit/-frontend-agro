@@ -2882,6 +2882,78 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     });
   }
 
+  // Comando de voz "borrar traslados" (29/09/2026, pedido explicito): "de
+  // una fecha a otra fecha", mostrando antes la lista y pidiendo
+  // confirmacion (eso lo hace AgroVoiceSection.tsx -- aca solo se valida y
+  // se borra de verdad). Misma protecion que requestDeleteAnimalMovement
+  // (el bloqueo duro de saldo negativo, nacido del incidente del 08/09 en
+  // Aguila Blanca), pero generalizada a TODO el lote junto: si borrar
+  // cualquiera de los traslados del rango dejaria algun potrero en
+  // negativo, no se borra NADA (pedido explicito: "no borrar nada del
+  // lote" antes que un borrado a medias).
+  function submitVoiceDeleteTransfers(
+    transferOutIds: string[]
+  ): Promise<{ ok: true; deletedCount: number } | { ok: false; message: string }> {
+    return new Promise((resolve) => {
+      const idsToDelete = new Set<string>();
+      for (const id of transferOutIds) {
+        const movement = animalMovements.find((item) => item.id === id);
+        if (!movement) continue;
+        idsToDelete.add(movement.id);
+        if (movement.pairedTransferMovementId) idsToDelete.add(movement.pairedTransferMovementId);
+      }
+
+      const deletedRecords = animalMovements.filter((item) => idsToDelete.has(item.id));
+
+      const affectedKeys = new Set(
+        deletedRecords.map((record) => `${record.fieldId}:${record.species}:${record.categoryCode}`)
+      );
+      const brokenBalances: string[] = [];
+
+      for (const key of affectedKeys) {
+        const [fieldId, species, categoryCode] = key.split(":") as [string, AgroSpecies, string];
+        const currentBalance = stockBalanceMap.get(key) ?? 0;
+        const removedEffect = deletedRecords
+          .filter((record) => `${record.fieldId}:${record.species}:${record.categoryCode}` === key)
+          .reduce((sum, record) => sum + (getMovementDirection(record) === "entry" ? record.quantity : -record.quantity), 0);
+        const resultingBalance = currentBalance - removedEffect;
+
+        if (resultingBalance < 0) {
+          const fieldName = fields.find((item) => item.id === fieldId)?.name ?? fieldId;
+          const categoryLabel = categoryCatalog[species]?.find((item) => item.code === categoryCode)?.label ?? categoryCode;
+          brokenBalances.push(
+            `${fieldName} (${speciesLabels[species]}, ${categoryLabel}): quedaria en ${formatNumber(resultingBalance, 0)}`
+          );
+        }
+      }
+
+      if (brokenBalances.length > 0) {
+        resolve({
+          ok: false,
+          message: `No se borro nada: al menos un traslado del rango dejaria un saldo imposible. ${brokenBalances.join(" · ")}. Revisa los traslados antes de continuar.`
+        });
+        return;
+      }
+
+      setAnimalMovements((current) => current.filter((item) => !idsToDelete.has(item.id)));
+
+      const now = Date.now();
+      const deleteAuditEntries: AgroAuditEntry[] = deletedRecords.map((record, index) => ({
+        id: `audit-${now}-${index}-${record.id}`,
+        action: "delete",
+        movementId: record.id,
+        before: record,
+        after: null
+      }));
+      if (deleteAuditEntries.length > 0) {
+        setAuditLog((current) => [...deleteAuditEntries, ...current]);
+      }
+
+      showSuccess(`${transferOutIds.length} traslado(s) eliminado(s).`);
+      resolve({ ok: true, deletedCount: transferOutIds.length });
+    });
+  }
+
   // Dispara el submit real recien cuando animalForm ya tiene los datos del
   // traslado de voz cargados (setAnimalForm es asincronico -- no se puede
   // llamar a handleAnimalSubmit en el mismo tick porque leeria el estado
@@ -4193,9 +4265,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             onSubmitDeath={submitVoiceDeath}
             onSubmitRainfall={submitVoiceRainfall}
             onSubmitPurchase={submitVoicePurchase}
+            onSubmitDeleteTransfers={submitVoiceDeleteTransfers}
             stockBalanceMap={stockBalanceMap}
             sanitaryRecords={sanitaryRecords}
             accountingEntries={accountingEntries}
+            animalMovements={animalMovements}
           />
         ) : null}
 
