@@ -1167,6 +1167,12 @@ export function parseVoicePurchaseCommand(transcript: string, data: VoiceTransfe
 export type VoiceDeleteTransfersSlots = {
   startDate: string | null;
   endDate: string | null;
+  // Filtro opcional (pedido explicito, 29/09/2026): si se dice "del campo
+  // [establecimiento]", solo entran los traslados donde ese campo este
+  // involucrado (como origen O como destino). null = todos los campos --
+  // nunca cuenta como "faltante", es un filtro de mas, no un dato
+  // obligatorio.
+  establishment: Establishment | null;
 };
 
 export type VoiceDeleteTransfersMissingSlot = "startDate" | "endDate";
@@ -1181,6 +1187,7 @@ export type VoiceDeleteTransfersReady = {
   status: "ready";
   startDate: string;
   endDate: string;
+  establishment: Establishment | null;
 };
 
 export type VoiceDeleteTransfersParseResult =
@@ -1210,9 +1217,14 @@ function parseSpokenDayMonth(tokens: string[], startIndex: number, year: number)
   return { iso, consumed: day.consumed + delConsumed + month.consumed };
 }
 
+// Frase con filtro de campo opcional: "borrar traslados del [dia] del
+// [mes] al [dia] del [mes] del campo [establecimiento]" -- el filtro va
+// al final, despues del rango de fechas, para no confundirse con los
+// "del" propios de las fechas (el "campo" es la palabra que lo distingue
+// sin ambiguedad).
 export function parseVoiceDeleteTransfersCommand(
   transcript: string,
-  data: { year: number }
+  data: { year: number; establishments: Establishment[] }
 ): VoiceDeleteTransfersParseResult {
   const tokens = normalize(transcript).split(" ").filter(Boolean);
 
@@ -1223,10 +1235,28 @@ export function parseVoiceDeleteTransfersCommand(
   const delIdx = indexOfToken(tokens, "del", 2);
   const alIdx = indexOfToken(tokens, "al", delIdx !== -1 ? delIdx + 1 : 2);
 
-  const startDate = delIdx !== -1 ? parseSpokenDayMonth(tokens, delIdx + 1, data.year)?.iso ?? null : null;
-  const endDate = alIdx !== -1 ? parseSpokenDayMonth(tokens, alIdx + 1, data.year)?.iso ?? null : null;
+  const startParsed = delIdx !== -1 ? parseSpokenDayMonth(tokens, delIdx + 1, data.year) : null;
+  const endParsed = alIdx !== -1 ? parseSpokenDayMonth(tokens, alIdx + 1, data.year) : null;
 
-  const slots: VoiceDeleteTransfersSlots = { startDate, endDate };
+  // Punto desde donde buscar "campo": justo despues de lo ultimo que se
+  // logro leer (fecha final si se entendio, si no desde donde haya
+  // quedado el resto de la frase).
+  const afterDates = endParsed
+    ? alIdx + 1 + endParsed.consumed
+    : alIdx !== -1
+      ? alIdx + 1
+      : startParsed
+        ? delIdx + 1 + startParsed.consumed
+        : 2;
+
+  const campoIdx = indexOfToken(tokens, "campo", afterDates);
+  let establishment: Establishment | null = null;
+  if (campoIdx !== -1) {
+    const establishmentTokens = stripLeadingFillers(tokens.slice(campoIdx + 1), ESTABLISHMENT_FILLERS);
+    establishment = matchEntityAtStart(establishmentTokens, buildEstablishmentCandidates(data.establishments))?.value ?? null;
+  }
+
+  const slots: VoiceDeleteTransfersSlots = { startDate: startParsed?.iso ?? null, endDate: endParsed?.iso ?? null, establishment };
   const missing: VoiceDeleteTransfersMissingSlot[] = [];
   if (!slots.startDate) missing.push("startDate");
   if (!slots.endDate) missing.push("endDate");
@@ -1235,5 +1265,5 @@ export function parseVoiceDeleteTransfersCommand(
     return { status: "partial", slots, missing };
   }
 
-  return { status: "ready", startDate: slots.startDate!, endDate: slots.endDate! };
+  return { status: "ready", startDate: slots.startDate!, endDate: slots.endDate!, establishment: slots.establishment };
 }

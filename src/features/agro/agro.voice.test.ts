@@ -330,14 +330,14 @@ describe("parseVoicePurchaseCommand (29/09/2026)", () => {
 
 describe("parseVoiceDeleteTransfersCommand (29/09/2026)", () => {
   it("no interpreta nada si no arranca con 'borrar traslados'", () => {
-    expect(parseVoiceDeleteTransfersCommand("hola como estas", { year: 2026 }).status).toBe("no_intent");
-    expect(parseVoiceDeleteTransfersCommand("borrar nacimientos del 1 9 al 2 9", { year: 2026 }).status).toBe(
+    expect(parseVoiceDeleteTransfersCommand("hola como estas", { year: 2026, establishments }).status).toBe("no_intent");
+    expect(parseVoiceDeleteTransfersCommand("borrar nacimientos del 1 9 al 2 9", { year: 2026, establishments }).status).toBe(
       "no_intent"
     );
   });
 
   it("frase completa -- entiende el rango de fechas", () => {
-    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 9 al 20 9", { year: 2026 });
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 9 al 20 9", { year: 2026, establishments });
     expect(result.status).toBe("ready");
     if (result.status !== "ready") return;
     expect(result.startDate).toBe("2026-09-15");
@@ -345,7 +345,7 @@ describe("parseVoiceDeleteTransfersCommand (29/09/2026)", () => {
   });
 
   it("funciona con numeros dichos en palabras", () => {
-    const result = parseVoiceDeleteTransfersCommand("borrar traslados del quince nueve al veinte nueve", { year: 2026 });
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del quince nueve al veinte nueve", { year: 2026, establishments });
     expect(result.status).toBe("ready");
     if (result.status !== "ready") return;
     expect(result.startDate).toBe("2026-09-15");
@@ -353,7 +353,7 @@ describe("parseVoiceDeleteTransfersCommand (29/09/2026)", () => {
   });
 
   it("falta la fecha final -- se conserva la inicial", () => {
-    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 9", { year: 2026 });
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 9", { year: 2026, establishments });
     expect(result.status).toBe("partial");
     if (result.status !== "partial") return;
     expect(result.slots.startDate).toBe("2026-09-15");
@@ -361,10 +361,32 @@ describe("parseVoiceDeleteTransfersCommand (29/09/2026)", () => {
   });
 
   it("con 'del' entre dia y mes (recomendado para que Chrome no pegue los numeros) -- funciona igual", () => {
-    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 del 9 al 29 del 9", { year: 2026 });
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 del 9 al 29 del 9", { year: 2026, establishments });
     expect(result.status).toBe("ready");
     if (result.status !== "ready") return;
     expect(result.startDate).toBe("2026-09-15");
     expect(result.endDate).toBe("2026-09-29");
+  });
+
+  it("con filtro de campo -- entiende el establecimiento ademas del rango", () => {
+    const result = parseVoiceDeleteTransfersCommand(
+      "borrar traslados del 15 del 9 al 29 del 9 del campo la milagrosa",
+      { year: 2026, establishments }
+    );
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.startDate).toBe("2026-09-15");
+    expect(result.endDate).toBe("2026-09-29");
+    expect(result.establishment?.id).toBe("est-milagrosa");
+  });
+
+  it("sin filtro de campo -- queda null (todos los campos)", () => {
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 del 9 al 29 del 9", {
+      year: 2026,
+      establishments
+    });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.establishment).toBeNull();
   });
 });

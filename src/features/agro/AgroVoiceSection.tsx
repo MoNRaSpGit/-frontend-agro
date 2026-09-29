@@ -353,8 +353,10 @@ function buildPurchaseExampleParts(establishments: Establishment[], fields: Fiel
 
 // Mismo criterio, para "borrar traslados" (29/09/2026): fechas fijas en
 // el ejemplo (no depende de datos reales del cliente).
-function buildDeleteTransfersExampleParts(): ExamplePart[] {
-  return [
+function buildDeleteTransfersExampleParts(establishments: Establishment[]): ExamplePart[] {
+  const establishment = establishments[0];
+
+  const base: ExamplePart[] = [
     { text: "Borrar traslados", keyword: true },
     { text: " ", keyword: false },
     { text: "del", keyword: true },
@@ -364,7 +366,17 @@ function buildDeleteTransfersExampleParts(): ExamplePart[] {
     { text: "al", keyword: true },
     { text: " 20 ", keyword: false },
     { text: "del", keyword: true },
-    { text: " 9.", keyword: false }
+    { text: " 9", keyword: false }
+  ];
+
+  if (!establishment) return [...base, { text: ".", keyword: false }];
+
+  return [
+    ...base,
+    { text: " ", keyword: false },
+    { text: "del campo", keyword: true },
+    { text: ` ${establishment.name} `, keyword: false },
+    { text: "(opcional, para acotarlo a un solo campo).", keyword: false }
   ];
 }
 
@@ -467,7 +479,11 @@ export function AgroVoiceSection({
   // entendio) y, debajo, la vista previa de los traslados que entran en
   // ese rango -- se recalcula sola cada vez que se toca una fecha. No se
   // borra nada hasta tocar "Confirmar borrado".
-  const [deleteRangeDraft, setDeleteRangeDraft] = useState<{ startDate: string; endDate: string } | null>(null);
+  const [deleteRangeDraft, setDeleteRangeDraft] = useState<{
+    startDate: string;
+    endDate: string;
+    establishmentId: string;
+  } | null>(null);
   const [isDeletingTransfers, setIsDeletingTransfers] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
@@ -486,7 +502,7 @@ export function AgroVoiceSection({
   const deathExampleParts = useMemo(() => buildDeathExampleParts(establishments, fields), [establishments, fields]);
   const rainfallExampleParts = useMemo(() => buildRainfallExampleParts(establishments), [establishments]);
   const purchaseExampleParts = useMemo(() => buildPurchaseExampleParts(establishments, fields), [establishments, fields]);
-  const deleteTransfersExampleParts = useMemo(() => buildDeleteTransfersExampleParts(), []);
+  const deleteTransfersExampleParts = useMemo(() => buildDeleteTransfersExampleParts(establishments), [establishments]);
   const summaryExampleParts = useMemo(() => buildSummaryExampleParts(establishments, fields), [establishments, fields]);
   const exampleParts =
     selectedExampleKind === "traslado"
@@ -760,17 +776,28 @@ export function AgroVoiceSection({
       return;
     }
 
-    const deleteResult = parseVoiceDeleteTransfersCommand(heard, { year: Number(getTodayDate().slice(0, 4)) });
+    const deleteResult = parseVoiceDeleteTransfersCommand(heard, {
+      year: Number(getTodayDate().slice(0, 4)),
+      establishments
+    });
     if (deleteResult.status !== "no_intent") {
       setStatusMessage(null);
       setActiveSummary(null);
 
       if (deleteResult.status === "ready") {
-        setDeleteRangeDraft({ startDate: deleteResult.startDate, endDate: deleteResult.endDate });
+        setDeleteRangeDraft({
+          startDate: deleteResult.startDate,
+          endDate: deleteResult.endDate,
+          establishmentId: deleteResult.establishment?.id ?? ""
+        });
         return;
       }
 
-      setDeleteRangeDraft({ startDate: deleteResult.slots.startDate ?? "", endDate: deleteResult.slots.endDate ?? "" });
+      setDeleteRangeDraft({
+        startDate: deleteResult.slots.startDate ?? "",
+        endDate: deleteResult.slots.endDate ?? "",
+        establishmentId: deleteResult.slots.establishment?.id ?? ""
+      });
       return;
     }
 
@@ -1139,10 +1166,20 @@ export function AgroVoiceSection({
           quantity: movement.quantity
         };
       })
+      .filter((row) => {
+        // Filtro opcional de campo (29/09/2026, pedido explicito): si se
+        // eligio un establecimiento, solo entran los traslados donde ese
+        // campo este involucrado, sea como origen o como destino.
+        if (!deleteRangeDraft.establishmentId) return true;
+        return (
+          row.origin.establishment.id === deleteRangeDraft.establishmentId ||
+          row.destination?.establishment.id === deleteRangeDraft.establishmentId
+        );
+      })
       .sort(compareRecordsByDateDesc);
   }, [animalMovements, deleteRangeDraft, establishments, fields]);
 
-  function updateDeleteRangeDraft(patch: Partial<{ startDate: string; endDate: string }>) {
+  function updateDeleteRangeDraft(patch: Partial<{ startDate: string; endDate: string; establishmentId: string }>) {
     setDeleteRangeDraft((current) => (current ? { ...current, ...patch } : current));
   }
 
@@ -2296,7 +2333,10 @@ export function AgroVoiceSection({
           <div className="confirm-modal confirm-modal-wide" role="dialog" aria-modal="true" aria-labelledby="voice-delete-confirm-title">
             <div className="confirm-modal-copy">
               <strong id="voice-delete-confirm-title">Borrar traslados</strong>
-              <span>Revisa las fechas y la lista antes de confirmar -- esto borra los traslados de verdad.</span>
+              <span>
+                Revisa las fechas (y el campo, si querés acotarlo) y la lista antes de confirmar -- esto borra los
+                traslados de verdad.
+              </span>
             </div>
             <div className="voice-confirm-summary">
               <label className="voice-confirm-field">
@@ -2316,6 +2356,21 @@ export function AgroVoiceSection({
                   onChange={(event) => updateDeleteRangeDraft({ endDate: event.target.value })}
                   disabled={isDeletingTransfers}
                 />
+              </label>
+              <label className="voice-confirm-field">
+                <span>Campo (opcional)</span>
+                <select
+                  value={deleteRangeDraft.establishmentId}
+                  onChange={(event) => updateDeleteRangeDraft({ establishmentId: event.target.value })}
+                  disabled={isDeletingTransfers}
+                >
+                  <option value="">Todos los campos</option>
+                  {establishments.map((establishment) => (
+                    <option key={establishment.id} value={establishment.id}>
+                      {establishment.name}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
 
