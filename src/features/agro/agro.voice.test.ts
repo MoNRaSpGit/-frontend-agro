@@ -359,4 +359,12 @@ describe("parseVoiceDeleteTransfersCommand (29/09/2026)", () => {
     expect(result.slots.startDate).toBe("2026-09-15");
     expect(result.missing).toEqual(["endDate"]);
   });
+
+  it("con 'del' entre dia y mes (recomendado para que Chrome no pegue los numeros) -- funciona igual", () => {
+    const result = parseVoiceDeleteTransfersCommand("borrar traslados del 15 del 9 al 29 del 9", { year: 2026 });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.startDate).toBe("2026-09-15");
+    expect(result.endDate).toBe("2026-09-29");
+  });
 });

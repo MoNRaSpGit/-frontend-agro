@@ -358,9 +358,13 @@ function buildDeleteTransfersExampleParts(): ExamplePart[] {
     { text: "Borrar traslados", keyword: true },
     { text: " ", keyword: false },
     { text: "del", keyword: true },
-    { text: " 15 9 ", keyword: false },
+    { text: " 15 ", keyword: false },
+    { text: "del", keyword: true },
+    { text: " 9 ", keyword: false },
     { text: "al", keyword: true },
-    { text: " 20 9.", keyword: false }
+    { text: " 20 ", keyword: false },
+    { text: "del", keyword: true },
+    { text: " 9.", keyword: false }
   ];
 }
 

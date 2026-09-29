@@ -1192,11 +1192,22 @@ function parseSpokenDayMonth(tokens: string[], startIndex: number, year: number)
   const day = parseQuantity(tokens, startIndex);
   if (!day || day.value < 1 || day.value > 31) return null;
 
-  const month = parseQuantity(tokens, startIndex + day.consumed);
+  // "del" entre dia y mes es opcional pero se recomienda decirlo (pedido
+  // explicito, 29/09/2026): sin el, Chrome a veces pega los dos numeros
+  // dichos seguidos en uno solo (ej "15 9" -> "159"), y ya no se puede
+  // separar. Con "del" en el medio, cada numero queda su propio token.
+  let monthIndex = startIndex + day.consumed;
+  let delConsumed = 0;
+  if (tokens[monthIndex] === "del") {
+    delConsumed = 1;
+    monthIndex += 1;
+  }
+
+  const month = parseQuantity(tokens, monthIndex);
   if (!month || month.value < 1 || month.value > 12) return null;
 
   const iso = `${year}-${String(month.value).padStart(2, "0")}-${String(day.value).padStart(2, "0")}`;
-  return { iso, consumed: day.consumed + month.consumed };
+  return { iso, consumed: day.consumed + delConsumed + month.consumed };
 }
 
 export function parseVoiceDeleteTransfersCommand(
