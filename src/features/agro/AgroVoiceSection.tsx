@@ -593,26 +593,38 @@ export function AgroVoiceSection({
       // reloj de silencio.
       resetSilenceTimer();
 
-      // Con continuous=true, event.results va acumulando TODOS los
-      // pedazos de la sesion (los ya finalizados se quedan, el ultimo
-      // puede seguir siendo parcial) -- se junta todo para mostrar/usar
-      // la frase completa dicha hasta ahora, sin depender de que cada
-      // pedazo se marque "final" (en algunos navegadores eso no es
-      // confiable -- ver comentario mas arriba sobre iPhone).
+      // Con continuous=true, event.results va acumulando los pedazos de
+      // la sesion. Los ya marcados "final" (isFinal=true) quedan fijos
+      // para siempre y hay que sumarlos todos. El/los que todavia estan
+      // "en progreso" (isFinal=false) son otra historia:
       //
-      // Chrome para Android (29/09/2026, pedido explicito: "se escucho
-      // traslado se escucho traslado se escucho traslado...") repite el
-      // mismo pedazo tal cual en varios indices seguidos de "results" en
-      // vez de dejarlo fijo en uno solo -- se saltea cualquier pedazo
-      // identico al anterior para no acumularlo de nuevo.
-      let combined = "";
-      let lastSegment = "";
+      // Chrome de escritorio actualiza SIEMPRE el mismo indice en
+      // progreso in-place -- solo hay uno interino a la vez.
+      //
+      // Chrome para Android (30/09/2026, reportado de nuevo tras el
+      // primer intento de arreglo: "traslado, traslado de la, traslado
+      // de la milagrosa, traslado de la milagrosa a...") en cambio va
+      // agregando un indice NUEVO cada vez que crece la frase en
+      // progreso, en vez de reemplazar el anterior -- cada uno ya
+      // contiene TODO lo dicho hasta ese momento, uno mas largo que el
+      // otro. Sumarlos todos (como hacia el primer intento de arreglo,
+      // que solo saltaba duplicados EXACTOS) repite y encima duplica la
+      // frase creciendo de a poco. La solucion es no sumar los
+      // interinos entre si: quedarse solo con el ULTIMO (el mas
+      // completo), y sumarlo una sola vez a lo ya finalizado.
+      let finalText = "";
+      let interimText = "";
       for (let i = 0; i < event.results.length; i++) {
-        const text = (event.results[i]?.[0]?.transcript ?? "").trim();
-        if (!text || text === lastSegment) continue;
-        combined += (combined ? " " : "") + text;
-        lastSegment = text;
+        const result = event.results[i];
+        const text = (result?.[0]?.transcript ?? "").trim();
+        if (!text) continue;
+        if (result.isFinal) {
+          finalText += (finalText ? " " : "") + text;
+        } else {
+          interimText = text;
+        }
       }
+      const combined = finalText && interimText ? `${finalText} ${interimText}` : finalText || interimText;
       heardSoFarRef.current = combined;
       setTranscript(combined);
     };
