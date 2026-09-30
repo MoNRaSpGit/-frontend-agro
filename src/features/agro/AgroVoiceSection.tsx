@@ -614,41 +614,38 @@ export function AgroVoiceSection({
       resetSilenceTimer();
 
       // Con continuous=true, event.results va acumulando los pedazos de
-      // la sesion. Los ya marcados "final" (isFinal=true) quedan fijos
-      // para siempre y hay que sumarlos todos. El/los que todavia estan
-      // "en progreso" (isFinal=false) son otra historia:
+      // la sesion, pero "isFinal" NO es confiable para saber si hay que
+      // sumar un pedazo o reemplazar el anterior -- se confirmo con el
+      // log real de un Android (30/09/2026, tabla
+      // saas_agro_voice_debug_logs, ver backend/scripts/read-voice-debug-log.js):
+      // TODAS las entradas venian con isFinal=true, cada una ya siendo
+      // la frase completa dicha hasta ese momento y un poco mas larga
+      // que la anterior ("traslado" -> "traslado" -> "traslado de" ->
+      // "traslado de la" -> ... -> la frase entera). Sumar todo lo
+      // marcado "final" (como hacian los dos intentos de arreglo
+      // anteriores) repetia y duplicaba la frase creciendo de a poco.
       //
-      // Chrome de escritorio actualiza SIEMPRE el mismo indice en
-      // progreso in-place -- solo hay uno interino a la vez.
-      //
-      // Chrome para Android (30/09/2026, reportado de nuevo tras el
-      // primer intento de arreglo: "traslado, traslado de la, traslado
-      // de la milagrosa, traslado de la milagrosa a...") en cambio va
-      // agregando un indice NUEVO cada vez que crece la frase en
-      // progreso, en vez de reemplazar el anterior -- cada uno ya
-      // contiene TODO lo dicho hasta ese momento, uno mas largo que el
-      // otro. Sumarlos todos (como hacia el primer intento de arreglo,
-      // que solo saltaba duplicados EXACTOS) repite y encima duplica la
-      // frase creciendo de a poco. La solucion es no sumar los
-      // interinos entre si: quedarse solo con el ULTIMO (el mas
-      // completo), y sumarlo una sola vez a lo ya finalizado.
-      let finalText = "";
-      let interimText = "";
+      // La forma correcta, que sirve para cualquier navegador sin
+      // depender de isFinal: por cada pedazo nuevo, si YA CONTIENE
+      // (empieza igual que) lo acumulado hasta ahora, es una version
+      // mas larga de lo mismo -- se reemplaza. Si es genuinamente
+      // distinto (p.ej. en PC, una frase nueva despues de una pausa
+      // real), se agrega.
+      let combined = "";
       const rawDebug: { index: number; isFinal: boolean; text: string }[] = [];
       for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
         const text = (result?.[0]?.transcript ?? "").trim();
         rawDebug.push({ index: i, isFinal: Boolean(result?.isFinal), text });
         if (!text) continue;
-        if (result.isFinal) {
-          finalText += (finalText ? " " : "") + text;
+        if (!combined || text.toLowerCase().startsWith(combined.toLowerCase())) {
+          combined = text;
         } else {
-          interimText = text;
+          combined += ` ${text}`;
         }
       }
       setRawResultsDebug(rawDebug);
       rawResultsDebugRef.current = rawDebug;
-      const combined = finalText && interimText ? `${finalText} ${interimText}` : finalText || interimText;
       heardSoFarRef.current = combined;
       setTranscript(combined);
     };
