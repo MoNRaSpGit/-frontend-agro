@@ -1706,20 +1706,6 @@ th {
   color: #3a4738;
 }
 
-/* Caja de debug TEMPORAL (30/09/2026) para ver el detalle crudo de
-   event.results en el bug de transcript duplicado en Android -- sacar
-   una vez encontrada la causa real. */
-.voice-debug-raw {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(35, 48, 31, 0.08);
-  color: #3a4738;
-  font-size: 12px;
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 
 .voice-status {
   border-radius: 12px;

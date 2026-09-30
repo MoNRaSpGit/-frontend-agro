@@ -33,7 +33,6 @@ import {
   VoiceTransferSlots
 } from "./agro.voice";
 import { BIRTH_CATEGORY_CODE, categoryCatalog, speciesLabels } from "./agro.demo.data";
-import { AgroPersistenceMode, sendVoiceDebugLog } from "./agro.client";
 
 // Pestana "Voz" (22/09/2026, pasada a produccion 26/09/2026, pedido
 // explicito: "que si guarde en la BDD, que no sea una demo"). Interpreta
@@ -77,9 +76,6 @@ type AgroVoiceSectionProps = {
   accountingEntries: AccountingEntry[];
   // Para armar la vista previa de "borrar traslados" antes de confirmar.
   animalMovements: AnimalMovementRecord[];
-  // Debug TEMPORAL (30/09/2026): para mandar el log crudo del bug de
-  // Android -- ver comentario en agro.client.ts#sendVoiceDebugLog.
-  persistenceMode: AgroPersistenceMode;
 };
 
 type DeleteTransferPreviewRow = {
@@ -420,8 +416,7 @@ export function AgroVoiceSection({
   stockBalanceMap,
   sanitaryRecords,
   accountingEntries,
-  animalMovements,
-  persistenceMode
+  animalMovements
 }: AgroVoiceSectionProps) {
   const [isSupported, setIsSupported] = useState(true);
   const [isListening, setIsListening] = useState(false);
@@ -497,14 +492,6 @@ export function AgroVoiceSection({
   const maxListeningTimeoutRef = useRef<number | null>(null);
   const heardSoFarRef = useRef("");
   const hadErrorRef = useRef(false);
-  // Debug TEMPORAL (30/09/2026): el arreglo del duplicado de Android no
-  // alcanzo ("traslado, traslado, traslado..." sigue apareciendo tal
-  // cual despues del fix) -- en vez de seguir adivinando a ciegas, se
-  // muestra en pantalla el contenido crudo de cada indice de
-  // event.results (con su isFinal) para ver exactamente que esta
-  // mandando el celular. Sacar esto una vez encontrada la causa real.
-  const [rawResultsDebug, setRawResultsDebug] = useState<{ index: number; isFinal: boolean; text: string }[]>([]);
-  const rawResultsDebugRef = useRef<{ index: number; isFinal: boolean; text: string }[]>([]);
 
   // Selector de ejemplo (29/09/2026, pedido explicito): en vez de mostrar
   // siempre el ejemplo de traslado, se elige de un desplegable cual
@@ -576,8 +563,6 @@ export function AgroVoiceSection({
 
     setStatusMessage(null);
     setTranscript("");
-    setRawResultsDebug([]);
-    rawResultsDebugRef.current = [];
     heardSoFarRef.current = "";
     hadErrorRef.current = false;
 
@@ -632,11 +617,8 @@ export function AgroVoiceSection({
       // distinto (p.ej. en PC, una frase nueva despues de una pausa
       // real), se agrega.
       let combined = "";
-      const rawDebug: { index: number; isFinal: boolean; text: string }[] = [];
       for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        const text = (result?.[0]?.transcript ?? "").trim();
-        rawDebug.push({ index: i, isFinal: Boolean(result?.isFinal), text });
+        const text = (event.results[i]?.[0]?.transcript ?? "").trim();
         if (!text) continue;
         if (!combined || text.toLowerCase().startsWith(combined.toLowerCase())) {
           combined = text;
@@ -644,8 +626,6 @@ export function AgroVoiceSection({
           combined += ` ${text}`;
         }
       }
-      setRawResultsDebug(rawDebug);
-      rawResultsDebugRef.current = rawDebug;
       heardSoFarRef.current = combined;
       setTranscript(combined);
     };
@@ -666,12 +646,6 @@ export function AgroVoiceSection({
     recognition.onend = () => {
       clearListeningTimers();
       setIsListening(false);
-      // Debug TEMPORAL (30/09/2026): manda lo escuchado crudo al backend
-      // para leerlo desde ahi -- ver comentario en
-      // agro.client.ts#sendVoiceDebugLog.
-      if (rawResultsDebugRef.current.length > 0) {
-        void sendVoiceDebugLog(persistenceMode, heardSoFarRef.current, rawResultsDebugRef.current);
-      }
       if (!hadErrorRef.current && heardSoFarRef.current.trim()) {
         handleTranscript(heardSoFarRef.current);
       }
@@ -1453,13 +1427,6 @@ export function AgroVoiceSection({
               <p className="voice-transcript">
                 Se escucho: <strong>"{transcript}"</strong>
               </p>
-            ) : null}
-            {rawResultsDebug.length > 0 ? (
-              <pre className="voice-debug-raw">
-                {rawResultsDebug
-                  .map((entry) => `[${entry.index}] final=${entry.isFinal ? "si" : "no"}: "${entry.text}"`)
-                  .join("\n")}
-              </pre>
             ) : null}
             {statusMessage ? <p className={`voice-status voice-status-${statusMessage.tone}`}>{statusMessage.text}</p> : null}
           </div>

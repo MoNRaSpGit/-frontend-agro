@@ -4270,7 +4270,6 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             sanitaryRecords={sanitaryRecords}
             accountingEntries={accountingEntries}
             animalMovements={animalMovements}
-            persistenceMode={persistenceMode}
           />
         ) : null}
 
