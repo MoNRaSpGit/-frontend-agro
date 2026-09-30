@@ -106,3 +106,27 @@ export async function saveAgroWorkspace(
 
   return (await response.json()) as AgroWorkspaceSnapshot;
 }
+
+// Debug TEMPORAL (30/09/2026) para el bug de transcript duplicado en
+// Android: manda al backend lo que se escucho crudo para poder leerlo
+// desde ahi con scripts/read-voice-debug-log.js, en vez de depender de
+// que el usuario transcriba capturas de pantalla a mano. Se traga
+// cualquier error (nunca debe romper el flujo de voz por esto) y solo
+// aplica en modo "backend" (en demo-local no hay sesion real).
+export async function sendVoiceDebugLog(
+  mode: AgroPersistenceMode,
+  transcript: string,
+  rawResults: { index: number; isFinal: boolean; text: string }[]
+) {
+  if (mode !== "backend") return;
+
+  try {
+    await fetchWithAgroAuth(buildApiUrl("/agro/voice-debug-log"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userAgent: navigator.userAgent, transcript, rawResults })
+    });
+  } catch {
+    // debug best-effort, no bloquea el flujo de voz.
+  }
+}
