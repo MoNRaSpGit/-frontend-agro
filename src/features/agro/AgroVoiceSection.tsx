@@ -497,7 +497,10 @@ export function AgroVoiceSection({
   // siempre el ejemplo de traslado, se elige de un desplegable cual
   // comando ver -- asi entran los 7 que se vayan armando sin amontonar
   // texto en la pantalla.
-  const [selectedExampleKind, setSelectedExampleKind] = useState<VoiceExampleKind>("traslado");
+  // Arranca sin nada seleccionado (30/09/2026, pedido explicito: "que al
+  // principio no muestre nada... no tenga el traslado predeterminado
+  // como tiene actualmente") -- el usuario elige el ejemplo a mano.
+  const [selectedExampleKind, setSelectedExampleKind] = useState<VoiceExampleKind | "">("");
   const transferExampleParts = useMemo(() => buildExampleParts(establishments, fields), [establishments, fields]);
   const birthExampleParts = useMemo(() => buildBirthExampleParts(establishments, fields), [establishments, fields]);
   const sanityExampleParts = useMemo(() => buildSanityExampleParts(establishments, fields), [establishments, fields]);
@@ -521,7 +524,9 @@ export function AgroVoiceSection({
                 ? purchaseExampleParts
                 : selectedExampleKind === "borrar"
                   ? deleteTransfersExampleParts
-                  : summaryExampleParts;
+                  : selectedExampleKind === "resumen"
+                    ? summaryExampleParts
+                    : null;
 
   useEffect(() => {
     setIsSupported(getSpeechRecognitionConstructor() !== null);
@@ -1393,8 +1398,9 @@ export function AgroVoiceSection({
           <select
             id="voice-example-select"
             value={selectedExampleKind}
-            onChange={(event) => setSelectedExampleKind(event.target.value as VoiceExampleKind)}
+            onChange={(event) => setSelectedExampleKind(event.target.value as VoiceExampleKind | "")}
           >
+            <option value="">Seleccione un ejemplo...</option>
             {(Object.keys(VOICE_EXAMPLE_LABELS) as VoiceExampleKind[]).map((kind) => (
               <option key={kind} value={kind}>
                 {VOICE_EXAMPLE_LABELS[kind]}
