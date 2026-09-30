@@ -1,10 +1,10 @@
 /* global self, caches, fetch, URL */
 
-// v4 (26/09/2026): los iconos de la PWA cambiaron (logo del cliente) y las
-// imagenes se sirven "cache primero, nunca se revisa de nuevo" -- sin subir
-// la version aca, el navegador sigue mostrando los iconos viejos para
-// siempre aunque el archivo en el servidor ya haya cambiado.
-const CACHE_NAME = "saaspro-agro-v4";
+// v5 (30/09/2026): bug de voz duplicada en Android -- se sube la version
+// por las dudas de que el celular este sirviendo un JS viejo cacheado a
+// pesar de los ultimos deploys (los scripts ya se piden "no-store", pero
+// esto fuerza tambien una limpieza completa del cache viejo).
+const CACHE_NAME = "saaspro-agro-v5";
 
 function isStaticAssetRequest(request) {
   return ["script", "style", "worker"].includes(request.destination);

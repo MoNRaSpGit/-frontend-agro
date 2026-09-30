@@ -492,6 +492,13 @@ export function AgroVoiceSection({
   const maxListeningTimeoutRef = useRef<number | null>(null);
   const heardSoFarRef = useRef("");
   const hadErrorRef = useRef(false);
+  // Debug TEMPORAL (30/09/2026): el arreglo del duplicado de Android no
+  // alcanzo ("traslado, traslado, traslado..." sigue apareciendo tal
+  // cual despues del fix) -- en vez de seguir adivinando a ciegas, se
+  // muestra en pantalla el contenido crudo de cada indice de
+  // event.results (con su isFinal) para ver exactamente que esta
+  // mandando el celular. Sacar esto una vez encontrada la causa real.
+  const [rawResultsDebug, setRawResultsDebug] = useState<{ index: number; isFinal: boolean; text: string }[]>([]);
 
   // Selector de ejemplo (29/09/2026, pedido explicito): en vez de mostrar
   // siempre el ejemplo de traslado, se elige de un desplegable cual
@@ -563,6 +570,7 @@ export function AgroVoiceSection({
 
     setStatusMessage(null);
     setTranscript("");
+    setRawResultsDebug([]);
     heardSoFarRef.current = "";
     hadErrorRef.current = false;
 
@@ -619,9 +627,11 @@ export function AgroVoiceSection({
       // completo), y sumarlo una sola vez a lo ya finalizado.
       let finalText = "";
       let interimText = "";
+      const rawDebug: { index: number; isFinal: boolean; text: string }[] = [];
       for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
         const text = (result?.[0]?.transcript ?? "").trim();
+        rawDebug.push({ index: i, isFinal: Boolean(result?.isFinal), text });
         if (!text) continue;
         if (result.isFinal) {
           finalText += (finalText ? " " : "") + text;
@@ -629,6 +639,7 @@ export function AgroVoiceSection({
           interimText = text;
         }
       }
+      setRawResultsDebug(rawDebug);
       const combined = finalText && interimText ? `${finalText} ${interimText}` : finalText || interimText;
       heardSoFarRef.current = combined;
       setTranscript(combined);
@@ -1431,6 +1442,13 @@ export function AgroVoiceSection({
               <p className="voice-transcript">
                 Se escucho: <strong>"{transcript}"</strong>
               </p>
+            ) : null}
+            {rawResultsDebug.length > 0 ? (
+              <pre className="voice-debug-raw">
+                {rawResultsDebug
+                  .map((entry) => `[${entry.index}] final=${entry.isFinal ? "si" : "no"}: "${entry.text}"`)
+                  .join("\n")}
+              </pre>
             ) : null}
             {statusMessage ? <p className={`voice-status voice-status-${statusMessage.tone}`}>{statusMessage.text}</p> : null}
           </div>
