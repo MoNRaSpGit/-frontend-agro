@@ -1485,6 +1485,7 @@ th {
 }
 
 .confirm-modal {
+  position: relative;
   width: min(440px, 100%);
   border: 1px solid rgba(35, 48, 31, 0.22);
   border-radius: 24px;
@@ -1499,6 +1500,34 @@ th {
      scroll... no puedo llegar a ver los botones"). */
   max-height: min(85vh, 760px);
   overflow-y: auto;
+}
+
+/* Cruz para cerrar el modal sin tener que llegar al boton "Cancelar" de
+   abajo (29/09/2026, pedido explicito: "nos falta una cruz... para
+   cerrar ese modal cuando no quiero usarlo") -- util sobre todo en
+   celular, donde el teclado en pantalla puede tapar los botones de
+   abajo. */
+.confirm-modal-close {
+  position: sticky;
+  float: right;
+  top: 0;
+  margin: -6px -6px 0 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(35, 48, 31, 0.1);
+  color: #3a4738;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-modal-close:hover {
+  background: rgba(35, 48, 31, 0.18);
 }
 
 /* Modal mas ancho para mostrar la tabla de vista previa de "borrar

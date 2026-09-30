@@ -599,10 +599,19 @@ export function AgroVoiceSection({
       // la frase completa dicha hasta ahora, sin depender de que cada
       // pedazo se marque "final" (en algunos navegadores eso no es
       // confiable -- ver comentario mas arriba sobre iPhone).
+      //
+      // Chrome para Android (29/09/2026, pedido explicito: "se escucho
+      // traslado se escucho traslado se escucho traslado...") repite el
+      // mismo pedazo tal cual en varios indices seguidos de "results" en
+      // vez de dejarlo fijo en uno solo -- se saltea cualquier pedazo
+      // identico al anterior para no acumularlo de nuevo.
       let combined = "";
+      let lastSegment = "";
       for (let i = 0; i < event.results.length; i++) {
-        const text = event.results[i]?.[0]?.transcript ?? "";
-        if (text.trim()) combined += (combined ? " " : "") + text.trim();
+        const text = (event.results[i]?.[0]?.transcript ?? "").trim();
+        if (!text || text === lastSegment) continue;
+        combined += (combined ? " " : "") + text;
+        lastSegment = text;
       }
       heardSoFarRef.current = combined;
       setTranscript(combined);
@@ -1660,6 +1669,9 @@ export function AgroVoiceSection({
       {summaryDraft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-summary-confirm-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={handleCancelSummaryDraft}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-summary-confirm-title">¿Ver resumen de que potrero?</strong>
               <span>Entendi parte de la frase -- completa lo que falta antes de continuar.</span>
@@ -1730,6 +1742,9 @@ export function AgroVoiceSection({
       {birthDraft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-birth-confirm-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={handleCancelBirth}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-birth-confirm-title">¿Confirmar nacimiento?</strong>
               <span>
@@ -1842,6 +1857,9 @@ export function AgroVoiceSection({
       {sanityDraft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-sanity-confirm-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={handleCancelSanity}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-sanity-confirm-title">¿Confirmar tratamiento sanitario?</strong>
               <span>
@@ -1982,6 +2000,9 @@ export function AgroVoiceSection({
       {deathDraft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-death-confirm-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={handleCancelDeath}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-death-confirm-title">¿Confirmar muerte?</strong>
               <span>
@@ -2124,6 +2145,9 @@ export function AgroVoiceSection({
       {rainfallDraft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-rainfall-confirm-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={handleCancelRainfall}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-rainfall-confirm-title">¿Confirmar lluvia?</strong>
               <span>
@@ -2192,6 +2216,9 @@ export function AgroVoiceSection({
       {purchaseDraft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-purchase-confirm-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={handleCancelPurchase}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-purchase-confirm-title">¿Confirmar compra?</strong>
               <span>
@@ -2336,6 +2363,9 @@ export function AgroVoiceSection({
       {deleteRangeDraft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal confirm-modal-wide" role="dialog" aria-modal="true" aria-labelledby="voice-delete-confirm-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={handleCancelDeleteTransfers}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-delete-confirm-title">Borrar traslados</strong>
               <span>
@@ -2437,6 +2467,9 @@ export function AgroVoiceSection({
       {draft ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-confirm-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={handleCancelTransfer}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-confirm-title">¿Confirmar traslado?</strong>
               <span>
@@ -2614,6 +2647,9 @@ export function AgroVoiceSection({
       {blockedMessage ? (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="voice-blocked-title">
+            <button type="button" className="confirm-modal-close" aria-label="Cerrar" onClick={() => setBlockedMessage(null)}>
+              ✕
+            </button>
             <div className="confirm-modal-copy">
               <strong id="voice-blocked-title">No se pudo hacer el traslado</strong>
               <span>{blockedMessage}</span>
