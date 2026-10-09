@@ -1034,6 +1034,23 @@ button {
   gap: 8px;
 }
 
+/* Filtro por fecha de la Planilla de compras (09/10/2026) -- el input no
+   necesita ocupar todo el ancho como un buscador de texto, y el boton
+   "Quitar filtro" se alinea con el input, no con la etiqueta de arriba. */
+.purchase-date-filter {
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.purchase-date-filter .table-search {
+  width: auto;
+  margin-bottom: 0;
+}
+
+.purchase-date-filter .table-search input {
+  width: auto;
+}
+
 /* Fila extra de "Vencido, ¿se cobro?" (ver AgroAccountingSection) --
    separada de Editar/Eliminar para que no se confundan entre si. */
 .due-actions-row,

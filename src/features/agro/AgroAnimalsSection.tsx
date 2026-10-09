@@ -745,6 +745,48 @@ export function AgroAnimalsSection({
     });
   }
 
+  // Filas de la Planilla de compras, compartidas entre la tabla y los dos
+  // exports -- respeta el filtro de fecha activo (exporta lo que se ve).
+  function buildPurchaseExportRows() {
+    return purchaseRows.map((movement) => {
+      const lugar = getOrigenDestino(movement);
+      const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+      return [
+        movement.date,
+        `${lugar.campoDestino} / ${lugar.potreroDestino}`,
+        `${speciesLabels[movement.species]} · ${category ? formatCategoryLabel(category.label) : movement.categoryCode}`,
+        movement.quantity
+      ];
+    });
+  }
+
+  async function exportPurchasesToExcel() {
+    const { exportRowsToExcel } = await import("./agro.exportExcel");
+    await exportRowsToExcel({
+      sheetName: "Planilla de compras",
+      columns: [
+        { header: "Fecha", width: 12, numFmt: "dd/mm/yyyy" },
+        { header: "Potrero destino", width: 26 },
+        { header: "Categoria", width: 28 },
+        { header: "Cantidad", width: 10, numFmt: "#,##0" }
+      ],
+      rows: buildPurchaseExportRows().map((row) => [new Date(`${row[0]}T00:00:00`), ...row.slice(1)]),
+      fileName: `planilla-compras-${new Date().toISOString().slice(0, 10)}.xlsx`
+    });
+  }
+
+  async function exportPurchasesToPdf() {
+    const { exportRowsToPdf } = await import("./agro.exportPdf");
+    const rows = buildPurchaseExportRows();
+    await exportRowsToPdf({
+      title: "Planilla de compras",
+      subtitle: `${rows.length} compra(s)`,
+      columns: ["Fecha", "Potrero destino", "Categoria", "Cantidad"],
+      rows: rows.map((row) => [formatShortDate(String(row[0])), ...row.slice(1)]),
+      fileName: `planilla-compras-${new Date().toISOString().slice(0, 10)}.pdf`
+    });
+  }
+
   // Las tres tablas de mas abajo se arman una sola vez aca (no directo en el
   // JSX del return) para poder reordenarlas segun el Movimiento elegido en
   // el formulario, sin duplicar el markup -- ver el uso mas abajo.
@@ -1139,31 +1181,49 @@ export function AgroAnimalsSection({
           <h2>Planilla de compras</h2>
           <p>Compras de animales: fecha, potrero de destino, categoria y cantidad, sin precio ni condiciones de compra.</p>
         </div>
-        <div className="form-grid">
-          <label>
-            <span>Filtrar por fecha</span>
-            <input
-              type="date"
-              value={purchaseDateFilter}
-              onChange={(event) => {
-                setPurchaseDateFilter(event.target.value);
-                setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
-              }}
-            />
-          </label>
-          {purchaseDateFilter ? (
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => {
-                setPurchaseDateFilter("");
-                setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
-              }}
-            >
-              Quitar filtro
-            </button>
-          ) : null}
+        <div className="table-actions">
+          <button
+            type="button"
+            className="ghost-button excel-button"
+            onClick={() => void exportPurchasesToExcel()}
+            disabled={purchaseRows.length === 0}
+          >
+            Excel
+          </button>
+          <button
+            type="button"
+            className="ghost-button pdf-button"
+            onClick={() => void exportPurchasesToPdf()}
+            disabled={purchaseRows.length === 0}
+          >
+            PDF
+          </button>
         </div>
+      </div>
+      <div className="table-actions purchase-date-filter">
+        <label className="table-search">
+          <span>Filtrar por fecha</span>
+          <input
+            type="date"
+            value={purchaseDateFilter}
+            onChange={(event) => {
+              setPurchaseDateFilter(event.target.value);
+              setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
+            }}
+          />
+        </label>
+        {purchaseDateFilter ? (
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              setPurchaseDateFilter("");
+              setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
+            }}
+          >
+            Quitar filtro
+          </button>
+        ) : null}
       </div>
       <div className="table-wrap">
         <table className="animal-ledger-table">
