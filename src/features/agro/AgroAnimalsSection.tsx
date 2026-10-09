@@ -1644,29 +1644,31 @@ export function AgroAnimalsSection({
           Traslado/Nacimiento/Muerte -> Planilla de movimientos de campo,
           cualquier otro -> Planilla de animales (la completa, con
           compra/venta/etc). */}
+      {/* La Planilla de compras es fija en el 2do lugar, siempre pegada
+          debajo de "Planilla de animales" (pedido explicito del cliente),
+          sin participar del reordenamiento segun el Movimiento elegido. */}
       {isCorrectionAnimalMovement ? (
         <>
           {planillaDeStockPanel}
           {planillaDeAnimalesPanel}
+          {planillaDeComprasPanel}
           {planillaDeMovimientosCampoPanel}
         </>
       ) : isTransferMovement || animalForm.kind === "birth" || animalForm.kind === "death" ? (
         <>
           {planillaDeMovimientosCampoPanel}
           {planillaDeAnimalesPanel}
+          {planillaDeComprasPanel}
           {planillaDeStockPanel}
         </>
       ) : (
         <>
           {planillaDeAnimalesPanel}
+          {planillaDeComprasPanel}
           {planillaDeMovimientosCampoPanel}
           {planillaDeStockPanel}
         </>
       )}
-
-      {/* Fija, no participa del reordenamiento de arriba -- el cliente
-          pidio que quede siempre debajo de "Planilla de animales". */}
-      {planillaDeComprasPanel}
 
       <article className="panel wide">
         <div className="panel-header">
