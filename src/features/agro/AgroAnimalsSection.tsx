@@ -245,11 +245,15 @@ export function AgroAnimalsSection({
   );
   const visibleRecentMovements = recentMovementsWithoutCorrections.slice(0, visibleRecentCount);
 
-  // Traslados, nacimientos y muertes -- los motivos "de campo" por los que
-  // cambia el rodeo de un potrero, a diferencia de compra/venta que son
-  // mas de oficina (el cliente pidio expresamente dejar afuera compra).
-  // Planilla chica, sin las columnas de precio/comision/IVA que lo
-  // obligaban a desplazar la pantalla para ver todo junto. Sale de
+  // Traslados, nacimientos, muertes y compra/venta -- los motivos "de
+  // campo" por los que cambia el rodeo de un potrero. El cliente aclaro
+  // por audio (09/10/2026) que no queria una planilla separada de compras:
+  // "quiero que me aparezca el ingreso de animales en el potrero... que
+  // incluya las compras, los ingresos por compra o los egresos por venta,
+  // en los traslados, en los movimientos" -- por eso compra/venta pasaron
+  // a sumarse aca, junto a los traslados. Planilla chica, sin las columnas
+  // de precio/comision/IVA que lo obligaban a desplazar la pantalla para
+  // ver todo junto (eso sigue viviendo en Contabilidad). Sale de
   // fieldScopedMovements (ya acotado por el filtro de Campo/Potrero de
   // arriba, con el mismo mes visible y el mismo dedup de traslados que
   // "Planilla de animales") -- asi, si el cliente elige un potrero puntual,
@@ -263,7 +267,9 @@ export function AgroAnimalsSection({
       movement.kind === "transfer_internal" ||
       movement.kind === "transfer_in" ||
       movement.kind === "birth" ||
-      movement.kind === "death"
+      movement.kind === "death" ||
+      movement.kind === "purchase" ||
+      movement.kind === "sale"
   );
   const visibleStockCorrectionRows = stockCorrectionRows.slice(0, visibleStockCount);
   const visibleFieldMovementRows = fieldMovementRows.slice(0, visibleFieldMovementCount);
@@ -684,7 +690,9 @@ export function AgroAnimalsSection({
         `${lugar.campoDestino} / ${lugar.potreroDestino}`,
         `${speciesLabels[movement.species]} · ${category ? formatCategoryLabel(category.label) : movement.categoryCode}`,
         movement.quantity,
-        movement.freightAmount !== undefined ? formatMoney(movement.freightAmount, currency) : "-"
+        movement.kind !== "purchase" && movement.kind !== "sale" && movement.freightAmount !== undefined
+          ? formatMoney(movement.freightAmount, currency)
+          : "-"
       ];
     });
   }
@@ -1040,7 +1048,9 @@ export function AgroAnimalsSection({
                     </td>
                     <td className="cell-number">{formatNumber(movement.quantity, 0)}</td>
                     <td className="cell-money">
-                      {movement.freightAmount !== undefined ? formatMoney(movement.freightAmount, currency) : "-"}
+                      {movement.kind !== "purchase" && movement.kind !== "sale" && movement.freightAmount !== undefined
+                        ? formatMoney(movement.freightAmount, currency)
+                        : "-"}
                     </td>
                     <td className="cell-actions">
                       <div className="table-actions">
