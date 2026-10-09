@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { animalMovementFormKinds, BIRTH_CATEGORY_CODE, categoryCatalog, currencyLabels, movementKindLabels, speciesLabels } from "./agro.demo.data";
-import {
-  compareRecordsByDateDesc,
-  formatCategoryLabel,
-  formatMoney,
-  formatNumber,
-  formatShortDate,
-  parseDecimalInput
-} from "./agro.home.shared";
+import { formatCategoryLabel, formatMoney, formatNumber, formatShortDate, parseDecimalInput } from "./agro.home.shared";
 import {
   AgroSpecies,
   AnimalMovementKind,
@@ -242,11 +235,6 @@ export function AgroAnimalsSection({
   const [visibleRecentCount, setVisibleRecentCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleStockCount, setVisibleStockCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleFieldMovementCount, setVisibleFieldMovementCount] = useState(LEDGER_PREVIEW_COUNT);
-  const [visiblePurchaseCount, setVisiblePurchaseCount] = useState(LEDGER_PREVIEW_COUNT);
-  // Filtro por fecha de la Planilla de compras (pedido explicito del
-  // cliente, 09/10/2026) -- vacio muestra las primeras 5 (con "Ver mas"
-  // para el resto); con una fecha puesta, solo las compras de ese dia.
-  const [purchaseDateFilter, setPurchaseDateFilter] = useState("");
 
   const visibleFilteredMovements = animalLedgerRows.slice(0, visibleFilteredCount);
   // Las correcciones de stock ya no se muestran aca -- tienen su propia
@@ -280,20 +268,6 @@ export function AgroAnimalsSection({
   const visibleStockCorrectionRows = stockCorrectionRows.slice(0, visibleStockCount);
   const visibleFieldMovementRows = fieldMovementRows.slice(0, visibleFieldMovementCount);
 
-  // Planilla de Compras (pedido explicito del cliente, 09/10/2026): "que
-  // figure en los movimientos... solo la cantidad de animales que
-  // ingresaron a tal potrero y la categoria", sin precio/flete/condiciones
-  // de compra (eso sigue viviendo en Contabilidad). A diferencia de
-  // Movimientos de campo, sale de "animalMovements" SIN recortar por el
-  // mes visible ni por el filtro de Campo/Potrero de arriba -- el cliente
-  // reporto que con fieldScopedMovements (acotado a ambos) aparecia "no
-  // hay compras" aun habiendo compras reales, por quedar fuera del mes/
-  // potrero seleccionado en otro filtro que no tiene que ver con esta
-  // planilla. Esta planilla tiene su propio filtro de fecha, independiente.
-  const purchaseRows = animalMovements
-    .filter((movement) => movement.kind === "purchase" && (!purchaseDateFilter || movement.date === purchaseDateFilter))
-    .sort(compareRecordsByDateDesc);
-  const visiblePurchaseRows = purchaseRows.slice(0, visiblePurchaseCount);
   // Vuelve a la vista compacta cuando cambia la busqueda -- si no, el
   // usuario podia quedar viendo "todos" de una busqueda vieja mezclado con
   // los resultados nuevos.
@@ -745,48 +719,6 @@ export function AgroAnimalsSection({
     });
   }
 
-  // Filas de la Planilla de compras, compartidas entre la tabla y los dos
-  // exports -- respeta el filtro de fecha activo (exporta lo que se ve).
-  function buildPurchaseExportRows() {
-    return purchaseRows.map((movement) => {
-      const lugar = getOrigenDestino(movement);
-      const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
-      return [
-        movement.date,
-        `${lugar.campoDestino} / ${lugar.potreroDestino}`,
-        `${speciesLabels[movement.species]} · ${category ? formatCategoryLabel(category.label) : movement.categoryCode}`,
-        movement.quantity
-      ];
-    });
-  }
-
-  async function exportPurchasesToExcel() {
-    const { exportRowsToExcel } = await import("./agro.exportExcel");
-    await exportRowsToExcel({
-      sheetName: "Planilla de compras",
-      columns: [
-        { header: "Fecha", width: 12, numFmt: "dd/mm/yyyy" },
-        { header: "Potrero destino", width: 26 },
-        { header: "Categoria", width: 28 },
-        { header: "Cantidad", width: 10, numFmt: "#,##0" }
-      ],
-      rows: buildPurchaseExportRows().map((row) => [new Date(`${row[0]}T00:00:00`), ...row.slice(1)]),
-      fileName: `planilla-compras-${new Date().toISOString().slice(0, 10)}.xlsx`
-    });
-  }
-
-  async function exportPurchasesToPdf() {
-    const { exportRowsToPdf } = await import("./agro.exportPdf");
-    const rows = buildPurchaseExportRows();
-    await exportRowsToPdf({
-      title: "Planilla de compras",
-      subtitle: `${rows.length} compra(s)`,
-      columns: ["Fecha", "Potrero destino", "Categoria", "Cantidad"],
-      rows: rows.map((row) => [formatShortDate(String(row[0])), ...row.slice(1)]),
-      fileName: `planilla-compras-${new Date().toISOString().slice(0, 10)}.pdf`
-    });
-  }
-
   // Las tres tablas de mas abajo se arman una sola vez aca (no directo en el
   // JSX del return) para poder reordenarlas segun el Movimiento elegido en
   // el formulario, sin duplicar el markup -- ver el uso mas abajo.
@@ -1160,141 +1092,6 @@ export function AgroAnimalsSection({
             </>
           ) : (
             <button type="button" className="ghost-button" onClick={() => setVisibleFieldMovementCount(LEDGER_PREVIEW_COUNT)}>
-              Ver menos
-            </button>
-          )}
-        </div>
-      ) : null}
-    </article>
-  );
-
-  // Planilla de Compras (pedido explicito del cliente, 09/10/2026): va
-  // fija debajo de "Planilla de animales", sin participar del
-  // reordenamiento segun el Movimiento elegido en el formulario (a
-  // diferencia de las otras 3) -- siempre en el mismo lugar. Solo Fecha,
-  // Potrero destino, Categoria y Cantidad: nada de precio/flete/comision
-  // (eso sigue en Contabilidad, sin cambios).
-  const planillaDeComprasPanel = (
-    <article className="panel wide">
-      <div className="panel-header">
-        <div>
-          <h2>Planilla de compras</h2>
-          <p>Compras de animales: fecha, potrero de destino, categoria y cantidad, sin precio ni condiciones de compra.</p>
-        </div>
-        <div className="table-actions">
-          <button
-            type="button"
-            className="ghost-button excel-button"
-            onClick={() => void exportPurchasesToExcel()}
-            disabled={purchaseRows.length === 0}
-          >
-            Excel
-          </button>
-          <button
-            type="button"
-            className="ghost-button pdf-button"
-            onClick={() => void exportPurchasesToPdf()}
-            disabled={purchaseRows.length === 0}
-          >
-            PDF
-          </button>
-        </div>
-      </div>
-      <div className="table-actions purchase-date-filter">
-        <label className="table-search">
-          <span>Filtrar por fecha</span>
-          <input
-            type="date"
-            value={purchaseDateFilter}
-            onChange={(event) => {
-              setPurchaseDateFilter(event.target.value);
-              setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
-            }}
-          />
-        </label>
-        {purchaseDateFilter ? (
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => {
-              setPurchaseDateFilter("");
-              setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
-            }}
-          >
-            Quitar filtro
-          </button>
-        ) : null}
-      </div>
-      <div className="table-wrap">
-        <table className="animal-ledger-table">
-          <thead>
-            <tr>
-              <th className="cell-date">Fecha</th>
-              <th className="cell-field">Potrero destino</th>
-              <th className="cell-category">Categoria</th>
-              <th className="cell-number">Cantidad</th>
-              <th className="cell-actions">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visiblePurchaseRows.length ? (
-              visiblePurchaseRows.map((movement) => {
-                const lugar = getOrigenDestino(movement);
-                const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
-                return (
-                  <tr key={movement.id}>
-                    <td>{formatShortDate(movement.date)}</td>
-                    <td>
-                      {lugar.campoDestino} / {lugar.potreroDestino}
-                    </td>
-                    <td>
-                      {speciesLabels[movement.species]} · {category ? formatCategoryLabel(category.label) : movement.categoryCode}
-                    </td>
-                    <td className="cell-number">{formatNumber(movement.quantity, 0)}</td>
-                    <td className="cell-actions">
-                      <div className="table-actions">
-                        <button type="button" className="ghost-button" onClick={() => onEditMovement(movement.id)}>
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button danger"
-                          onClick={() => requestDeleteAnimalMovement(movement.id)}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td className="cell-empty" colSpan={5}>
-                  {purchaseDateFilter ? "No hay compras en esa fecha." : "No hay compras en el rango de fechas visible."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      {purchaseRows.length > LEDGER_PREVIEW_COUNT ? (
-        <div className="action-row">
-          {visiblePurchaseCount < purchaseRows.length ? (
-            <>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setVisiblePurchaseCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, purchaseRows.length))}
-              >
-                Ver 5 más
-              </button>
-              <button type="button" className="ghost-button" onClick={() => setVisiblePurchaseCount(purchaseRows.length)}>
-                Ver todos ({purchaseRows.length})
-              </button>
-            </>
-          ) : (
-            <button type="button" className="ghost-button" onClick={() => setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT)}>
               Ver menos
             </button>
           )}
@@ -1720,27 +1517,21 @@ export function AgroAnimalsSection({
           Traslado/Nacimiento/Muerte -> Planilla de movimientos de campo,
           cualquier otro -> Planilla de animales (la completa, con
           compra/venta/etc). */}
-      {/* La Planilla de compras es fija en el 2do lugar, siempre pegada
-          debajo de "Planilla de animales" (pedido explicito del cliente),
-          sin participar del reordenamiento segun el Movimiento elegido. */}
       {isCorrectionAnimalMovement ? (
         <>
           {planillaDeStockPanel}
           {planillaDeAnimalesPanel}
-          {planillaDeComprasPanel}
           {planillaDeMovimientosCampoPanel}
         </>
       ) : isTransferMovement || animalForm.kind === "birth" || animalForm.kind === "death" ? (
         <>
           {planillaDeMovimientosCampoPanel}
           {planillaDeAnimalesPanel}
-          {planillaDeComprasPanel}
           {planillaDeStockPanel}
         </>
       ) : (
         <>
           {planillaDeAnimalesPanel}
-          {planillaDeComprasPanel}
           {planillaDeMovimientosCampoPanel}
           {planillaDeStockPanel}
         </>
