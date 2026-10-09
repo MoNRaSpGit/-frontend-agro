@@ -235,6 +235,7 @@ export function AgroAnimalsSection({
   const [visibleRecentCount, setVisibleRecentCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleStockCount, setVisibleStockCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleFieldMovementCount, setVisibleFieldMovementCount] = useState(LEDGER_PREVIEW_COUNT);
+  const [visiblePurchaseCount, setVisiblePurchaseCount] = useState(LEDGER_PREVIEW_COUNT);
 
   const visibleFilteredMovements = animalLedgerRows.slice(0, visibleFilteredCount);
   // Las correcciones de stock ya no se muestran aca -- tienen su propia
@@ -268,6 +269,15 @@ export function AgroAnimalsSection({
   const visibleStockCorrectionRows = stockCorrectionRows.slice(0, visibleStockCount);
   const visibleFieldMovementRows = fieldMovementRows.slice(0, visibleFieldMovementCount);
 
+  // Planilla de Compras (pedido explicito del cliente, 09/10/2026): "que
+  // figure en los movimientos... solo la cantidad de animales que
+  // ingresaron a tal potrero y la categoria", sin precio/flete/condiciones
+  // de compra (eso sigue viviendo en Contabilidad). Misma fuente que
+  // Movimientos de campo (fieldScopedMovements, ya acotada por el filtro
+  // de Campo/Potrero de arriba), solo que filtrada a "purchase".
+  const purchaseRows = fieldScopedMovements.filter((movement) => movement.kind === "purchase");
+  const visiblePurchaseRows = purchaseRows.slice(0, visiblePurchaseCount);
+
   // Vuelve a la vista compacta cuando cambia la busqueda -- si no, el
   // usuario podia quedar viendo "todos" de una busqueda vieja mezclado con
   // los resultados nuevos.
@@ -281,6 +291,7 @@ export function AgroAnimalsSection({
   useEffect(() => {
     setVisibleStockCount(LEDGER_PREVIEW_COUNT);
     setVisibleFieldMovementCount(LEDGER_PREVIEW_COUNT);
+    setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
   }, [selectedVisibleFieldId]);
 
   const isTransferMovement = animalForm.kind === "transfer";
@@ -1100,6 +1111,98 @@ export function AgroAnimalsSection({
     </article>
   );
 
+  // Planilla de Compras (pedido explicito del cliente, 09/10/2026): va
+  // fija debajo de "Planilla de animales", sin participar del
+  // reordenamiento segun el Movimiento elegido en el formulario (a
+  // diferencia de las otras 3) -- siempre en el mismo lugar. Solo Fecha,
+  // Potrero destino, Categoria y Cantidad: nada de precio/flete/comision
+  // (eso sigue en Contabilidad, sin cambios).
+  const planillaDeComprasPanel = (
+    <article className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Planilla de compras</h2>
+          <p>Compras de animales: fecha, potrero de destino, categoria y cantidad, sin precio ni condiciones de compra.</p>
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table className="animal-ledger-table">
+          <thead>
+            <tr>
+              <th className="cell-date">Fecha</th>
+              <th className="cell-field">Potrero destino</th>
+              <th className="cell-category">Categoria</th>
+              <th className="cell-number">Cantidad</th>
+              <th className="cell-actions">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visiblePurchaseRows.length ? (
+              visiblePurchaseRows.map((movement) => {
+                const lugar = getOrigenDestino(movement);
+                const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
+                return (
+                  <tr key={movement.id}>
+                    <td>{formatShortDate(movement.date)}</td>
+                    <td>
+                      {lugar.campoDestino} / {lugar.potreroDestino}
+                    </td>
+                    <td>
+                      {speciesLabels[movement.species]} · {category ? formatCategoryLabel(category.label) : movement.categoryCode}
+                    </td>
+                    <td className="cell-number">{formatNumber(movement.quantity, 0)}</td>
+                    <td className="cell-actions">
+                      <div className="table-actions">
+                        <button type="button" className="ghost-button" onClick={() => onEditMovement(movement.id)}>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button danger"
+                          onClick={() => requestDeleteAnimalMovement(movement.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td className="cell-empty" colSpan={5}>
+                  No hay compras en el rango de fechas visible.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {purchaseRows.length > LEDGER_PREVIEW_COUNT ? (
+        <div className="action-row">
+          {visiblePurchaseCount < purchaseRows.length ? (
+            <>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setVisiblePurchaseCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, purchaseRows.length))}
+              >
+                Ver 5 más
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setVisiblePurchaseCount(purchaseRows.length)}>
+                Ver todos ({purchaseRows.length})
+              </button>
+            </>
+          ) : (
+            <button type="button" className="ghost-button" onClick={() => setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT)}>
+              Ver menos
+            </button>
+          )}
+        </div>
+      ) : null}
+    </article>
+  );
+
   return (
     <section className="content-grid">
       <article ref={animalFormPanelRef} className="panel">
@@ -1536,6 +1639,10 @@ export function AgroAnimalsSection({
           {planillaDeStockPanel}
         </>
       )}
+
+      {/* Fija, no participa del reordenamiento de arriba -- el cliente
+          pidio que quede siempre debajo de "Planilla de animales". */}
+      {planillaDeComprasPanel}
 
       <article className="panel wide">
         <div className="panel-header">
