@@ -1573,27 +1573,21 @@ export function AgroAnimalsSection({
         </form>
       </article>
 
-      {/* La planilla que corresponde al Movimiento elegido en el formulario
-          pasa primera -- Correccion de stock -> Planilla de stock,
-          Traslado/Nacimiento/Muerte -> Planilla de movimientos de campo,
-          cualquier otro -> Planilla de animales (la completa, con
-          compra/venta/etc). */}
+      {/* "Planilla de movimientos de campo" va siempre primera (pedido
+          explicito del cliente, 09/10/2026, tras sumarle compras/ventas):
+          es la vista mas usada ahora, no participa del reordenamiento de
+          las otras dos -- Correccion de stock -> Planilla de stock
+          primero entre ellas, cualquier otro -> Planilla de animales
+          primero entre ellas. */}
+      {planillaDeMovimientosCampoPanel}
       {isCorrectionAnimalMovement ? (
         <>
           {planillaDeStockPanel}
           {planillaDeAnimalesPanel}
-          {planillaDeMovimientosCampoPanel}
-        </>
-      ) : isTransferMovement || animalForm.kind === "birth" || animalForm.kind === "death" ? (
-        <>
-          {planillaDeMovimientosCampoPanel}
-          {planillaDeAnimalesPanel}
-          {planillaDeStockPanel}
         </>
       ) : (
         <>
           {planillaDeAnimalesPanel}
-          {planillaDeMovimientosCampoPanel}
           {planillaDeStockPanel}
         </>
       )}
