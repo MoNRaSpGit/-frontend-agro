@@ -235,10 +235,9 @@ export function AgroAnimalsSection({
   const [visibleRecentCount, setVisibleRecentCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleStockCount, setVisibleStockCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleFieldMovementCount, setVisibleFieldMovementCount] = useState(LEDGER_PREVIEW_COUNT);
-  const [visiblePurchaseCount, setVisiblePurchaseCount] = useState(LEDGER_PREVIEW_COUNT);
   // Filtro por fecha de la Planilla de compras (pedido explicito del
-  // cliente, 09/10/2026) -- vacio muestra todas (con el "Ver 5 mas" de
-  // siempre); con una fecha puesta, solo las compras de ese dia.
+  // cliente, 09/10/2026) -- por defecto muestra TODAS las compras, sin
+  // paginado; con una fecha puesta, solo las compras de ese dia.
   const [purchaseDateFilter, setPurchaseDateFilter] = useState("");
 
   const visibleFilteredMovements = animalLedgerRows.slice(0, visibleFilteredCount);
@@ -282,8 +281,6 @@ export function AgroAnimalsSection({
   const purchaseRows = fieldScopedMovements.filter(
     (movement) => movement.kind === "purchase" && (!purchaseDateFilter || movement.date === purchaseDateFilter)
   );
-  const visiblePurchaseRows = purchaseRows.slice(0, visiblePurchaseCount);
-
   // Vuelve a la vista compacta cuando cambia la busqueda -- si no, el
   // usuario podia quedar viendo "todos" de una busqueda vieja mezclado con
   // los resultados nuevos.
@@ -297,7 +294,6 @@ export function AgroAnimalsSection({
   useEffect(() => {
     setVisibleStockCount(LEDGER_PREVIEW_COUNT);
     setVisibleFieldMovementCount(LEDGER_PREVIEW_COUNT);
-    setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
   }, [selectedVisibleFieldId]);
 
   const isTransferMovement = animalForm.kind === "transfer";
@@ -1136,10 +1132,7 @@ export function AgroAnimalsSection({
             <input
               type="date"
               value={purchaseDateFilter}
-              onChange={(event) => {
-                setPurchaseDateFilter(event.target.value);
-                setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
-              }}
+              onChange={(event) => setPurchaseDateFilter(event.target.value)}
             />
           </label>
           {purchaseDateFilter ? (
@@ -1161,8 +1154,8 @@ export function AgroAnimalsSection({
             </tr>
           </thead>
           <tbody>
-            {visiblePurchaseRows.length ? (
-              visiblePurchaseRows.map((movement) => {
+            {purchaseRows.length ? (
+              purchaseRows.map((movement) => {
                 const lugar = getOrigenDestino(movement);
                 const category = categoryCatalog[movement.species].find((item) => item.code === movement.categoryCode);
                 return (
@@ -1202,28 +1195,6 @@ export function AgroAnimalsSection({
           </tbody>
         </table>
       </div>
-      {purchaseRows.length > LEDGER_PREVIEW_COUNT ? (
-        <div className="action-row">
-          {visiblePurchaseCount < purchaseRows.length ? (
-            <>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setVisiblePurchaseCount((current) => Math.min(current + LEDGER_PREVIEW_STEP, purchaseRows.length))}
-              >
-                Ver 5 más
-              </button>
-              <button type="button" className="ghost-button" onClick={() => setVisiblePurchaseCount(purchaseRows.length)}>
-                Ver todos ({purchaseRows.length})
-              </button>
-            </>
-          ) : (
-            <button type="button" className="ghost-button" onClick={() => setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT)}>
-              Ver menos
-            </button>
-          )}
-        </div>
-      ) : null}
     </article>
   );
 
