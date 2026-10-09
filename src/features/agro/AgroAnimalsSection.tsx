@@ -236,6 +236,10 @@ export function AgroAnimalsSection({
   const [visibleStockCount, setVisibleStockCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleFieldMovementCount, setVisibleFieldMovementCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visiblePurchaseCount, setVisiblePurchaseCount] = useState(LEDGER_PREVIEW_COUNT);
+  // Filtro por fecha de la Planilla de compras (pedido explicito del
+  // cliente, 09/10/2026) -- vacio muestra todas (con el "Ver 5 mas" de
+  // siempre); con una fecha puesta, solo las compras de ese dia.
+  const [purchaseDateFilter, setPurchaseDateFilter] = useState("");
 
   const visibleFilteredMovements = animalLedgerRows.slice(0, visibleFilteredCount);
   // Las correcciones de stock ya no se muestran aca -- tienen su propia
@@ -275,7 +279,9 @@ export function AgroAnimalsSection({
   // de compra (eso sigue viviendo en Contabilidad). Misma fuente que
   // Movimientos de campo (fieldScopedMovements, ya acotada por el filtro
   // de Campo/Potrero de arriba), solo que filtrada a "purchase".
-  const purchaseRows = fieldScopedMovements.filter((movement) => movement.kind === "purchase");
+  const purchaseRows = fieldScopedMovements.filter(
+    (movement) => movement.kind === "purchase" && (!purchaseDateFilter || movement.date === purchaseDateFilter)
+  );
   const visiblePurchaseRows = purchaseRows.slice(0, visiblePurchaseCount);
 
   // Vuelve a la vista compacta cuando cambia la busqueda -- si no, el
@@ -1124,6 +1130,24 @@ export function AgroAnimalsSection({
           <h2>Planilla de compras</h2>
           <p>Compras de animales: fecha, potrero de destino, categoria y cantidad, sin precio ni condiciones de compra.</p>
         </div>
+        <div className="form-grid">
+          <label>
+            <span>Filtrar por fecha</span>
+            <input
+              type="date"
+              value={purchaseDateFilter}
+              onChange={(event) => {
+                setPurchaseDateFilter(event.target.value);
+                setVisiblePurchaseCount(LEDGER_PREVIEW_COUNT);
+              }}
+            />
+          </label>
+          {purchaseDateFilter ? (
+            <button type="button" className="ghost-button" onClick={() => setPurchaseDateFilter("")}>
+              Quitar filtro
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="table-wrap">
         <table className="animal-ledger-table">
@@ -1171,7 +1195,7 @@ export function AgroAnimalsSection({
             ) : (
               <tr>
                 <td className="cell-empty" colSpan={5}>
-                  No hay compras en el rango de fechas visible.
+                  {purchaseDateFilter ? "No hay compras en esa fecha." : "No hay compras en el rango de fechas visible."}
                 </td>
               </tr>
             )}
