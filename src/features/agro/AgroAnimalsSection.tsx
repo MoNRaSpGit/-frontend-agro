@@ -11,6 +11,12 @@ import {
   MoneyCurrency
 } from "./agro.types";
 
+// Opciones del filtro de "Motivo" en Planilla de movimientos de campo.
+// "transfer" agrupa transfer_out/transfer_internal/transfer_in (una sola
+// operacion de traslado, aunque en la tabla se vea como dos filas con
+// etiquetas distintas segun el lado).
+type FieldMovementKindFilter = "all" | "purchase" | "sale" | "transfer" | "birth" | "death";
+
 interface AgroAnimalsSectionProps {
   establishments: Establishment[];
   fields: FieldUnit[];
@@ -235,6 +241,14 @@ export function AgroAnimalsSection({
   const [visibleRecentCount, setVisibleRecentCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleStockCount, setVisibleStockCount] = useState(LEDGER_PREVIEW_COUNT);
   const [visibleFieldMovementCount, setVisibleFieldMovementCount] = useState(LEDGER_PREVIEW_COUNT);
+  // Filtros propios de "Planilla de movimientos de campo" (pedido
+  // explicito del cliente, 09/10/2026, tras agregar compra/venta a esta
+  // tabla): Motivo (que agrupa transfer_out/transfer_internal/transfer_in
+  // bajo un solo "Traslados", ya que en la tabla se ven como dos
+  // etiquetas distintas -- "Traslado"/"Ingreso" -- pero son la misma
+  // operacion) y Fecha, siempre visibles y combinables entre si.
+  const [fieldMovementKindFilter, setFieldMovementKindFilter] = useState<FieldMovementKindFilter>("all");
+  const [fieldMovementDateFilter, setFieldMovementDateFilter] = useState("");
 
   const visibleFilteredMovements = animalLedgerRows.slice(0, visibleFilteredCount);
   // Las correcciones de stock ya no se muestran aca -- tienen su propia
@@ -261,16 +275,25 @@ export function AgroAnimalsSection({
   // potrero. Aca si hace falta transfer_in (a diferencia de "Movimientos
   // recientes"): es la unica fila que representa una entrada cuando el
   // potrero elegido es el destino del traslado, no el origen.
-  const fieldMovementRows = fieldScopedMovements.filter(
-    (movement) =>
-      movement.kind === "transfer_out" ||
-      movement.kind === "transfer_internal" ||
-      movement.kind === "transfer_in" ||
-      movement.kind === "birth" ||
-      movement.kind === "death" ||
-      movement.kind === "purchase" ||
-      movement.kind === "sale"
-  );
+  const fieldMovementRows = fieldScopedMovements
+    .filter(
+      (movement) =>
+        movement.kind === "transfer_out" ||
+        movement.kind === "transfer_internal" ||
+        movement.kind === "transfer_in" ||
+        movement.kind === "birth" ||
+        movement.kind === "death" ||
+        movement.kind === "purchase" ||
+        movement.kind === "sale"
+    )
+    .filter((movement) => {
+      if (fieldMovementKindFilter === "all") return true;
+      if (fieldMovementKindFilter === "transfer") {
+        return movement.kind === "transfer_out" || movement.kind === "transfer_internal" || movement.kind === "transfer_in";
+      }
+      return movement.kind === fieldMovementKindFilter;
+    })
+    .filter((movement) => !fieldMovementDateFilter || movement.date === fieldMovementDateFilter);
   const visibleStockCorrectionRows = stockCorrectionRows.slice(0, visibleStockCount);
   const visibleFieldMovementRows = fieldMovementRows.slice(0, visibleFieldMovementCount);
 
@@ -288,6 +311,12 @@ export function AgroAnimalsSection({
     setVisibleStockCount(LEDGER_PREVIEW_COUNT);
     setVisibleFieldMovementCount(LEDGER_PREVIEW_COUNT);
   }, [selectedVisibleFieldId]);
+
+  // Mismo criterio al cambiar el Motivo o la Fecha de "Planilla de
+  // movimientos de campo" -- vuelve a mostrar solo los primeros 5.
+  useEffect(() => {
+    setVisibleFieldMovementCount(LEDGER_PREVIEW_COUNT);
+  }, [fieldMovementKindFilter, fieldMovementDateFilter]);
 
   const isTransferMovement = animalForm.kind === "transfer";
   const isInternalTransfer = isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
@@ -969,7 +998,7 @@ export function AgroAnimalsSection({
       <div className="panel-header">
         <div>
           <h2>Planilla de movimientos de campo</h2>
-          <p>Traslados, nacimientos y muertes: fecha, motivo, origen, destino y cantidad, sin compras ni ventas.</p>
+          <p>Traslados, nacimientos, muertes, compras y ventas: fecha, motivo, origen, destino y cantidad.</p>
         </div>
         <div className="table-actions">
           <button
@@ -1011,6 +1040,28 @@ export function AgroAnimalsSection({
               </option>
             ))}
           </select>
+        </label>
+        <label className="table-search">
+          <span>Motivo</span>
+          <select
+            value={fieldMovementKindFilter}
+            onChange={(event) => setFieldMovementKindFilter(event.target.value as FieldMovementKindFilter)}
+          >
+            <option value="all">Todos</option>
+            <option value="purchase">Compras</option>
+            <option value="sale">Ventas</option>
+            <option value="transfer">Traslados</option>
+            <option value="birth">Nacimientos</option>
+            <option value="death">Muertes</option>
+          </select>
+        </label>
+        <label className="table-search">
+          <span>Fecha</span>
+          <input
+            type="date"
+            value={fieldMovementDateFilter}
+            onChange={(event) => setFieldMovementDateFilter(event.target.value)}
+          />
         </label>
       </div>
       <div className="table-wrap">
