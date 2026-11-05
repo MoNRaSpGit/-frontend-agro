@@ -384,6 +384,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           : ""
         : getAlternativeFieldId(fields, activeTransferDestinationId, preserveContext ? current.fieldId : activeFieldId) ||
           getFieldIdForEstablishmentFrom(fields, activeTransferDestinationId),
+      categoryChangeDestinationCategoryCode: preserveContext && current.kind === "category_change" ? current.categoryChangeDestinationCategoryCode : "",
       species: preserveContext ? current.species : ("vacunos" as AgroSpecies),
       categoryCode: preserveContext
         ? current.categoryCode
@@ -2725,6 +2726,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         fieldId: transfer.origin.field.id,
         transferDestinationEstablishmentId: transfer.destination.establishment.id,
         transferDestinationFieldId: transfer.destination.field.id,
+        categoryChangeDestinationCategoryCode: "",
         species: transfer.species,
         categoryCode: transfer.category.code,
         kind: "transfer",
@@ -2762,6 +2764,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         fieldId: birth.field.id,
         transferDestinationEstablishmentId: "",
         transferDestinationFieldId: "",
+        categoryChangeDestinationCategoryCode: "",
         species: birth.species,
         categoryCode: birth.category.code,
         kind: "birth",
@@ -2804,6 +2807,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         fieldId: death.field.id,
         transferDestinationEstablishmentId: "",
         transferDestinationFieldId: "",
+        categoryChangeDestinationCategoryCode: "",
         species: death.species,
         categoryCode: death.category.code,
         kind: "death",
@@ -2908,6 +2912,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         fieldId: purchase.field.id,
         transferDestinationEstablishmentId: "",
         transferDestinationFieldId: "",
+        categoryChangeDestinationCategoryCode: "",
         species: purchase.species,
         categoryCode: purchase.category.code,
         kind: "purchase",
@@ -3339,6 +3344,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       fieldId: movement.fieldId,
       transferDestinationEstablishmentId: "",
       transferDestinationFieldId: "",
+      categoryChangeDestinationCategoryCode: "",
       species: movement.species,
       categoryCode: movement.categoryCode,
       kind: movement.kind,
