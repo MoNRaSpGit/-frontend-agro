@@ -15,7 +15,15 @@ export type AnimalMovementKind =
   | "adjustment"
   | "correction"
   | "correction_in"
-  | "correction_out";
+  | "correction_out"
+  // Cambio de categoria (05/11/2026, pedido explicito del cliente
+  // Rosendo): un animal que crece y pasa a otra categoria, dentro del
+  // mismo potrero. "category_change" es el valor que se elige en el
+  // formulario (igual que "transfer"); se guarda como el par
+  // category_change_out/category_change_in.
+  | "category_change"
+  | "category_change_out"
+  | "category_change_in";
 
 // "kilo": el total sale de peso individual x cantidad x precio (precio por
 // kilo). "unidad": el total sale de cantidad x precio (precio por cabeza),

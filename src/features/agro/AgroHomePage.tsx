@@ -251,6 +251,11 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     fieldId: "",
     transferDestinationEstablishmentId: "",
     transferDestinationFieldId: "",
+    // Cambio de categoria (05/11/2026, pedido explicito del cliente
+    // Rosendo): a que categoria pasan los animales, dentro de la misma
+    // especie y el mismo potrero -- no hay campo/potrero destino como en
+    // un traslado.
+    categoryChangeDestinationCategoryCode: "",
     species: "vacunos" as AgroSpecies,
     categoryCode: categoryCatalog.vacunos[0]?.code ?? "",
     kind: "purchase" as AnimalMovementKind,
@@ -495,6 +500,15 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
                       getFirstFieldIdForEstablishment(fields, destinationEstablishmentId)
                   : getFirstFieldIdForEstablishment(fields, destinationEstablishmentId);
               })()
+            : "",
+        categoryChangeDestinationCategoryCode:
+          kind === "category_change"
+            ? current.categoryChangeDestinationCategoryCode &&
+              categoryCatalog[current.species].some(
+                (category) => category.code === current.categoryChangeDestinationCategoryCode && category.code !== current.categoryCode
+              )
+              ? current.categoryChangeDestinationCategoryCode
+              : categoryCatalog[current.species].find((category) => category.code !== current.categoryCode)?.code ?? ""
             : "",
         pricingMode: "kilo",
         weightKg: "",
@@ -2311,6 +2325,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     const isInternalTransferMovement =
       isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
     const isCorrectionMovement = animalForm.kind === "correction";
+    const isCategoryChangeMovement = animalForm.kind === "category_change";
     const nextErrors: Record<string, string> = {};
 
     // En una correccion, "quantity" es el total correcto que el usuario
@@ -2410,6 +2425,19 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       }
     }
 
+    // Cambio de categoria: la cantidad maxima ya la valida el chequeo
+    // generico de salida mas arriba (isExitMovementRequiringStockCheck,
+    // que alcanza a "category_change" porque no es transfer ni
+    // correction y su direccion es "exit"). Aca solo falta la categoria
+    // destino: tiene que estar elegida y ser distinta de la de origen.
+    if (isCategoryChangeMovement) {
+      if (!animalForm.categoryChangeDestinationCategoryCode) {
+        nextErrors.categoryChangeDestinationCategoryCode = "Falta elegir la categoria destino.";
+      } else if (animalForm.categoryChangeDestinationCategoryCode === animalForm.categoryCode) {
+        nextErrors.categoryChangeDestinationCategoryCode = "La categoria destino debe ser distinta de la de origen.";
+      }
+    }
+
     if (!animalForm.fieldId) {
       nextErrors.fieldId = "Falta elegir el potrero origen.";
     }
@@ -2490,7 +2518,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       : undefined;
     const nextMovementId = editingAnimalMovementId ?? `anm-${Date.now()}`;
     const nextPairedTransferMovementId =
-      isTransferMovement || existingMovement?.pairedTransferMovementId
+      isTransferMovement || isCategoryChangeMovement || existingMovement?.pairedTransferMovementId
         ? existingMovement?.pairedTransferMovementId ?? `anm-${Date.now()}-pair`
         : undefined;
     const transferOutMovementId =
@@ -2584,6 +2612,22 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
             fieldId: animalForm.transferDestinationFieldId,
             kind: "transfer_in" as AnimalMovementKind,
             pairedTransferMovementId: transferOutMovementId
+          }
+        ]
+      : isCategoryChangeMovement
+      ? [
+          {
+            ...movement,
+            id: nextMovementId,
+            kind: "category_change_out" as AnimalMovementKind,
+            pairedTransferMovementId: nextPairedTransferMovementId
+          },
+          {
+            ...movement,
+            id: nextPairedTransferMovementId!,
+            categoryCode: animalForm.categoryChangeDestinationCategoryCode,
+            kind: "category_change_in" as AnimalMovementKind,
+            pairedTransferMovementId: nextMovementId
           }
         ]
       : [movement];
@@ -3334,6 +3378,22 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
               : pairedMovement.fieldId,
           transferDestinationEstablishmentId: destinationEstablishmentId,
           transferDestinationFieldId: movement.kind === "transfer_out" ? pairedMovement.fieldId : movement.fieldId
+        }));
+      }
+    }
+    // Cambio de categoria: igual que el traslado arriba, el formulario
+    // siempre muestra la categoria de ORIGEN en "Categoria" sin importar
+    // que lado del par se haya tocado "Editar".
+    if ((movement.kind === "category_change_out" || movement.kind === "category_change_in") && movement.pairedTransferMovementId) {
+      const pairedMovement = animalMovements.find((item) => item.id === movement.pairedTransferMovementId);
+      if (pairedMovement) {
+        const originCategoryCode = movement.kind === "category_change_out" ? movement.categoryCode : pairedMovement.categoryCode;
+        const destinationCategoryCode = movement.kind === "category_change_out" ? pairedMovement.categoryCode : movement.categoryCode;
+        setAnimalForm((current) => ({
+          ...current,
+          kind: "category_change",
+          categoryCode: originCategoryCode,
+          categoryChangeDestinationCategoryCode: destinationCategoryCode
         }));
       }
     }

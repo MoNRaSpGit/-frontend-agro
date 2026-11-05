@@ -1,7 +1,11 @@
 import { AgroSpecies, AnimalMovementKind, AnimalPricingMode, IncomeConcept } from "./agro.types";
 
 export function deriveMovementDirection(kind: AnimalMovementKind) {
-  return kind === "purchase" || kind === "birth" || kind === "transfer_in" || kind === "correction_in"
+  return kind === "purchase" ||
+    kind === "birth" ||
+    kind === "transfer_in" ||
+    kind === "correction_in" ||
+    kind === "category_change_in"
     ? "entry"
     : "exit";
 }

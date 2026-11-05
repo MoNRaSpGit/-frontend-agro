@@ -27,6 +27,7 @@ interface AgroAnimalsSectionProps {
     fieldId: string;
     transferDestinationEstablishmentId: string;
     transferDestinationFieldId: string;
+    categoryChangeDestinationCategoryCode: string;
     species: AgroSpecies;
     categoryCode: string;
     kind: AnimalMovementKind;
@@ -126,6 +127,7 @@ interface AgroAnimalsSectionProps {
       fieldId: string;
       transferDestinationEstablishmentId: string;
       transferDestinationFieldId: string;
+      categoryChangeDestinationCategoryCode: string;
       species: AgroSpecies;
       categoryCode: string;
       kind: AnimalMovementKind;
@@ -320,6 +322,10 @@ export function AgroAnimalsSection({
 
   const isTransferMovement = animalForm.kind === "transfer";
   const isInternalTransfer = isTransferMovement && animalForm.transferDestinationEstablishmentId === animalForm.establishmentId;
+  const isCategoryChangeMovement = animalForm.kind === "category_change";
+  const categoryChangeDestinationOptions = categoryCatalog[animalForm.species].filter(
+    (category) => category.code !== animalForm.categoryCode
+  );
   const selectedEstablishment = establishments.find((item) => item.id === animalForm.establishmentId);
   const selectedFields = fields.filter((item) => item.establishmentId === animalForm.establishmentId);
   const transferDestinations = establishments;
@@ -381,6 +387,15 @@ export function AgroAnimalsSection({
     }
     if (movement.kind === "transfer_in") {
       return "Ingreso";
+    }
+    // Mismo criterio que el traslado arriba: la fila de salida y la de
+    // llegada del mismo cambio de categoria dicen distinto, para saber
+    // cual es cual sin tener que abrir el detalle.
+    if (movement.kind === "category_change_out") {
+      return "Cambio de categoria";
+    }
+    if (movement.kind === "category_change_in") {
+      return "Nueva categoria";
     }
 
     return movementKindLabels[movement.kind as keyof typeof movementKindLabels];
@@ -1337,6 +1352,17 @@ export function AgroAnimalsSection({
                   if (current.kind === "birth") {
                     return { ...current, species: nextSpecies, categoryCode: BIRTH_CATEGORY_CODE[nextSpecies] };
                   }
+                  if (current.kind === "category_change") {
+                    const nextOriginCode = categoryCatalog[nextSpecies][0]?.code ?? "";
+                    const nextDestinationCode =
+                      categoryCatalog[nextSpecies].find((category) => category.code !== nextOriginCode)?.code ?? "";
+                    return {
+                      ...current,
+                      species: nextSpecies,
+                      categoryCode: nextOriginCode,
+                      categoryChangeDestinationCategoryCode: nextDestinationCode
+                    };
+                  }
                   if (!isTransferMovement) {
                     return { ...current, species: nextSpecies, categoryCode: categoryCatalog[nextSpecies][0]?.code ?? "" };
                   }
@@ -1366,7 +1392,15 @@ export function AgroAnimalsSection({
               value={animalForm.categoryCode}
               onChange={(event) => {
                 clearAnimalFieldError("categoryCode");
-                setAnimalForm((current) => ({ ...current, categoryCode: event.target.value }));
+                const nextCategoryCode = event.target.value;
+                setAnimalForm((current) => ({
+                  ...current,
+                  categoryCode: nextCategoryCode,
+                  categoryChangeDestinationCategoryCode:
+                    current.kind === "category_change" && current.categoryChangeDestinationCategoryCode === nextCategoryCode
+                      ? categoryCatalog[current.species].find((category) => category.code !== nextCategoryCode)?.code ?? ""
+                      : current.categoryChangeDestinationCategoryCode
+                }));
               }}
             >
               {(isTransferMovement
@@ -1383,9 +1417,10 @@ export function AgroAnimalsSection({
                     .map((category) => ({ code: category.code, label: category.label }))
                 : categoryCatalog[animalForm.species].map((category) => ({
                     code: category.code,
-                    label: isCorrectionAnimalMovement
-                      ? `${category.label} (${formatNumber(correctionFieldCategoryQuantities.get(category.code) ?? 0, 0)})`
-                      : category.label
+                    label:
+                      isCorrectionAnimalMovement || isCategoryChangeMovement
+                        ? `${category.label} (${formatNumber(correctionFieldCategoryQuantities.get(category.code) ?? 0, 0)})`
+                        : category.label
                   }))
               ).map((category) => (
                 <option key={category.code} value={category.code}>
@@ -1394,6 +1429,25 @@ export function AgroAnimalsSection({
               ))}
             </select>
           </label>
+          {isCategoryChangeMovement ? (
+            <label className={animalFormErrors.categoryChangeDestinationCategoryCode ? "field-error" : undefined}>
+              <span>Categoria destino</span>
+              <select
+                ref={registerAnimalFieldRef("categoryChangeDestinationCategoryCode")}
+                value={animalForm.categoryChangeDestinationCategoryCode}
+                onChange={(event) => {
+                  clearAnimalFieldError("categoryChangeDestinationCategoryCode");
+                  setAnimalForm((current) => ({ ...current, categoryChangeDestinationCategoryCode: event.target.value }));
+                }}
+              >
+                {categoryChangeDestinationOptions.map((category) => (
+                  <option key={category.code} value={category.code}>
+                    {category.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className={animalFormErrors.quantity ? "field-error" : undefined}>
             <span>{isCorrectionAnimalMovement ? "Cantidad correcta (total real)" : "Cantidad"}</span>
             <input

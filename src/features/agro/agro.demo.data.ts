@@ -42,7 +42,10 @@ export const movementKindLabels = {
   adjustment: "Ajuste",
   correction: "Correccion de stock",
   correction_in: "Correccion de stock",
-  correction_out: "Correccion de stock"
+  correction_out: "Correccion de stock",
+  category_change: "Cambio de categoria",
+  category_change_out: "Cambio de categoria",
+  category_change_in: "Cambio de categoria"
 } as const;
 
 export const animalMovementFormKinds = [
@@ -51,6 +54,7 @@ export const animalMovementFormKinds = [
   "birth",
   "death",
   "transfer",
+  "category_change",
   "shortage",
   "adjustment",
   "correction"

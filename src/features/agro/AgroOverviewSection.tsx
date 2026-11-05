@@ -31,6 +31,12 @@ export function AgroOverviewSection({
     if (movement.kind === "transfer_in" || movement.kind === "transfer_out") {
       return "Traslado";
     }
+    if (movement.kind === "category_change_out") {
+      return "Cambio de categoria";
+    }
+    if (movement.kind === "category_change_in") {
+      return "Nueva categoria";
+    }
 
     return movementKindLabels[movement.kind];
   }
