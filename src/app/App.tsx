@@ -14,7 +14,7 @@ import {
 const SESSION_REPLACED_MESSAGE =
   "Se ingreso con esta cuenta desde otro dispositivo y esta sesion se cerro. Lo que no estaba guardado se descarto.";
 import { changeAccountPassword, loginWithAccount } from "../shared/auth/auth.client";
-import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../shared/lib/persistence";
+import { readJsonStorage, writeJsonStorage } from "../shared/lib/persistence";
 
 // Pedido explicito (26/09/2026): el cliente quiere ver/escribir "Rosendo"
 // con mayuscula en el login. Es solo visual -- el usuario real en la BDD
@@ -40,7 +40,8 @@ function readStoredAccessMode(): AgroAccessMode | null {
     return session?.tokens.accessToken?.trim() ? "backend" : null;
   }
 
-  return storedMode === "demo-local" ? "demo-local" : null;
+  // El modo "Demo" se saco (17/11/2026): un acceso viejo guardado vuelve al login.
+  return null;
 }
 
 export function App() {
@@ -87,14 +88,6 @@ export function App() {
   async function handleDirectLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await loginWithCredentials(loginIdentifier, loginPassword);
-  }
-
-  async function handleDemoLogin() {
-    clearAgroSessionStorage();
-    removeStorageItem(AGRO_AUTH_SESSION_STORAGE_KEY);
-    writeJsonStorage(AGRO_ACCESS_MODE_STORAGE_KEY, "demo-local");
-    setLoginError(null);
-    setAccessMode("demo-local");
   }
 
   async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
@@ -169,16 +162,6 @@ export function App() {
             <div className="access-login-actions">
               <button type="submit" className="access-submit-button" disabled={loginPending || passwordPending}>
                 {loginPending ? "Ingresando..." : "Entrar"}
-              </button>
-              <button
-                type="button"
-                className="access-demo-button"
-                disabled={loginPending || passwordPending}
-                onClick={() => {
-                  void handleDemoLogin();
-                }}
-              >
-                Demo
               </button>
             </div>
           </form>
