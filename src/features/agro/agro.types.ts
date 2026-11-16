@@ -98,6 +98,9 @@ export interface AnimalMovementRecord {
   currency?: MoneyCurrency;
   linkedAccountingEntryId?: string;
   pairedTransferMovementId?: string;
+  // Cuenta que lo cargo (17/11/2026): "rosendo" | "administrador" (contador).
+  // Lo viejo no lo tiene y se toma como Rosendo.
+  createdBy?: string;
   notes: string;
 }
 
@@ -114,6 +117,9 @@ export interface AgroAuditEntry {
   movementId: string;
   before: AnimalMovementRecord;
   after: AnimalMovementRecord | null;
+  // Quien y cuando (17/11/2026); los registros viejos no lo tienen.
+  by?: string;
+  at?: string;
 }
 
 // Mismo criterio que AgroAuditEntry pero para Contabilidad (ventas/gastos):
@@ -123,12 +129,37 @@ export interface AgroAuditEntry {
 // quiere poder ver todo lo que se hizo. Se guarda en su propio arreglo
 // (accountingAuditLog), separado del de animales, porque el formato de
 // registro es distinto (AccountingEntry, no AnimalMovementRecord).
+//
+// Refuerzo (16/11/2026, pedido explicito: "si manana nos preguntan que paso,
+// que quede el porque de cada monto"): ahora tambien se registran las ALTAS
+// ("create"), y cada registro nuevo trae cuando paso ("at"), por que camino
+// ("source") y una explicacion en texto con la cuenta que dio ese monto
+// ("explanation"). Los tres campos son opcionales: los registros viejos no
+// los tienen y siguen siendo validos (before/after no cambian). "before" es
+// null solo en un alta.
+export type AccountingAuditAction = "create" | "edit" | "delete";
+
+export type AccountingAuditSource =
+  | "contabilidad" // cargado/editado/borrado desde la pantalla de Contabilidad
+  | "animales" // se genero o cambio por una venta/compra de la pantalla Animales
+  | "borrado-animales" // se borro el movimiento de animales y arrastro a este asiento
+  | "deshacer-borrado" // volvio por "Deshacer" tras borrar un movimiento de animales
+  | "cobro" // boton "Pago" de Clientes
+  | "vencimiento" // boton "Sigue en deuda" (cambio de fecha de vencimiento)
+  | "fusion-potreros"; // cambio de campo/potrero por fusion de potreros
+
 export interface AgroAccountingAuditEntry {
   id: string;
-  action: "edit" | "delete";
+  action: AccountingAuditAction;
   entryId: string;
-  before: AccountingEntry;
+  // Solo un alta no tiene "antes". Los registros viejos siempre lo traen.
+  before: AccountingEntry | null;
   after: AccountingEntry | null;
+  at?: string;
+  source?: AccountingAuditSource;
+  explanation?: string;
+  // Cuenta que lo hizo: "rosendo" | "administrador" (contador).
+  by?: string;
 }
 
 export interface AccountingEntry {
@@ -158,6 +189,8 @@ export interface AccountingEntry {
   // cobrar" (ver AgroReceivablesSection).
   clientName?: string;
   linkedAnimalMovementId?: string;
+  // Cuenta que lo cargo (17/11/2026), igual que en AnimalMovementRecord.
+  createdBy?: string;
   notes: string;
 }
 

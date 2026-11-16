@@ -195,3 +195,9 @@ export async function checkAgroSession(): Promise<boolean> {
     return !(error instanceof AgroApiError && error.kind === "auth");
   }
 }
+
+// Usuario de la cuenta conectada ("rosendo", "administrador"...), para dejar
+// registrado quien hizo cada cosa (17/11/2026).
+export function getCurrentAgroUsername(): string | undefined {
+  return readAgroAuthSession()?.user.email?.trim().toLowerCase() || undefined;
+}

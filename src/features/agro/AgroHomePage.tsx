@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ProductShell } from "../../shared/components/ProductShell";
-import { checkAgroSession } from "../../shared/auth/agroSession";
+import { checkAgroSession, getCurrentAgroUsername } from "../../shared/auth/agroSession";
 import { AgroAccountingSection } from "./AgroAccountingSection";
 import { AgroReceivablesSection } from "./AgroReceivablesSection";
 import { AgroAnimalsSection } from "./AgroAnimalsSection";
@@ -62,6 +62,7 @@ import {
   summarizeRangeData,
   incomeConceptLabels
 } from "./agro.home.shared";
+import { buildAccountingAuditEntry } from "./agro.accountingAudit";
 import { agroWorkspaceSections } from "./agro.workspace.config";
 import { AGRO_WORKSPACE_SAVE_ERROR_TOAST_ID, describeAgroWorkspaceError, friendlyAgroToastMessage } from "./agro.workspaceErrors";
 import {
@@ -170,10 +171,10 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // Una sola sesion por cuenta (17/11/2026): cada SESSION_CHECK_MS, y apenas se
   // vuelve a mirar la app, pregunta si esta sesion sigue siendo la valida. Solo
   // mientras la pantalla esta a la vista (minimizada o celular bloqueado = no
-  // pregunta). 30 s es para probar; el usuario va a definir el tiempo final.
+  // pregunta). 1 minuto (definido por el usuario 17/11/2026).
   useEffect(() => {
     if (persistenceMode !== "backend") return;
-    const SESSION_CHECK_MS = 30_000;
+    const SESSION_CHECK_MS = 60_000;
     let cancelled = false;
     async function check() {
       if (document.visibilityState !== "visible") return;
@@ -2308,6 +2309,21 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         entry.fieldId === sourceFieldId ? { ...entry, fieldId: targetFieldId, establishmentId: targetField.establishmentId } : entry
       )
     );
+    // Auditoria: la fusion de potreros cambia el campo de estos asientos.
+    {
+      const mergeAudits = accountingEntries
+        .filter((entry) => entry.fieldId === sourceFieldId)
+        .map((entry, index) =>
+          buildAccountingAuditEntry({
+            action: "edit",
+            before: entry,
+            after: { ...entry, fieldId: targetFieldId, establishmentId: targetField.establishmentId },
+            source: "fusion-potreros",
+            now: Date.now() + index
+          })
+        );
+      if (mergeAudits.length > 0) setAccountingAuditLog((current) => [...mergeAudits, ...current]);
+    }
     setRainfallRecords((current) =>
       current.map((record) => (record.fieldId === sourceFieldId ? { ...record, fieldId: targetFieldId } : record))
     );
@@ -2621,6 +2637,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       currency: commercialMovement ? animalForm.currency : undefined,
       linkedAccountingEntryId: nextAccountingId,
       pairedTransferMovementId: nextPairedTransferMovementId,
+      createdBy: existingMovement?.createdBy ?? getCurrentAgroUsername(),
       notes: correctionMovement?.notes ?? animalForm.notes.trim()
     };
 
@@ -2686,6 +2703,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         action: "edit",
         movementId: oldRecord.id,
         before: oldRecord,
+        by: getCurrentAgroUsername(),
+        at: new Date().toISOString(),
         after: nextMovements.find((item) => item.id === oldRecord.id) ?? null
       }));
       setAuditLog((current) => [...editAuditEntries, ...current]);
@@ -2707,6 +2726,7 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         expectedAmount: entryType === "income" ? totalAmount : undefined,
         collectedAmount: entryType === "income" ? collectedAmount ?? 0 : undefined,
         linkedAnimalMovementId: nextMovementId,
+        createdBy: accountingEntries.find((item) => item.id === nextAccountingId)?.createdBy ?? getCurrentAgroUsername(),
         notes: animalForm.notes.trim()
       };
 
@@ -2718,8 +2738,30 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
         return [accountingEntry, ...current];
       });
+      // Auditoria reforzada 16/11/2026: la venta/compra de Animales crea o
+      // cambia un asiento contable y hasta ahora no dejaba rastro contable.
+      const previousAccountingEntry = accountingEntries.find((item) => item.id === nextAccountingId) ?? null;
+      const animalsAccountingAudit = buildAccountingAuditEntry({
+        action: previousAccountingEntry ? "edit" : "create",
+        before: previousAccountingEntry,
+        after: accountingEntry,
+        source: "animales",
+        movement
+      });
+      setAccountingAuditLog((current) => [animalsAccountingAudit, ...current]);
     } else if (!commercialMovement && existingMovement?.linkedAccountingEntryId) {
+      const removedAccountingEntry = accountingEntries.find((item) => item.id === existingMovement.linkedAccountingEntryId);
       setAccountingEntries((current) => current.filter((item) => item.id !== existingMovement.linkedAccountingEntryId));
+      if (removedAccountingEntry) {
+        const removedAudit = buildAccountingAuditEntry({
+          action: "delete",
+          before: removedAccountingEntry,
+          after: null,
+          source: "animales",
+          movement: existingMovement
+        });
+        setAccountingAuditLog((current) => [removedAudit, ...current]);
+      }
     }
 
     setSelectedEstablishmentId(animalForm.establishmentId);
@@ -3018,6 +3060,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
         action: "delete",
         movementId: record.id,
         before: record,
+        by: getCurrentAgroUsername(),
+        at: new Date().toISOString(),
         after: null
       }));
       if (deleteAuditEntries.length > 0) {
@@ -3118,6 +3162,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       collectedAmount,
       dueDate: accountingForm.type === "income" ? accountingForm.dueDate.trim() || undefined : undefined,
       clientName: accountingForm.type === "income" ? accountingForm.clientName.trim() || undefined : undefined,
+      linkedAnimalMovementId: existingEntry?.linkedAnimalMovementId,
+      createdBy: existingEntry?.createdBy ?? getCurrentAgroUsername(),
       notes: accountingForm.notes.trim()
     };
 
@@ -3132,14 +3178,21 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     // diferencia de un alta nueva (que ya se ve en la propia planilla),
     // una edicion pisa el numero anterior sin dejar rastro si no se guarda
     // aca.
-    if (editingAccountingEntryId && existingEntry) {
-      const accountingAuditEntry: AgroAccountingAuditEntry = {
-        id: `audit-acc-${Date.now()}`,
-        action: "edit",
-        entryId: existingEntry.id,
-        before: existingEntry,
-        after: entry
-      };
+    // Refuerzo 16/11/2026: ahora tambien se registra el ALTA, y cada
+    // registro trae la explicacion de la cuenta (ver agro.accountingAudit.ts).
+    {
+      const linkedForAudit = entry.linkedAnimalMovementId
+        ? animalMovements.find((item) => item.id === entry.linkedAnimalMovementId)
+        : existingEntry?.linkedAnimalMovementId
+          ? animalMovements.find((item) => item.id === existingEntry.linkedAnimalMovementId)
+          : undefined;
+      const accountingAuditEntry = buildAccountingAuditEntry({
+        action: editingAccountingEntryId && existingEntry ? "edit" : "create",
+        before: editingAccountingEntryId && existingEntry ? existingEntry : null,
+        after: entry,
+        source: "contabilidad",
+        movement: linkedForAudit
+      });
       setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
     }
     if (existingEntry?.linkedAnimalMovementId) {
@@ -3167,6 +3220,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
           action: "edit",
           movementId: linkedMovementId,
           before: oldMovement,
+          by: getCurrentAgroUsername(),
+          at: new Date().toISOString(),
           after: updatedMovement
         };
         setAuditLog((current) => [editAuditEntry, ...current]);
@@ -3531,6 +3586,14 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     setAnimalMovements((current) => [...current, ...deletedRecords]);
     if (deletedAccountingEntry) {
       setAccountingEntries((current) => [...current, deletedAccountingEntry]);
+      const restoredAudit = buildAccountingAuditEntry({
+        action: "create",
+        before: null,
+        after: deletedAccountingEntry,
+        source: "deshacer-borrado",
+        movement: deletedRecords.find((record) => record.id === deletedAccountingEntry.linkedAnimalMovementId)
+      });
+      setAccountingAuditLog((current) => [restoredAudit, ...current]);
     }
     showSuccess("Movimiento restaurado.");
   }
@@ -3552,6 +3615,17 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     if (movement?.linkedAccountingEntryId) {
       setAccountingEntries((current) => current.filter((item) => item.id !== movement.linkedAccountingEntryId));
+      // Antes este borrado en cascada no dejaba nada en la auditoria contable.
+      if (deletedAccountingEntry) {
+        const cascadeAudit = buildAccountingAuditEntry({
+          action: "delete",
+          before: deletedAccountingEntry,
+          after: null,
+          source: "borrado-animales",
+          movement
+        });
+        setAccountingAuditLog((current) => [cascadeAudit, ...current]);
+      }
     }
 
     // Auditoria: una entrada por cada movimiento fisico borrado (un
@@ -3565,6 +3639,8 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
       action: "delete",
       movementId: record.id,
       before: record,
+      by: getCurrentAgroUsername(),
+      at: new Date().toISOString(),
       after: null
     }));
     if (deleteAuditEntries.length > 0) {
@@ -3609,13 +3685,15 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
     // borrado -- sin esto, un movimiento eliminado desaparecia sin dejar
     // ningun rastro de que existio ni de cuanto era.
     if (deletedEntry) {
-      const accountingAuditEntry: AgroAccountingAuditEntry = {
-        id: `audit-acc-${Date.now()}`,
+      const accountingAuditEntry = buildAccountingAuditEntry({
         action: "delete",
-        entryId: deletedEntry.id,
         before: deletedEntry,
-        after: null
-      };
+        after: null,
+        source: "contabilidad",
+        movement: deletedEntry.linkedAnimalMovementId
+          ? animalMovements.find((item) => item.id === deletedEntry.linkedAnimalMovementId)
+          : undefined
+      });
       setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
     }
     showSuccess("Movimiento contable eliminado.");
@@ -3638,13 +3716,15 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     setAccountingEntries((current) => current.map((item) => (item.id === entryId ? updatedEntry : item)));
 
-    const accountingAuditEntry: AgroAccountingAuditEntry = {
-      id: `audit-acc-${Date.now()}`,
+    const accountingAuditEntry = buildAccountingAuditEntry({
       action: "edit",
-      entryId,
       before: existingEntry,
-      after: updatedEntry
-    };
+      after: updatedEntry,
+      source: "cobro",
+      movement: existingEntry.linkedAnimalMovementId
+        ? animalMovements.find((item) => item.id === existingEntry.linkedAnimalMovementId)
+        : undefined
+    });
     setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
     showSuccess("Venta marcada como cobrada.");
   }
@@ -3659,13 +3739,15 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
 
     setAccountingEntries((current) => current.map((item) => (item.id === entryId ? updatedEntry : item)));
 
-    const accountingAuditEntry: AgroAccountingAuditEntry = {
-      id: `audit-acc-${Date.now()}`,
+    const accountingAuditEntry = buildAccountingAuditEntry({
       action: "edit",
-      entryId,
       before: existingEntry,
-      after: updatedEntry
-    };
+      after: updatedEntry,
+      source: "vencimiento",
+      movement: existingEntry.linkedAnimalMovementId
+        ? animalMovements.find((item) => item.id === existingEntry.linkedAnimalMovementId)
+        : undefined
+    });
     setAccountingAuditLog((current) => [accountingAuditEntry, ...current]);
     showSuccess("Nueva fecha de vencimiento guardada.");
   }
