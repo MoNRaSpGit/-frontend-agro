@@ -43,7 +43,7 @@ export type AuthSession = {
 };
 
 export async function loginWithAccount(identifier: string, password: string) {
-  const response = await fetch(buildApiUrl("/auth/login"), {
+  const response = await fetch(buildApiUrl("/agro/auth/login"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -62,7 +62,7 @@ export async function loginWithAccount(identifier: string, password: string) {
 }
 
 export async function changeAccountPassword(accessToken: string, currentPassword: string, newPassword: string) {
-  const response = await fetch(buildApiUrl("/auth/change-password"), {
+  const response = await fetch(buildApiUrl("/agro/auth/change-password"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

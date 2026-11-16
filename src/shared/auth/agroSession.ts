@@ -11,6 +11,36 @@ export function clearAgroSessionStorage() {
   removeStorageItem(AGRO_ACCESS_MODE_STORAGE_KEY);
 }
 
+const SESSION_REPLACED_FLAG_KEY = "frontend-agro.session-replaced";
+
+async function isSessionReplacedResponse(response: Response) {
+  try {
+    const payload = (await response.clone().json()) as { message?: string };
+    return payload.message === "SESSION_REPLACED";
+  } catch {
+    return false;
+  }
+}
+
+function markSessionReplaced() {
+  try {
+    sessionStorage.setItem(SESSION_REPLACED_FLAG_KEY, "1");
+  } catch {
+    // sin storage: el login no muestra el motivo, nada mas
+  }
+}
+
+// Lo lee (y borra) la pantalla de login para explicar por que se cerro.
+export function consumeSessionReplacedFlag() {
+  try {
+    const value = sessionStorage.getItem(SESSION_REPLACED_FLAG_KEY) === "1";
+    sessionStorage.removeItem(SESSION_REPLACED_FLAG_KEY);
+    return value;
+  } catch {
+    return false;
+  }
+}
+
 export function readAgroAuthSession() {
   return readJsonStorage<AuthSession | null>(AGRO_AUTH_SESSION_STORAGE_KEY, null);
 }
@@ -64,13 +94,23 @@ async function performAgroSessionRefresh(): Promise<AuthSession | null> {
     return null;
   }
 
-  const response = await fetch(buildApiUrl("/auth/refresh"), {
+  const response = await fetch(buildApiUrl("/agro/auth/refresh"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refreshToken })
   });
 
   if (!response.ok) {
+    // Una sola sesion por usuario (17/11/2026): si alguien entro con esta
+    // misma cuenta en otro dispositivo, el servidor responde SESSION_REPLACED.
+    // Se deja una marca para que el login lo explique; lo que no estaba
+    // guardado en este dispositivo se descarta (pedido explicito).
+    if (await isSessionReplacedResponse(response)) {
+      markSessionReplaced();
+      clearAgroSessionStorage();
+      return null;
+    }
+
     // El refresh pudo fallar porque OTRA pestana con la misma sesion ya uso
     // y roto este mismo refresh token un instante antes. Antes de cerrar la
     // sesion, nos fijamos si mientras tanto ya quedo guardada una sesion mas

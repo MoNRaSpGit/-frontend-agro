@@ -5,8 +5,14 @@ import {
   AGRO_ACCESS_MODE_STORAGE_KEY,
   AGRO_AUTH_SESSION_STORAGE_KEY,
   clearAgroSessionStorage,
+  consumeSessionReplacedFlag,
   readAgroAuthSession
 } from "../shared/auth/agroSession";
+
+// Una sola sesion por cuenta (17/11/2026): si alguien entra con la misma
+// cuenta en otro dispositivo, este vuelve al login con este aviso.
+const SESSION_REPLACED_MESSAGE =
+  "Se ingreso con esta cuenta desde otro dispositivo y esta sesion se cerro. Lo que no estaba guardado se descarto.";
 import { changeAccountPassword, loginWithAccount } from "../shared/auth/auth.client";
 import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../shared/lib/persistence";
 
@@ -15,7 +21,6 @@ import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../shared/
 // sigue en minuscula, por eso se normaliza a minuscula justo antes de
 // autenticar (ver authenticateWithCredentials), sin tocar nada mas.
 const AGRO_DIRECT_ACCOUNT = "Rosendo";
-const AGRO_DIRECT_PASSWORD = "lamilagrosa";
 
 type AgroAccessMode = "demo-local" | "backend";
 
@@ -42,10 +47,10 @@ export function App() {
   const [accessMode, setAccessMode] = useState<AgroAccessMode | null>(readStoredAccessMode);
   const [loginIdentifier, setLoginIdentifier] = useState(AGRO_DIRECT_ACCOUNT);
   const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(() => (consumeSessionReplacedFlag() ? SESSION_REPLACED_MESSAGE : null));
   const [loginPending, setLoginPending] = useState(false);
   const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
-  const [passwordCurrent, setPasswordCurrent] = useState(AGRO_DIRECT_PASSWORD);
+  const [passwordCurrent, setPasswordCurrent] = useState("");
   const [passwordNext, setPasswordNext] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [passwordPending, setPasswordPending] = useState(false);
@@ -55,7 +60,7 @@ export function App() {
   function handleSignOut() {
     clearAgroSessionStorage();
     setAccessMode(null);
-    setLoginError(null);
+    setLoginError(consumeSessionReplacedFlag() ? SESSION_REPLACED_MESSAGE : null);
   }
 
   async function authenticateWithCredentials(identifier: string, secret: string) {
