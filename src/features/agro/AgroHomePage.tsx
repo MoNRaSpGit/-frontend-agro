@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ProductShell } from "../../shared/components/ProductShell";
+import { checkAgroSession } from "../../shared/auth/agroSession";
 import { AgroAccountingSection } from "./AgroAccountingSection";
 import { AgroReceivablesSection } from "./AgroReceivablesSection";
 import { AgroAnimalsSection } from "./AgroAnimalsSection";
@@ -165,6 +166,31 @@ export function AgroHomePage({ persistenceMode, onSignOut }: AgroHomePageProps) 
   // realmente cambia lo que le importa a ese efecto.
   const onSignOutRef = useRef(onSignOut);
   onSignOutRef.current = onSignOut;
+
+  // Una sola sesion por cuenta (17/11/2026): cada SESSION_CHECK_MS, y apenas se
+  // vuelve a mirar la app, pregunta si esta sesion sigue siendo la valida. Solo
+  // mientras la pantalla esta a la vista (minimizada o celular bloqueado = no
+  // pregunta). 30 s es para probar; el usuario va a definir el tiempo final.
+  useEffect(() => {
+    if (persistenceMode !== "backend") return;
+    const SESSION_CHECK_MS = 30_000;
+    let cancelled = false;
+    async function check() {
+      if (document.visibilityState !== "visible") return;
+      const valid = await checkAgroSession();
+      if (!cancelled && !valid) onSignOutRef.current();
+    }
+    const intervalId = window.setInterval(() => void check(), SESSION_CHECK_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [persistenceMode]);
   const enqueueWorkspaceSaveRef = useRef(enqueueWorkspaceSave);
   enqueueWorkspaceSaveRef.current = enqueueWorkspaceSave;
   const [activeView, setActiveView] = useState<AgroView | null>(null);

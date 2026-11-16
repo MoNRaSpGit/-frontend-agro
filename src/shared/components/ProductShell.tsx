@@ -141,14 +141,14 @@ export function ProductShell({
             onClick={() => setMenuOpen((current) => !current)}
             aria-expanded={menuOpen}
             aria-haspopup="menu"
-            aria-label="Abrir menu del demo"
+            aria-label="Abrir menu"
           >
             <span className="product-shell-menu-user">
               <span className="product-shell-avatar">
                 <UserRound size={18} strokeWidth={2.1} />
               </span>
               <span className="product-shell-identity">
-                <strong>Demo</strong>
+                <strong>Agro</strong>
                 <small>{activeItem?.label ?? title}</small>
               </span>
             </span>
@@ -158,7 +158,7 @@ export function ProductShell({
           </button>
 
           {menuOpen ? (
-            <div className="product-shell-dropdown" role="menu" aria-label="Secciones del demo">
+            <div className="product-shell-dropdown" role="menu" aria-label="Secciones">
               <button
                 type="button"
                 className={activeKey === null ? "product-shell-dropdown-item active" : "product-shell-dropdown-item"}

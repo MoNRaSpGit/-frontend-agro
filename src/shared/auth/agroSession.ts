@@ -183,3 +183,15 @@ export async function fetchWithAgroAuth(input: string, init?: RequestInit) {
   response = await doRequest();
   return response;
 }
+
+// Chequeo liviano de sesion (17/11/2026). true = sigue valida; false = se
+// cerro (por ejemplo, alguien entro con la misma cuenta en otro dispositivo).
+// Sin conexion no se considera cerrada: se reintenta en el proximo chequeo.
+export async function checkAgroSession(): Promise<boolean> {
+  try {
+    const response = await fetchWithAgroAuth(buildApiUrl("/agro/auth/check"));
+    return response.status !== 401;
+  } catch (error) {
+    return !(error instanceof AgroApiError && error.kind === "auth");
+  }
+}
