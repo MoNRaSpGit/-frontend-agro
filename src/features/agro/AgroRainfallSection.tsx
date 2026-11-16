@@ -154,7 +154,7 @@ export function AgroRainfallSection({
               onClick={() => void exportRainfallToExcel()}
               disabled={rainfallRows.length === 0}
             >
-              Exportar a Excel
+              Excel
             </button>
             <button
               type="button"
@@ -162,7 +162,7 @@ export function AgroRainfallSection({
               onClick={() => void exportRainfallToPdf()}
               disabled={rainfallRows.length === 0}
             >
-              Exportar a PDF
+              PDF
             </button>
           </div>
         </div>

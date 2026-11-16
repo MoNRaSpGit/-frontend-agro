@@ -278,7 +278,7 @@ export function AgroSanitySection({
               onClick={() => void exportSanitaryToExcel()}
               disabled={sanitaryRows.length === 0}
             >
-              Exportar a Excel
+              Excel
             </button>
             <button
               type="button"
@@ -286,7 +286,7 @@ export function AgroSanitySection({
               onClick={() => void exportSanitaryToPdf()}
               disabled={sanitaryRows.length === 0}
             >
-              Exportar a PDF
+              PDF
             </button>
           </div>
         </div>

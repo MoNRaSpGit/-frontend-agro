@@ -788,7 +788,7 @@ export function AgroAnimalsSection({
             onClick={() => void exportAnimalLedgerToExcel()}
             disabled={animalLedgerRows.length === 0}
           >
-            Exportar a Excel
+            Excel
           </button>
           <button
             type="button"
@@ -796,7 +796,7 @@ export function AgroAnimalsSection({
             onClick={() => void exportAnimalLedgerToPdf()}
             disabled={animalLedgerRows.length === 0}
           >
-            Exportar a PDF
+            PDF
           </button>
         </div>
       </div>

@@ -1816,3 +1816,13 @@ th {
     animation: none;
   }
 }
+
+/* Botones Excel / PDF (17/11/2026): chicos, solo la palabra, para que en el
+   celular no se monten sobre el titulo de cada planilla. */
+.ghost-button.excel-button,
+.ghost-button.pdf-button {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}

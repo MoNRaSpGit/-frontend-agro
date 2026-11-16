@@ -612,7 +612,7 @@ export function AgroAccountingSection({
               onClick={() => void exportAccountingLedgerToExcel()}
               disabled={accountingLedgerWithConversions.length === 0}
             >
-              Exportar a Excel
+              Excel
             </button>
             <button
               type="button"
@@ -620,7 +620,7 @@ export function AgroAccountingSection({
               onClick={() => void exportAccountingLedgerToPdf()}
               disabled={accountingLedgerWithConversions.length === 0}
             >
-              Exportar a PDF
+              PDF
             </button>
           </div>
         </div>
