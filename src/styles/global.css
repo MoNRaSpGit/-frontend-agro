@@ -1842,3 +1842,9 @@ th {
   height: 18px;
   accent-color: #466934;
 }
+
+/* Campo de contrasena del login: puntitos por CSS para que el navegador no lo
+   trate como contrasena (ver App.tsx, MASKED_TEXT_SUPPORTED). */
+.access-field input.access-masked-input {
+  -webkit-text-security: disc;
+}

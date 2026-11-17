@@ -22,6 +22,14 @@ import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../shared/
 // nunca la contrasena.
 const REMEMBERED_ACCOUNT_STORAGE_KEY = "agro.rememberedAccount";
 
+// La contrasena NUNCA se recuerda (pedido explicito 17/11/2026). Los
+// navegadores ofrecen guardarla y autocompletarla por su cuenta cuando ven un
+// campo type="password", asi que el campo de contrasena del login se dibuja
+// como texto con los puntitos por CSS: el navegador ya no lo trata como una
+// contrasena. Si el navegador no soporta ese CSS, queda el campo normal con
+// autocomplete="new-password" (que evita que autocomplete la guardada).
+const MASKED_TEXT_SUPPORTED = typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("-webkit-text-security", "disc");
+
 // Pedido explicito (26/09/2026): el cliente quiere ver/escribir "Rosendo"
 // con mayuscula en el login. Es solo visual -- el usuario real en la BDD
 // sigue en minuscula, por eso se normaliza a minuscula justo antes de
@@ -160,23 +168,33 @@ export function App() {
           <form className="access-login-form" onSubmit={(event) => void handleDirectLogin(event)}>
             <label className="access-field">
               <span>Usuario</span>
-              <input value={loginIdentifier} onChange={(event) => setLoginIdentifier(event.target.value)} autoComplete="username" />
+              <input
+                value={loginIdentifier}
+                onChange={(event) => setLoginIdentifier(event.target.value)}
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+              />
             </label>
 
             <label className="access-field">
               <span>Contrasena</span>
               <input
-                type="password"
+                type={MASKED_TEXT_SUPPORTED ? "text" : "password"}
+                className={MASKED_TEXT_SUPPORTED ? "access-masked-input" : undefined}
                 value={loginPassword}
                 onChange={(event) => setLoginPassword(event.target.value)}
-                autoComplete="current-password"
+                autoComplete={MASKED_TEXT_SUPPORTED ? "off" : "new-password"}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 autoFocus={Boolean(rememberedAccount)}
               />
             </label>
 
             <label className="access-remember">
               <input type="checkbox" checked={rememberAccount} onChange={(event) => setRememberAccount(event.target.checked)} />
-              <span>Recordar mi cuenta en este dispositivo</span>
+              <span>Recordar mi cuenta</span>
             </label>
 
             <div className="access-login-actions">
