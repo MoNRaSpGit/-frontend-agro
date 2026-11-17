@@ -1826,3 +1826,19 @@ th {
   font-size: 13px;
   white-space: nowrap;
 }
+
+.access-remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #294022;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.access-remember input {
+  width: 18px;
+  height: 18px;
+  accent-color: #466934;
+}

@@ -14,7 +14,13 @@ import {
 const SESSION_REPLACED_MESSAGE =
   "Se ingreso con esta cuenta desde otro dispositivo y esta sesion se cerro. Lo que no estaba guardado se descarto.";
 import { changeAccountPassword, loginWithAccount } from "../shared/auth/auth.client";
-import { readJsonStorage, writeJsonStorage } from "../shared/lib/persistence";
+import { readJsonStorage, removeStorageItem, writeJsonStorage } from "../shared/lib/persistence";
+
+// "Recordar mi cuenta" (17/11/2026): ahora hay mas de un usuario (Rosendo y el
+// contador). Cada dispositivo recuerda el ULTIMO usuario que marco la casilla,
+// asi solo hay que escribir la contrasena. Se guarda solo el nombre de usuario,
+// nunca la contrasena.
+const REMEMBERED_ACCOUNT_STORAGE_KEY = "agro.rememberedAccount";
 
 // Pedido explicito (26/09/2026): el cliente quiere ver/escribir "Rosendo"
 // con mayuscula en el login. Es solo visual -- el usuario real en la BDD
@@ -46,7 +52,12 @@ function readStoredAccessMode(): AgroAccessMode | null {
 
 export function App() {
   const [accessMode, setAccessMode] = useState<AgroAccessMode | null>(readStoredAccessMode);
-  const [loginIdentifier, setLoginIdentifier] = useState(AGRO_DIRECT_ACCOUNT);
+  const [rememberedAccount] = useState(() => {
+    const stored = readJsonStorage<string | null>(REMEMBERED_ACCOUNT_STORAGE_KEY, null);
+    return typeof stored === "string" && stored.trim() ? stored.trim() : null;
+  });
+  const [loginIdentifier, setLoginIdentifier] = useState(rememberedAccount ?? AGRO_DIRECT_ACCOUNT);
+  const [rememberAccount, setRememberAccount] = useState(Boolean(rememberedAccount));
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(() => (consumeSessionReplacedFlag() ? SESSION_REPLACED_MESSAGE : null));
   const [loginPending, setLoginPending] = useState(false);
@@ -77,6 +88,9 @@ export function App() {
 
     try {
       await authenticateWithCredentials(identifier, secret);
+      // Solo se recuerda si el login salio bien (nunca un usuario mal escrito).
+      if (rememberAccount) writeJsonStorage(REMEMBERED_ACCOUNT_STORAGE_KEY, identifier.trim());
+      else removeStorageItem(REMEMBERED_ACCOUNT_STORAGE_KEY);
       setAccessMode("backend");
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "No se pudo iniciar sesion.");
@@ -156,7 +170,13 @@ export function App() {
                 value={loginPassword}
                 onChange={(event) => setLoginPassword(event.target.value)}
                 autoComplete="current-password"
+                autoFocus={Boolean(rememberedAccount)}
               />
+            </label>
+
+            <label className="access-remember">
+              <input type="checkbox" checked={rememberAccount} onChange={(event) => setRememberAccount(event.target.checked)} />
+              <span>Recordar mi cuenta en este dispositivo</span>
             </label>
 
             <div className="access-login-actions">
