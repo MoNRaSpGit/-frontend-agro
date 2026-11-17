@@ -77,8 +77,21 @@ export function App() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
+  // Ninguna contrasena queda en la memoria de la pantalla: se borran al entrar y al
+  // salir, asi el login vuelve a salir solo con el usuario (pedido 17/11/2026).
+  function clearTypedPasswords() {
+    setLoginPassword("");
+    setPasswordCurrent("");
+    setPasswordNext("");
+    setPasswordConfirm("");
+  }
+
   function handleSignOut() {
     clearAgroSessionStorage();
+    clearTypedPasswords();
+    setPasswordPanelOpen(false);
+    setPasswordError(null);
+    setPasswordSuccess(null);
     setAccessMode(null);
     setLoginError(consumeSessionReplacedFlag() ? SESSION_REPLACED_MESSAGE : null);
   }
@@ -99,6 +112,7 @@ export function App() {
       // Solo se recuerda si el login salio bien (nunca un usuario mal escrito).
       if (rememberAccount) writeJsonStorage(REMEMBERED_ACCOUNT_STORAGE_KEY, identifier.trim());
       else removeStorageItem(REMEMBERED_ACCOUNT_STORAGE_KEY);
+      clearTypedPasswords();
       setAccessMode("backend");
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "No se pudo iniciar sesion.");
@@ -140,10 +154,7 @@ export function App() {
       await changeAccountPassword(accessToken, passwordCurrent, passwordNext);
       clearAgroSessionStorage();
       setAccessMode(null);
-      setLoginPassword(passwordNext);
-      setPasswordCurrent(passwordNext);
-      setPasswordNext("");
-      setPasswordConfirm("");
+      clearTypedPasswords();
       setPasswordPanelOpen(false);
       setPasswordSuccess("Contrasena actualizada. Ahora entra con el mismo usuario y tu nueva clave.");
     } catch (error) {
